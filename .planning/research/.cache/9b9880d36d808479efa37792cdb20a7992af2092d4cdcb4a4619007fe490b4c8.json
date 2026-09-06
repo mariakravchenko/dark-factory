@@ -1,0 +1,1 @@
+{"content":"uv 0.12.10 is the de facto standard Python project/package manager in 2025/2026: lockfile (uv.lock), PEP 621 pyproject, workspaces, Python version management, 10-100x faster than pip/poetry. Recommended over poetry for greenfield.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-09-06T11:14:10.709Z","ttl":86400000,"kind":"web"}

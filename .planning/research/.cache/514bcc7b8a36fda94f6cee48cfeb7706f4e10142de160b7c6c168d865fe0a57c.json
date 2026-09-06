@@ -1,0 +1,1 @@
+{"content":"Official MCP Python SDK is package 'mcp' (modelcontextprotocol/python-sdk), current 2.1.1, Python >=3.10. Provides client + FastMCP server. Use as an optional tool-transport adapter only; orchestrator must not depend on it internally.","source":"web","provider":"websearch","confidence":"MEDIUM","fetched_at":"2026-09-06T11:14:10.594Z","ttl":86400000,"kind":"web"}
