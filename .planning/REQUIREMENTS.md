@@ -182,17 +182,122 @@ Explicitly excluded. Anti-features carry a warning against re-adding.
 
 ## Traceability
 
-Populated during roadmap creation. Each v1 requirement maps to exactly one phase.
+Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (all v1 requirements) | TBD | Pending |
+| INTAKE-01 | Phase 1 | Pending |
+| INTAKE-02 | Phase 4 | Pending |
+| INTAKE-03 | Phase 10 | Pending |
+| INTAKE-04 | Phase 1 | Pending |
+| INTAKE-05 | Phase 1 | Pending |
+| ORCH-01 | Phase 1 | Pending |
+| ORCH-02 | Phase 3 | Pending |
+| ORCH-03 | Phase 3 | Pending |
+| ORCH-04 | Phase 4 | Pending |
+| ORCH-05 | Phase 1 | Pending |
+| ORCH-06 | Phase 1 | Pending |
+| ROLE-01 | Phase 4 | Pending |
+| ROLE-02 | Phase 4 | Pending |
+| ROLE-03 | Phase 4 | Pending |
+| ROLE-04 | Phase 4 | Pending |
+| ROLE-05 | Phase 5 | Pending |
+| ROLE-06 | Phase 4 | Pending |
+| WORK-01 | Phase 1 | Pending |
+| WORK-02 | Phase 3 | Pending |
+| WORK-03 | Phase 1 | Pending |
+| WORK-04 | Phase 7 | Pending |
+| WORK-05 | Phase 8 | Pending |
+| WORK-06 | Phase 8 | Pending |
+| WORK-07 | Phase 7 | Pending |
+| WORK-08 | Phase 1 | Pending |
+| WORK-09 | Phase 8 | Pending |
+| WORK-10 | Phase 1 | Pending |
+| TOOL-01 | Phase 6 | Pending |
+| TOOL-02 | Phase 6 | Pending |
+| TOOL-03 | Phase 6 | Pending |
+| TOOL-04 | Phase 6 | Pending |
+| TOOL-05 | Phase 6 | Pending |
+| CTX-01 | Phase 4 | Pending |
+| CTX-02 | Phase 4 | Pending |
+| CTX-03 | Phase 4 | Pending |
+| CTX-04 | Phase 4 | Pending |
+| ART-01 | Phase 4 | Pending |
+| ART-02 | Phase 4 | Pending |
+| ART-03 | Phase 4 | Pending |
+| ART-04 | Phase 5 | Pending |
+| STATE-01 | Phase 1 | Pending |
+| STATE-02 | Phase 1 | Pending |
+| STATE-03 | Phase 1 | Pending |
+| STATE-04 | Phase 2 | Pending |
+| STATE-05 | Phase 4 | Pending |
+| STATE-06 | Phase 1 | Pending |
+| STATE-07 | Phase 1 | Pending |
+| STATE-08 | Phase 1 | Pending |
+| HITL-01 | Phase 2 | Pending |
+| HITL-02 | Phase 2 | Pending |
+| HITL-03 | Phase 2 | Pending |
+| HITL-04 | Phase 7 | Pending |
+| HITL-05 | Phase 7 | Pending |
+| HITL-06 | Phase 11 | Pending |
+| HITL-07 | Phase 2 | Pending |
+| HITL-08 | Phase 2 | Pending |
+| LOOP-01 | Phase 9 | Pending |
+| LOOP-02 | Phase 9 | Pending |
+| LOOP-03 | Phase 9 | Pending |
+| LOOP-04 | Phase 9 | Pending |
+| GATE-01 | Phase 9 | Pending |
+| GATE-02 | Phase 9 | Pending |
+| GATE-03 | Phase 9 | Pending |
+| GATE-04 | Phase 9 | Pending |
+| GIT-01 | Phase 5 | Pending |
+| GIT-02 | Phase 5 | Pending |
+| GIT-03 | Phase 10 | Pending |
+| GIT-04 | Phase 10 | Pending |
+| GIT-05 | Phase 10 | Pending |
+| GIT-06 | Phase 10 | Pending |
+| TRIG-01 | Phase 11 | Pending |
+| TRIG-02 | Phase 12 | Pending |
+| TRIG-03 | Phase 12 | Pending |
+| TRIG-04 | Phase 11 | Pending |
+| CFG-01 | Phase 3 | Pending |
+| CFG-02 | Phase 3 | Pending |
+| CFG-03 | Phase 3 | Pending |
+| CFG-04 | Phase 3 | Pending |
+| CFG-05 | Phase 3 | Pending |
+| OBS-01 | Phase 12 | Pending |
+| OBS-02 | Phase 12 | Pending |
+| OBS-03 | Phase 12 | Pending |
+| SEC-01 | Phase 6 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 6 | Pending |
+| QUAL-01 | Phase 11 | Pending |
+| QUAL-02 | Phase 7 | Pending |
+| QUAL-03 | Phase 8 | Pending |
+| QUAL-04 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 89 total
-- Mapped to phases: 0 ⚠️ (roadmap not yet created)
-- Unmapped: 89 ⚠️
+- Mapped to phases: 89 ✓
+- Unmapped: 0 ✓
+
+**By phase:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 1 | Walking Skeleton — One Durable Run | 17 |
+| 2 | Pause, Resume & Single-Owner Execution | 6 |
+| 3 | Configuration-Driven Pipeline | 8 |
+| 4 | The Four-Role Pipeline & Artifact Handoffs | 15 |
+| 5 | Isolated Workspace & Git Lifecycle | 4 |
+| 6 | Tools, Permissions & the Credential Boundary | 7 |
+| 7 | Claude Code — the First Real Worker | 6 |
+| 8 | Copilot & Hermes — Worker Independence Proven | 4 |
+| 9 | Independent Quality Gate & Bounded Feedback Loops | 8 |
+| 10 | GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 5 |
+| 11 | One Orchestrator, Many Triggers — Cross-Machine Resume | 4 |
+| 12 | Observability & Audit Surface | 5 |
 
 ---
 *Requirements defined: 2026-09-06*
-*Last updated: 2026-09-06 after initial definition*
+*Last updated: 2026-09-07 after roadmap creation (traceability populated)*
