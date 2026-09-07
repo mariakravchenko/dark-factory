@@ -1,0 +1,17 @@
+# Python bytecode / build metadata
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# uv-managed virtual environment
+.venv/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment file — load-bearing: keeps a real DATABASE_URL / GITHUB_TOKEN out of git
+.env
