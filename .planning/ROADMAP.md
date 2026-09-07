@@ -76,7 +76,19 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `dark-factory status <run-id>` reports run state, current role and attempt number read from state columns, never recomputed by folding the event log.
   4. A crash injected between the sub-writes of a transition leaves a consistent, resumable run: no state change exists without its `run_events` row, and no event exists without its state change.
   5. A task whose text contains a `DATABASE_URL`-shaped value shows redacted values in every persisted event payload and every log line.
-**Plans**: TBD
+**Plans**: 9 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Wave 0: uv scaffold, pinned stack, tooling, and a reachable test PostgreSQL 17 (blocking)
+- [ ] 01-02-PLAN.md — Domain contracts: RunStatus, Signal, event catalog, NormalizedTask, WorkerResult, CodingWorker, WorkerRegistry, FakeWorker
+- [ ] 01-03-PLAN.md — Redaction at birth: Settings with SecretStr, the one redact(), and the structlog processor
+- [ ] 01-04-PLAN.md — Schema: runs / role_executions / run_events and Alembic revision 0001 applied to a real PostgreSQL 17
+- [ ] 01-05-PLAN.md — The one mutation path (create_run, apply_transition) and the read model (load_run_state)
+- [ ] 01-06-PLAN.md — TRACER: `dark-factory run text:"..."` drives CREATED → BA → COMPLETED end to end
+- [ ] 01-07-PLAN.md — SC2 fresh-process resume and SC4 crash-consistency proofs
+- [ ] 01-08-PLAN.md — `dark-factory status` reading position from columns, plus `--json`
+- [ ] 01-09-PLAN.md — SC5 end-to-end redaction proof, phase acceptance gate, and the documented full-stack run command
+
 **Invariants**: single-transaction lifecycle mutation through one mutation path; every resume input is a persisted column; control state from columns not the event log; only the orchestrator mutates state; redaction from the first persistence code; no worker-name branching outside adapters.
 **Note**: The artifact-durability strategy (open decision 1) affects schema shape; record the intended approach here even though it is implemented in Phase 5. Retry-counter placement (columns on `runs` vs. derived) is settled with this schema.
 
@@ -236,7 +248,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton — One Durable Run | 0/TBD | Not started | - |
+| 1. Walking Skeleton — One Durable Run | 0/9 | Planned | - |
 | 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
