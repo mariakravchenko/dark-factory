@@ -20,7 +20,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import pytest
@@ -302,3 +302,53 @@ def normalized_task_factory() -> type[NormalizedTaskFactory]:
 @pytest.fixture
 def worker_result_factory() -> type[WorkerResultFactory]:
     return WorkerResultFactory
+
+
+# --------------------------------------------------------------------------- #
+# Plan 06 — the tracer test kit
+# --------------------------------------------------------------------------- #
+#
+# `advance_session_factory` gives an in-process test something the runner's
+# `advance()` / `drive()` can call repeatedly for a fresh Session, while keeping
+# every committed `with session.begin()` block inside one outer transaction that
+# is rolled back at teardown (the Plan 05 `db_session` discipline, as a factory).
+#
+# `fake_worker_registry` builds a `WorkerRegistry` whose "fake" worker runs a
+# caller-supplied script, so a test drives either terminal arm without touching
+# `default_registry` or any production wiring.
+
+
+@pytest.fixture
+def advance_session_factory(engine: Engine) -> Iterator[Callable[[], Session]]:
+    """A repeatable session factory for driving ``advance()`` / ``drive()`` in-process."""
+    connection = engine.connect()
+    outer = connection.begin()
+
+    def factory() -> Session:
+        return Session(
+            bind=connection,
+            join_transaction_mode="create_savepoint",
+            expire_on_commit=False,
+        )
+
+    try:
+        yield factory
+    finally:
+        if outer.is_active:
+            outer.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def fake_worker_registry() -> Callable[[Sequence[WorkerResult]], object]:
+    """Return a builder: ``build(script) -> WorkerRegistry`` with ``"fake"`` bound
+    to a :class:`FakeWorker` seeded with ``script``."""
+    from dark_factory.workers.fake import FakeWorker
+    from dark_factory.workers.registry import WorkerRegistry
+
+    def _build(script: Sequence[WorkerResult]) -> object:
+        registry = WorkerRegistry()
+        registry.register("fake", lambda: FakeWorker(list(script)))
+        return registry
+
+    return _build
