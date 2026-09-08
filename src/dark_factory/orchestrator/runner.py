@@ -280,8 +280,16 @@ def _run_current_role(
                 type=EventType.ROLE_COMPLETED,
                 payload={"role": node.name, "summary": result.summary},
             ),
-            EventWrite(type=EventType.RUN_COMPLETED, payload={"role": node.name}),
         ]
+        # RUN_COMPLETED belongs only to the transition that actually reaches the
+        # terminal COMPLETED state -- i.e. the last node in the pipeline. For any
+        # earlier role, transition() returns the next role status and the run
+        # continues, so emitting RUN_COMPLETED here would write a false terminal
+        # audit row (the "never assume one role" hazard in workflows/pipeline.py).
+        if next_status is RunStatus.COMPLETED:
+            events.append(
+                EventWrite(type=EventType.RUN_COMPLETED, payload={"role": node.name})
+            )
     elif signal is Signal.ROLE_FAILED:
         re_status = _ROLE_FAILED
         re_result = None
