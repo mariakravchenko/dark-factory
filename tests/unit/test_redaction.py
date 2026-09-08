@@ -95,6 +95,17 @@ def test_sensitive_key_value_pair_is_labelled() -> None:
     assert "hunter2" not in out
 
 
+def test_quoted_sensitive_value_keeps_its_closing_quote() -> None:
+    """IN-06: the kv rule captures an optional opening quote on the value and
+    requires a matching closing quote; the replacement must re-emit both so a
+    log line like ``... token="abc" ...`` stays balanced."""
+    from dark_factory.events.redaction import redact
+
+    out = redact('the header token="abc123def" was sent', known_secrets={})
+    assert out == 'the header token="[redacted:token]" was sent'
+    assert "abc123def" not in out
+
+
 def test_dict_key_match_replaces_value_of_any_type() -> None:
     from dark_factory.events.redaction import redact
 

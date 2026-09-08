@@ -48,8 +48,19 @@ _KV_KEYS = "|".join(sorted(_SENSITIVE_KEYS))
 
 
 def _kv_replacement(match: re.Match[str]) -> str:
-    """``<key><sep>[redacted:<key-lowercased>]`` for a sensitive ``key=value``."""
-    return f"{match.group(1)}{match.group(2)}[redacted:{match.group(1).lower()}]"
+    """``<key><sep><quote?>[redacted:<key-lowercased>]<quote?>`` for a sensitive
+    ``key=value``.
+
+    Group 3 is the optional opening quote that the pattern also requires as the
+    closing delimiter (``\\3``); re-emit it on both sides so ``token="abc"``
+    becomes ``token="[redacted:token]"`` and not the unbalanced
+    ``token=[redacted:token]`` that could invalidate a surrounding JSON string
+    (IN-06)."""
+    quote = match.group(3)
+    return (
+        f"{match.group(1)}{match.group(2)}{quote}"
+        f"[redacted:{match.group(1).lower()}]{quote}"
+    )
 
 
 # A 40-hex (classic PAT) or 64-hex token is redacted UNLESS the text right before
