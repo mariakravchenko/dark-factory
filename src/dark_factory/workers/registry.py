@@ -3,6 +3,22 @@
 The orchestrator calls ``registry.get(role.worker)`` and then reads only
 :class:`WorkerResult` / :class:`WorkerCapabilities` fields. A worker's name never
 appears in a conditional outside this package.
+
+``get()`` returns whatever the registered factory returns: a factory bound to a
+class hands back a fresh instance every call, a factory bound to a single object
+hands back that same object every call. The choice is the registrant's, not the
+registry's -- the registry stays a plain name-to-callable map.
+
+**``default_registry``'s ``"fake"`` factory returns one long-lived
+:class:`FakeWorker`.** ``_run_current_role`` calls ``registry.get(node.worker)``
+inside every ``advance()``; a fresh ``FakeWorker`` per call would reset the
+script cursor to 0 every step, so a multi-entry ``DARK_FACTORY_FAKE_SCRIPT``
+would replay element 0 forever and never raise ``ScriptExhaustedError``. The
+worker instance is not run state -- it is a registry-scoped singleton, and
+``advance()``'s "reconstruct everything from columns" invariant is unaffected
+(the cursor is test-scaffolding position, never lifecycle state). Tests that
+need isolated cursors build their own :class:`WorkerRegistry` with a
+per-instance factory (see ``tests/conftest.py::fake_worker_registry``).
 """
 
 from collections.abc import Callable
@@ -35,4 +51,19 @@ class WorkerRegistry:
 
 
 default_registry = WorkerRegistry()
-default_registry.register("fake", FakeWorker)
+
+# One process-lifetime FakeWorker so its script cursor advances across the
+# repeated registry.get() calls a drive loop makes (see module docstring). Built
+# lazily on first lookup so DARK_FACTORY_FAKE_SCRIPT is read at use time, not at
+# import time.
+_fake_worker: FakeWorker | None = None
+
+
+def _shared_fake_worker() -> CodingWorker:
+    global _fake_worker
+    if _fake_worker is None:
+        _fake_worker = FakeWorker()
+    return _fake_worker
+
+
+default_registry.register("fake", _shared_fake_worker)
