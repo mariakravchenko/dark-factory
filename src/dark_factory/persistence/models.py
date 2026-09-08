@@ -119,9 +119,18 @@ class Run(Base):
 
 class RoleExecution(Base):
     """One row per role attempt — the STATE-03 column set. A retry is a **new
-    row**, never an update of an existing one; ``attempt`` starts at 1."""
+    row**, never an update of an existing one; ``attempt`` starts at 1.
+
+    ``attempt`` is computed as ``MAX(attempt) + 1`` scoped to ``(run_id, role)``
+    under a ``runs``-row lock in the one mutation path, so duplicates cannot
+    occur there. ``uq_role_exec_attempt`` is defence-in-depth: a future writer
+    that forgets the lock hits a constraint violation, not a silent duplicate
+    (added in migration ``0002``)."""
 
     __tablename__ = "role_executions"
+    __table_args__ = (
+        sa.UniqueConstraint("run_id", "role", "attempt", name="uq_role_exec_attempt"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         sa.Uuid(), primary_key=True, default=uuid.uuid4
