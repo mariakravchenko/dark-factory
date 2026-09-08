@@ -13,7 +13,9 @@ pytestmark = pytest.mark.unit
 
 # Obviously-fake, >=8-char placeholder secret values.
 FAKE_DB_URL = "postgresql+psycopg://fakeuser:fakepass@fake-host.example/darkfactory"
-FAKE_DB_URL_DIRECT = "postgresql+psycopg://fakeuser:fakepass@fake-direct.example/darkfactory"
+FAKE_DB_URL_DIRECT = (
+    "postgresql+psycopg://fakeuser:fakepass@fake-direct.example/darkfactory"
+)
 FAKE_GITHUB_TOKEN = "ghp_fake000000000000000000000000000000"
 
 
