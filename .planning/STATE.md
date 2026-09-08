@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-09-08T09:05:08.463Z"
+stopped_at: Completed 01-06-PLAN.md
+last_updated: "2026-09-08T09:42:04.569Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: 8bd310a7db632d9839980844a3ffaea8a63e239d
+state_head: 7de973ff587e513ea0f42b4de697dee2b3e8ec76
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P03 | 15min | 2 tasks | 9 files |
 | Phase 01 P04 | 40min | 3 tasks | 12 files |
 | Phase 01 P05 | 35min | 2 tasks | 7 files |
+| Phase 01 P06 | 26 min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-05: apply_transition opens exactly one with session.begin(); no explicit commit call; redact() at the single call site before every result/error/payload write; attempt = SQL MAX(attempt)+1 per run+role inside the transaction (D-19)
 - [Phase 01]: 01-05: load_run_state returns a frozen detached RunState built from scalar columns + the single latest role_executions row; never queries run_events; imports nothing from dark_factory.events (STATE-06)
 - [Phase 01]: 01-05: test_single_mutation_path.py is an AST source-tree guard proving mutations.py is the only module that constructs RunEvent/RoleExecution or assigns .status
+- [Phase 01]: 01-06: advance/drive/start_run/run_state take session_factory / registry / pipeline as keyword-only params with production defaults — the test injection seam; advance still takes exactly one required arg (run_id)
+- [Phase 01]: 01-06: lifecycle.transition is typed against a structural Protocol, not RunState, so the pure module imports nothing from dark_factory.persistence and contains no Session
+- [Phase 01]: 01-06: start_run(source: str) owns classify->load->create_run and raises before any write; cli wraps it so exit 2 stays reserved for pre-persistence failures. CLI output: run id on stdout line 1, 'PREV -> NEXT' per transition, summary block, exit 0/1/2
 
 ### Pending Todos
 
@@ -111,6 +115,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T09:05:08.443Z
-Stopped at: Completed 01-05-PLAN.md
+Last session: 2026-09-08T09:41:52.433Z
+Stopped at: Completed 01-06-PLAN.md
 Resume file: None

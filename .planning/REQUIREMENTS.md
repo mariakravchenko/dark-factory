@@ -9,19 +9,19 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Task Intake
 
-- [ ] **INTAKE-01**: Operator can start a run from plain text — `dark-factory run text:"..."`
+- [x] **INTAKE-01**: Operator can start a run from plain text — `dark-factory run text:"..."`
 - [ ] **INTAKE-02**: Operator can start a run from a spec file — `dark-factory run spec:./path.md`
 - [ ] **INTAKE-03**: Operator can start a run from a GitHub issue — `dark-factory run github:152` — pulling issue title, body, comments, labels, and repository metadata
-- [ ] **INTAKE-04**: The input resolver classifies the task source deterministically (text vs path vs GitHub reference) with no LLM call, and does not inspect the repo, call GitHub, or create a run
-- [ ] **INTAKE-05**: Every source is loaded through a source-specific loader and normalized to one internal `NormalizedTask` model, after which the orchestrator is agnostic to origin
+- [x] **INTAKE-04**: The input resolver classifies the task source deterministically (text vs path vs GitHub reference) with no LLM call, and does not inspect the repo, call GitHub, or create a run
+- [x] **INTAKE-05**: Every source is loaded through a source-specific loader and normalized to one internal `NormalizedTask` model, after which the orchestrator is agnostic to origin
 
 ### Orchestration
 
-- [ ] **ORCH-01**: A deterministic orchestrator drives the run lifecycle; the outer delivery flow is never a single LLM loop
+- [x] **ORCH-01**: A deterministic orchestrator drives the run lifecycle; the outer delivery flow is never a single LLM loop
 - [ ] **ORCH-02**: The orchestrator executes a configured ordered sequence of roles, not hardcoded role calls
 - [ ] **ORCH-03**: The role pipeline is defined in configuration (`workflow.roles`) and can be shortened or reordered without changing orchestrator code
 - [ ] **ORCH-04**: Roles communicate through durable artifacts, not one shared agent conversation
-- [ ] **ORCH-05**: Only the orchestrator changes lifecycle state; a worker result never directly drives a transition
+- [x] **ORCH-05**: Only the orchestrator changes lifecycle state; a worker result never directly drives a transition
 - [x] **ORCH-06**: Every lifecycle mutation (store result, transition state, create interaction, emit event) is written in a single database transaction through one mutation path
 
 ### Engineering Roles
@@ -186,16 +186,16 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INTAKE-01 | Phase 1 | Pending |
+| INTAKE-01 | Phase 1 | Complete |
 | INTAKE-02 | Phase 4 | Pending |
 | INTAKE-03 | Phase 10 | Pending |
-| INTAKE-04 | Phase 1 | Pending |
-| INTAKE-05 | Phase 1 | Pending |
-| ORCH-01 | Phase 1 | Pending |
+| INTAKE-04 | Phase 1 | Complete |
+| INTAKE-05 | Phase 1 | Complete |
+| ORCH-01 | Phase 1 | Complete |
 | ORCH-02 | Phase 3 | Pending |
 | ORCH-03 | Phase 3 | Pending |
 | ORCH-04 | Phase 4 | Pending |
-| ORCH-05 | Phase 1 | Pending |
+| ORCH-05 | Phase 1 | Complete |
 | ORCH-06 | Phase 1 | Complete |
 | ROLE-01 | Phase 4 | Pending |
 | ROLE-02 | Phase 4 | Pending |
