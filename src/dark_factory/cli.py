@@ -59,6 +59,25 @@ def _echo_summary(run_id: UUID, final: RunStatus) -> None:
     typer.echo(f"  attempt:        {attempt}")
 
 
+def _route_logs_to_stderr() -> None:
+    """Install the production structlog chain (redaction processor included) with
+    every log line going to **stderr**.
+
+    Two reasons this runs before any lifecycle work on ``run`` / ``resume`` /
+    ``status --json``:
+
+    * without it, structlog is in its library-default configuration -- no
+      ``_redaction_processor`` -- so the first ``log.*`` call added anywhere on
+      the advance path would bypass ``redact()`` (the project credential-boundary
+      invariant: credentials must never reach logs);
+    * library-default structlog also writes to **stdout**, which would interleave
+      JSON/console lines into the parseable ``run`` output contract (run id on
+      line 1, one ``PREVIOUS -> NEXT`` line per transition, D-04) and the
+      ``status --json`` object (D-13, T-01-34).
+    """
+    configure_logging(structlog.PrintLoggerFactory(file=sys.stderr))
+
+
 def _drive_and_exit(run_id: UUID) -> None:
     final = drive(run_id, on_transition=_echo_transition)
     _echo_summary(run_id, final)
@@ -68,6 +87,7 @@ def _drive_and_exit(run_id: UUID) -> None:
 @app.command()
 def run(source: str) -> None:
     """Start a run from a ``text:`` / ``spec:`` / ``github:`` source and drive it."""
+    _route_logs_to_stderr()
     try:
         run_id = start_run(source)
     except (UnresolvableSourceError, SourceNotSupportedError) as exc:
@@ -80,6 +100,7 @@ def run(source: str) -> None:
 @app.command()
 def resume(run_id: str) -> None:
     """Resume an existing run by id -- the identical drive loop, no other argument (D-03)."""
+    _route_logs_to_stderr()
     try:
         parsed = UUID(run_id)
     except ValueError as exc:
@@ -90,13 +111,6 @@ def resume(run_id: str) -> None:
         raise typer.Exit(code=2)
     typer.echo(str(parsed))
     _drive_and_exit(parsed)
-
-
-def _route_logs_to_stderr() -> None:
-    """Keep the ``--json`` stdout a clean stream: any structlog output goes to
-    stderr, so a CI step parsing the object never trips over an interleaved log
-    line (D-13, T-01-34)."""
-    configure_logging(structlog.PrintLoggerFactory(file=sys.stderr))
 
 
 @app.command()
