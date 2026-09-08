@@ -14,7 +14,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 # Obviously-fake, >=8-char placeholder connection strings.
-FAKE_DB_URL = "postgresql+psycopg://fakeuser:fakepass@fake-host.example:5432/darkfactory"
+FAKE_DB_URL = (
+    "postgresql+psycopg://fakeuser:fakepass@fake-host.example:5432/darkfactory"
+)
 FAKE_DB_URL_DIRECT = (
     "postgresql+psycopg://fakeuser:fakepass@fake-direct.example:5432/darkfactory"
 )
