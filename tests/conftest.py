@@ -25,9 +25,14 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from polyfactory.factories.pydantic_factory import ModelFactory
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
+
+from dark_factory.config.settings import Settings
+from dark_factory.domain.task import NormalizedTask
+from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -229,7 +234,73 @@ def _schema_at_head(request: pytest.FixtureRequest) -> Iterator[None]:
 #   StringIO / temp-file sink (NOT structlog.testing.capture_logs) so the
 #   SC5 redaction assertion runs against a real sink.
 #
-# Plan 05 — FakeWorker factory:
+# Plan 06 — FakeWorker injection point:
 #   A fixture returning a builder for `FakeWorker` seeded with a scripted list
-#   of `WorkerResult`s, plus polyfactory model factories for `WorkerResult` /
-#   `NormalizedTask` / ORM rows.
+#   of `WorkerResult`s, wired into `advance()` so the drive loop runs the fake
+#   in-process. Declared here; wired in Plan 06.
+
+
+# --------------------------------------------------------------------------- #
+# Plan 05 — the one-mutation-path test kit
+# --------------------------------------------------------------------------- #
+#
+# `fake_settings` builds a `Settings` from obviously-fake credentials so
+# `known_secret_values()` returns a map the redaction assertions can grep for
+# with no real secret ever entering the test process. `use_fake_secrets` swaps
+# it in for `mutations.get_settings` so `create_run` / `apply_transition` redact
+# against the fake values. The polyfactory factories build boundary models for
+# the db-tier tests.
+
+_FAKE_DB_URL = (
+    "postgresql://df_fake_user:df_fake_pw_0123456789@fake-db.invalid:5432/df_fake_db"
+)
+_FAKE_DB_URL_DIRECT = (
+    "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
+)
+_FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
+
+
+@pytest.fixture
+def fake_settings() -> Settings:
+    """A `Settings` built entirely from fake, greppable credential values."""
+    return Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        database_url=_FAKE_DB_URL,
+        database_url_direct=_FAKE_DB_URL_DIRECT,
+        github_token=_FAKE_GITHUB_TOKEN,
+    )
+
+
+@pytest.fixture
+def use_fake_secrets(
+    monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
+) -> Settings:
+    """Point the one mutation path's `get_settings` at `fake_settings`."""
+    from dark_factory.persistence import mutations
+
+    monkeypatch.setattr(mutations, "get_settings", lambda: fake_settings)
+    return fake_settings
+
+
+class NormalizedTaskFactory(ModelFactory[NormalizedTask]):
+    """polyfactory builder for `NormalizedTask` (Plan 05)."""
+
+    __use_defaults__ = True
+
+
+class WorkerResultFactory(ModelFactory[WorkerResult]):
+    """polyfactory builder for `WorkerResult` (Plan 05); pinned COMPLETED so the
+    question-less-NEEDS_INPUT validator never trips on a random draw."""
+
+    __use_defaults__ = True
+    status = WorkerResultStatus.COMPLETED
+
+
+@pytest.fixture
+def normalized_task_factory() -> type[NormalizedTaskFactory]:
+    return NormalizedTaskFactory
+
+
+@pytest.fixture
+def worker_result_factory() -> type[WorkerResultFactory]:
+    return WorkerResultFactory
