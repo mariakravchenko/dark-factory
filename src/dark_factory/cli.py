@@ -19,13 +19,20 @@ source, unknown run id).
 
 from __future__ import annotations
 
+import functools
+import sys
 from uuid import UUID
 
+import structlog
 import typer
 
+from dark_factory.config.settings import get_settings
 from dark_factory.domain.status import RunStatus
+from dark_factory.events.redaction import redact
 from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
+from dark_factory.logging import configure_logging
+from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.runner import drive, run_state, start_run
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -83,3 +90,45 @@ def resume(run_id: str) -> None:
         raise typer.Exit(code=2)
     typer.echo(str(parsed))
     _drive_and_exit(parsed)
+
+
+def _route_logs_to_stderr() -> None:
+    """Keep the ``--json`` stdout a clean stream: any structlog output goes to
+    stderr, so a CI step parsing the object never trips over an interleaved log
+    line (D-13, T-01-34)."""
+    configure_logging(structlog.PrintLoggerFactory(file=sys.stderr))
+
+
+@app.command()
+def status(
+    run_id: str,
+    output_json: bool = typer.Option(
+        False, "--json", help="Emit one JSON object instead of the text field list."
+    ),
+) -> None:
+    """Report where a run is -- read from state columns, never the event log (D-11 / D-12).
+
+    A pure read: it calls ``read_status`` and renders. It never inspects the
+    status to decide on an action -- that is the orchestrator's job, and letting
+    a read command grow a decision is exactly what Phase 11's single-``advance``
+    funnel starts by refusing.
+    """
+    try:
+        parsed = UUID(run_id)
+    except ValueError as exc:
+        typer.echo(f"not a run id: {run_id}", err=True)
+        raise typer.Exit(code=2) from exc
+    try:
+        view = read_status(parsed)
+    except UnknownRunError as exc:
+        typer.echo(f"unknown run: {run_id}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    redactor = functools.partial(
+        redact, known_secrets=get_settings().known_secret_values()
+    )
+    if output_json:
+        _route_logs_to_stderr()
+        typer.echo(view.as_json(redactor=redactor))
+    else:
+        typer.echo(view.as_text(redactor=redactor))
