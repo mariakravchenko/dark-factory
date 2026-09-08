@@ -21,11 +21,15 @@ import os
 import re
 import subprocess
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # --------------------------------------------------------------------------- #
 # Provisioning probe ladder
@@ -172,14 +176,48 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 # --------------------------------------------------------------------------- #
-# Extension points — filled in by later plans, declared here so their shape is
-# visible from the start. Do NOT wire these up in Plan 01.
+# Alembic upgrade hook (Plan 04)
 # --------------------------------------------------------------------------- #
-#
-# Plan 04 — Alembic upgrade hook:
-#   A session-scoped autouse fixture that runs `alembic upgrade head` against
-#   `pg_url` once (command.upgrade(Config(...), "head")) and `downgrade base`
-#   on teardown, so `db` tests see the real schema.
+
+
+def _alembic_config(url: str) -> Config:
+    """An Alembic ``Config`` pinned to this repo, with the URL injected in
+    memory so no connection string is ever written to a file."""
+    cfg = Config(str(_REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", url)
+    return cfg
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _schema_at_head(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Bring the provisioned database to ``head`` once before any ``db`` or
+    ``integration`` test runs, so a fresh checkout produces a green suite with
+    no manual migration step.
+
+    Skipped entirely when the collected session contains no ``db`` /
+    ``integration`` test — a ``pytest -m unit`` run never touches PostgreSQL and
+    must not force the provisioning ladder to resolve.
+    """
+    wants_database = any(
+        item.get_closest_marker("db") or item.get_closest_marker("integration")
+        for item in request.session.items
+    )
+    if not wants_database:
+        yield
+        return
+
+    from alembic import command
+
+    url = request.getfixturevalue("pg_url")
+    command.upgrade(_alembic_config(url), "head")
+    yield
+
+
+# --------------------------------------------------------------------------- #
+# Extension points — filled in by later plans, declared here so their shape is
+# visible from the start. Do NOT wire these up before their plan.
+# --------------------------------------------------------------------------- #
 #
 # Plan 03 — settings override fixture:
 #   A fixture yielding a `Settings` instance built from fake-shaped secrets
