@@ -1,0 +1,146 @@
+"""Unit coverage for the pure transition function (ORCH-01, ORCH-05).
+
+``transition`` needs no database and no mocks: it reads three fields off the run
+state and is otherwise a pure function of ``(state, signal, pipeline)``. The
+state is a tiny local stand-in here -- this test imports nothing from
+``dark_factory.persistence`` and uses no database fixture.
+"""
+
+from __future__ import annotations
+
+import ast
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+from dark_factory.domain.signal import Signal
+from dark_factory.domain.status import RunStatus
+from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
+from dark_factory.workflows.pipeline import Pipeline, RoleNode
+
+pytestmark = pytest.mark.unit
+
+_ONE_ROLE = Pipeline(nodes=(RoleNode(name="BA", worker="fake"),))
+_TWO_ROLE = Pipeline(
+    nodes=(
+        RoleNode(name="BA", worker="fake"),
+        RoleNode(name="ARCHITECTURE", worker="fake"),
+    )
+)
+
+_LIFECYCLE_SRC = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "dark_factory"
+    / "orchestrator"
+    / "lifecycle.py"
+)
+
+
+@dataclass(frozen=True)
+class _FakeState:
+    """The read-only slice of run state ``transition`` consumes."""
+
+    status: RunStatus
+    current_role: str | None
+    current_step: int | None = None
+
+
+@pytest.mark.parametrize(
+    ("status", "current_role", "current_step", "signal", "pipeline", "expected"),
+    [
+        (
+            RunStatus.CREATED,
+            None,
+            None,
+            Signal.ENTER,
+            _ONE_ROLE,
+            (RunStatus.BA, "BA", 0),
+        ),
+        (
+            RunStatus.BA,
+            "BA",
+            0,
+            Signal.ROLE_COMPLETED,
+            _ONE_ROLE,
+            (RunStatus.COMPLETED, "BA", 0),
+        ),
+        (
+            RunStatus.BA,
+            "BA",
+            0,
+            Signal.ROLE_FAILED,
+            _ONE_ROLE,
+            (RunStatus.FAILED, "BA", 0),
+        ),
+        (
+            RunStatus.BA,
+            "BA",
+            0,
+            Signal.ROLE_COMPLETED,
+            _TWO_ROLE,
+            (RunStatus.ARCHITECTURE, "ARCHITECTURE", 1),
+        ),
+    ],
+)
+def test_legal_transitions_produce_documented_next_state(
+    status: RunStatus,
+    current_role: str | None,
+    current_step: int | None,
+    signal: Signal,
+    pipeline: Pipeline,
+    expected: tuple[RunStatus, str | None, int | None],
+) -> None:
+    state = _FakeState(status, current_role, current_step)
+    assert transition(state, signal, pipeline) == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "current_role", "signal", "pipeline"),
+    [
+        (RunStatus.BA, "BA", Signal.ENTER, _ONE_ROLE),
+        (RunStatus.CREATED, None, Signal.ROLE_COMPLETED, _ONE_ROLE),
+        (RunStatus.CREATED, None, Signal.ROLE_FAILED, _ONE_ROLE),
+        (RunStatus.COMPLETED, "BA", Signal.ROLE_COMPLETED, _ONE_ROLE),
+        (RunStatus.FAILED, "BA", Signal.ROLE_FAILED, _ONE_ROLE),
+        (RunStatus.ARCHITECTURE, "ARCHITECTURE", Signal.ROLE_COMPLETED, _ONE_ROLE),
+        (RunStatus.BA, "BA", Signal.ROLE_NEEDS_INPUT, _ONE_ROLE),
+    ],
+)
+def test_illegal_pairs_raise(
+    status: RunStatus,
+    current_role: str | None,
+    signal: Signal,
+    pipeline: Pipeline,
+) -> None:
+    state = _FakeState(status, current_role, 0)
+    with pytest.raises(IllegalTransitionError):
+        transition(state, signal, pipeline)
+
+
+def test_transition_is_pure_and_repeatable() -> None:
+    state = _FakeState(RunStatus.BA, "BA", 0)
+    pipeline_nodes = _ONE_ROLE.nodes
+
+    first = transition(state, Signal.ROLE_COMPLETED, _ONE_ROLE)
+    second = transition(state, Signal.ROLE_COMPLETED, _ONE_ROLE)
+
+    assert first == second
+    assert state == _FakeState(RunStatus.BA, "BA", 0)
+    assert _ONE_ROLE.nodes is pipeline_nodes
+
+
+def test_lifecycle_module_has_no_persistence_import_and_no_session() -> None:
+    tree = ast.parse(_LIFECYCLE_SRC.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            assert node.module is not None
+            assert not node.module.startswith("dark_factory.persistence"), node.module
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert not alias.name.startswith("dark_factory.persistence")
+        if isinstance(node, ast.Name):
+            assert node.id != "Session"
+        if isinstance(node, ast.Attribute):
+            assert node.attr != "Session"
