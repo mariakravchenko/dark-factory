@@ -71,7 +71,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Durable State
 
 - [x] **STATE-01**: The persistence stack is SQLAlchemy + Alembic + PostgreSQL (Neon); the application uses only `DATABASE_URL` and contains no provider-specific database logic
-- [ ] **STATE-02**: A `runs` table persists run identity, source, workflow, status, current role, current step, repository, base/working branch, PR number/URL, and timestamps
+- [x] **STATE-02**: A `runs` table persists run identity, source, workflow, status, current role, current step, repository, base/working branch, PR number/URL, and timestamps
 - [x] **STATE-03**: A `role_executions` table persists one row per attempt (role, worker, status, attempt number, worker_session_id, result/error JSONB, timestamps)
 - [ ] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
 - [ ] **STATE-05**: An `artifacts` table persists artifact metadata
@@ -227,7 +227,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ART-03 | Phase 4 | Pending |
 | ART-04 | Phase 5 | Pending |
 | STATE-01 | Phase 1 | Complete |
-| STATE-02 | Phase 1 | Pending |
+| STATE-02 | Phase 1 | Complete |
 | STATE-03 | Phase 1 | Complete |
 | STATE-04 | Phase 2 | Pending |
 | STATE-05 | Phase 4 | Pending |

@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-09-08T12:10:51.435Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-09-08T12:50:14.434Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: afb2476ec157d3d3425d7c37acbc42b4bc5241c3
+state_head: 409ddb8e25386e3ae4bb1acd449aa75cae820b64
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -64,6 +64,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P05 | 35min | 2 tasks | 7 files |
 | Phase 01 P06 | 26 min | 3 tasks | 17 files |
 | Phase 01 P07 | 40min | 3 tasks | 5 files |
+| Phase 01 P08 | 40min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -94,6 +95,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-07: DARK_FACTORY_CRASH_AFTER — shipped test-only env var read inside _maybe_crash_after every call (never cached at import), inert unless set, os._exit(137) after a named committed transition ('<PREV>_<NEXT>'); one function, wired after apply_transition in both step funcs
 - [Phase 01]: 01-07: SC2 proven across two real OS processes sharing only the DB (child env from an allowlist, not os.environ.copy); SC4 proven with an after_cursor_execute listener parametrized over the role_executions and runs sub-writes — full rollback + still resumable
 - [Phase 01]: 01-07: STATE-08 complete — killed run resumed by a fresh process to the same terminal state/attempt, and a fresh-engine-per-step drive is byte-identical to a shared-engine drive; orchestrator module holds no mutable public state across a drive
+- [Phase 01]: 01-08: read_status lives in a new observability/ tier, does two selects (runs row + latest role_executions row), imports nothing from dark_factory.events transitively (AST import-graph guard), and performs no write — SC3 proven invariant under an inserted/deleted/corrupted run_events row
+- [Phase 01]: 01-08: source redaction for status output is applied by the CLI via an injected redactor (functools.partial(redact, known_secrets=...)), so RunView and the read path stay free of any dark_factory.events import while the source is still scrubbed in both text and --json modes
+- [Phase 01]: 01-08: RunView is a frozen pydantic DTO with the exact D-12 field set; as_text() and as_json() share one model_dump(mode=json) renderer and iterate model_fields so the text field set and JSON key set cannot drift
 
 ### Pending Todos
 
@@ -119,6 +123,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T12:10:41.027Z
-Stopped at: Completed 01-07-PLAN.md
+Last session: 2026-09-08T12:49:57.991Z
+Stopped at: Completed 01-08-PLAN.md
 Resume file: None
