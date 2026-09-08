@@ -77,7 +77,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [ ] **STATE-05**: An `artifacts` table persists artifact metadata
 - [x] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
 - [x] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
-- [ ] **STATE-08**: The complete execution of a run is reconstructable from persisted data alone
+- [x] **STATE-08**: The complete execution of a run is reconstructable from persisted data alone
 
 ### Human-in-the-Loop, Pause & Resume
 
@@ -233,7 +233,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | STATE-05 | Phase 4 | Pending |
 | STATE-06 | Phase 1 | Complete |
 | STATE-07 | Phase 1 | Complete |
-| STATE-08 | Phase 1 | Pending |
+| STATE-08 | Phase 1 | Complete |
 | HITL-01 | Phase 2 | Pending |
 | HITL-02 | Phase 2 | Pending |
 | HITL-03 | Phase 2 | Pending |

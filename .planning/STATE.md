@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-09-08T09:42:04.569Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-09-08T12:10:51.435Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: 7de973ff587e513ea0f42b4de697dee2b3e8ec76
+state_head: afb2476ec157d3d3425d7c37acbc42b4bc5241c3
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 6 of 9
+Plan: 7 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -63,6 +63,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P04 | 40min | 3 tasks | 12 files |
 | Phase 01 P05 | 35min | 2 tasks | 7 files |
 | Phase 01 P06 | 26 min | 3 tasks | 17 files |
+| Phase 01 P07 | 40min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-06: advance/drive/start_run/run_state take session_factory / registry / pipeline as keyword-only params with production defaults — the test injection seam; advance still takes exactly one required arg (run_id)
 - [Phase 01]: 01-06: lifecycle.transition is typed against a structural Protocol, not RunState, so the pure module imports nothing from dark_factory.persistence and contains no Session
 - [Phase 01]: 01-06: start_run(source: str) owns classify->load->create_run and raises before any write; cli wraps it so exit 2 stays reserved for pre-persistence failures. CLI output: run id on stdout line 1, 'PREV -> NEXT' per transition, summary block, exit 0/1/2
+- [Phase 01]: 01-07: DARK_FACTORY_CRASH_AFTER — shipped test-only env var read inside _maybe_crash_after every call (never cached at import), inert unless set, os._exit(137) after a named committed transition ('<PREV>_<NEXT>'); one function, wired after apply_transition in both step funcs
+- [Phase 01]: 01-07: SC2 proven across two real OS processes sharing only the DB (child env from an allowlist, not os.environ.copy); SC4 proven with an after_cursor_execute listener parametrized over the role_executions and runs sub-writes — full rollback + still resumable
+- [Phase 01]: 01-07: STATE-08 complete — killed run resumed by a fresh process to the same terminal state/attempt, and a fresh-engine-per-step drive is byte-identical to a shared-engine drive; orchestrator module holds no mutable public state across a drive
 
 ### Pending Todos
 
@@ -115,6 +119,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T09:41:52.433Z
-Stopped at: Completed 01-06-PLAN.md
+Last session: 2026-09-08T12:10:41.027Z
+Stopped at: Completed 01-07-PLAN.md
 Resume file: None

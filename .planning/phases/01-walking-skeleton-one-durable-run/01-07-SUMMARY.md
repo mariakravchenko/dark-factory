@@ -197,7 +197,7 @@ status: complete
 
 ## Full suite
 
-`pytest -q` (whole suite, real PostgreSQL 18.6 via `DARK_FACTORY_TEST_DATABASE_URL`): running at SUMMARY-write time; the three tiers were each run to completion and green independently (152 unit + 53 db + 12 integration + 4 contract), and no test outside this plan's five files was touched. The full-suite run is expected to report the union with exit 0.
+`pytest -q` (whole suite, real PostgreSQL 18.6 via `DARK_FACTORY_TEST_DATABASE_URL`): **221 passed in 446.19s, exit 0.** No failures, no errors, no marker warnings. (+10 vs 01-06's 211: this plan's 3 integration + 7 db new tests.)
 
 ## Crash-hook reference (for Phase 2 lease work and Phase 11 cross-machine resume)
 
