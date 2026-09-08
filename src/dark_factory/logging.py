@@ -30,12 +30,22 @@ def _redaction_processor(
     return result
 
 
+def _configured_level() -> int:
+    """The numeric log level from ``Settings.log_level`` (validated upstream to a
+    known name), falling back to ``INFO`` if the mapping ever misses."""
+    return logging.getLevelNamesMapping().get(
+        get_settings().log_level.upper(), logging.INFO
+    )
+
+
 def configure_logging(logger_factory: Any | None = None) -> None:
     """Install the production structlog processor chain.
 
     ``logger_factory`` lets a test point the *same* configured chain at a
     ``StringIO`` (``structlog.PrintLoggerFactory(file=...)``); production leaves
-    it unset and logs to stdout.
+    it unset and logs to stdout. The level filter honours ``Settings.log_level``
+    (``LOG_LEVEL`` in the environment / ``.env``), so an operator debugging a
+    stuck resume can raise verbosity.
     """
     structlog.configure(
         processors=[
@@ -45,7 +55,7 @@ def configure_logging(logger_factory: Any | None = None) -> None:
             _redaction_processor,
             structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        wrapper_class=structlog.make_filtering_bound_logger(_configured_level()),
         logger_factory=logger_factory
         if logger_factory is not None
         else structlog.PrintLoggerFactory(),

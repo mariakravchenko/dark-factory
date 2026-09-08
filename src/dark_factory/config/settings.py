@@ -16,8 +16,12 @@ from __future__ import annotations
 
 import functools
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_VALID_LOG_LEVELS = frozenset(
+    {"CRITICAL", "FATAL", "ERROR", "WARN", "WARNING", "INFO", "DEBUG", "NOTSET"}
+)
 
 
 class Settings(BaseSettings):
@@ -40,6 +44,19 @@ class Settings(BaseSettings):
     database_url_direct: SecretStr
     github_token: SecretStr | None = None
     log_level: str = "INFO"
+
+    @field_validator("log_level")
+    @classmethod
+    def _known_log_level(cls, value: str) -> str:
+        """Reject a typo loudly rather than let ``configure_logging`` silently
+        fall back to INFO. Normalised to upper case so ``LOG_LEVEL=debug`` works."""
+        normalised = value.strip().upper()
+        if normalised not in _VALID_LOG_LEVELS:
+            raise ValueError(
+                f"log_level {value!r} is not a Python logging level name "
+                f"(one of: {', '.join(sorted(_VALID_LOG_LEVELS))})"
+            )
+        return normalised
 
     def known_secret_values(self) -> dict[str, str]:
         """Return ``{live secret value: label}`` for exact-value redaction.

@@ -61,6 +61,49 @@ def test_log_level_defaults_to_info(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Settings(_env_file=None).log_level == "INFO"
 
 
+def test_log_level_is_read_from_env_and_normalised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LOG_LEVEL="debug")
+    assert Settings(_env_file=None).log_level == "DEBUG"
+
+
+def test_log_level_typo_fails_loudly(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pydantic import ValidationError
+
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LOG_LEVEL="VERBOSE")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_configure_logging_honours_the_configured_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``LOG_LEVEL=WARNING`` must actually filter out an ``info`` event."""
+    import structlog
+
+    from dark_factory.config.settings import get_settings
+    from tests.support.log_sink import real_log_sink
+
+    _set_env(monkeypatch, LOG_LEVEL="WARNING")
+    get_settings.cache_clear()
+    try:
+        with real_log_sink() as buffer:
+            log = structlog.get_logger()
+            log.info("should be filtered")
+            log.warning("should be kept")
+        output = buffer.getvalue()
+    finally:
+        get_settings.cache_clear()
+
+    assert "should be filtered" not in output
+    assert "should be kept" in output
+
+
 def test_secrets_are_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
     from dark_factory.config.settings import Settings
 
