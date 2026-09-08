@@ -23,7 +23,6 @@ into an unaudited mutation path.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -46,15 +45,10 @@ class UnknownRunError(LookupError):
     """
 
 
-def _default_session() -> Session:
-    """A real ``Session`` bound to the process-wide, cold-start-warmed engine."""
-    return cast(Session, new_session())
-
-
 def read_status(
     run_id: UUID,
     *,
-    session_factory: SessionFactory = _default_session,
+    session_factory: SessionFactory = new_session,
 ) -> RunView:
     """Return a :class:`RunView` built from state columns alone.
 

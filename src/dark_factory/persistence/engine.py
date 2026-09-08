@@ -26,13 +26,13 @@ from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import NullPool
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from dark_factory.config.settings import get_settings
 
-__all__ = ["SessionLocal", "build_engine"]
+__all__ = ["SessionLocal", "build_engine", "new_session"]
 
 # psycopg v3 is the only supported driver (project guidelines, Version
 # Compatibility): ``postgresql+psycopg://``, never ``postgresql+psycopg2://``.
@@ -101,6 +101,7 @@ def get_engine() -> Engine:
 SessionLocal = sessionmaker(expire_on_commit=False, future=True)
 
 
-def new_session() -> object:
-    """Return a new ``Session`` bound to the process-wide warmed engine."""
+def new_session() -> Session:
+    """Return a new ``Session`` bound to the process-wide, cold-start-warmed
+    engine. Statically a ``Session`` -- callers need no ``cast``."""
     return SessionLocal(bind=get_engine())

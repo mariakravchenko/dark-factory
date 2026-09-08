@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -96,11 +96,6 @@ class DriveLoopExhausted(RuntimeError):
     transition-graph bug, surfaced loudly instead of spinning."""
 
 
-def _default_session() -> Session:
-    """A real ``Session`` bound to the process-wide, cold-start-warmed engine."""
-    return cast(Session, new_session())
-
-
 def _workflow_snapshot(pipeline: Pipeline) -> dict[str, Any]:
     """The pipeline shape persisted to ``runs.workflow`` at creation time."""
     return {"roles": [node.name for node in pipeline.nodes]}
@@ -148,7 +143,7 @@ def _maybe_crash_after(previous: RunStatus, new: RunStatus) -> None:
 def start_run(
     source: str,
     *,
-    session_factory: SessionFactory = _default_session,
+    session_factory: SessionFactory = new_session,
     pipeline: Pipeline = DEFAULT_PIPELINE,
 ) -> UUID:
     """Classify, load and create -- return the new run id.
@@ -169,7 +164,7 @@ def start_run(
 def run_state(
     run_id: UUID,
     *,
-    session_factory: SessionFactory = _default_session,
+    session_factory: SessionFactory = new_session,
 ) -> RunState | None:
     """Reconstruct a run's state, or ``None`` if the id is unknown.
 
@@ -186,7 +181,7 @@ def run_state(
 def advance(
     run_id: UUID,
     *,
-    session_factory: SessionFactory = _default_session,
+    session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline = DEFAULT_PIPELINE,
 ) -> RunStatus:
@@ -335,7 +330,7 @@ def drive(
     run_id: UUID,
     on_transition: TransitionCallback | None = None,
     *,
-    session_factory: SessionFactory = _default_session,
+    session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline = DEFAULT_PIPELINE,
 ) -> RunStatus:
