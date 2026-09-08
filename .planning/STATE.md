@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-07T12:11:13.995Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-09-08T08:00:40.363Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: 8c008a9c10ceb3201d37f1cbbe377355b90aca33
+state_head: 95de4fa223b51b39ec8c1333507ba01aed26d285
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
@@ -28,8 +28,8 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 1 of 9
-Status: Executing Phase 01
+Plan: 2 of 9
+Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -54,6 +54,11 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+**Per-Plan Metrics:**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 01 P02 | 20min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -66,6 +71,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Checkpoint-in-Postgres, not replay — control state read from `runs` columns; `run_events` is append-only audit only.
 - [Roadmap]: Postgres-only concurrency — conditional-UPDATE lease + guarded status update; no distributed-lock service.
 - [Roadmap]: Real worker adapters split across two phases — Claude Code first (Phase 7) to prove the vertical slice, then Copilot + Hermes (Phase 8) to prove worker independence.
+- [Phase 01]: 01-02: WorkerResult is a frozen extra=forbid pydantic v2 model with the 7 WORK-08 fields plus optional error; question-less NEEDS_INPUT rejected by model_validator
+- [Phase 01]: 01-02: RunStatus defines all 10 STATE-07 values up front; STOP_STATUSES kept distinct from TERMINAL_STATUSES so Phase 2 adds WAITING_HUMAN to one line (D-06)
+- [Phase 01]: 01-02: CodingWorker ABC (execute/resume/capabilities) + WorkerRegistry name->factory map + shipped FakeWorker; contract suite parametrized for Phases 7-8 real adapters
 
 ### Pending Todos
 
@@ -91,6 +99,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-07T06:01:24.123Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-walking-skeleton-one-durable-run/01-CONTEXT.md
+Last session: 2026-09-08T08:00:31.317Z
+Stopped at: Completed 01-02-PLAN.md
+Resume file: None

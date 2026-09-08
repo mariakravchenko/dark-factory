@@ -296,6 +296,10 @@ None - no external service configuration required. This plan is pure in-memory P
 - **Guards active:** any later code that leaks a runtime name outside `workers/`+`config/`, or copies `os.environ` wholesale, fails `pytest -m unit`.
 - **Unchanged blockers:** the three research-flagged decisions (artifact-content durability → Phase 5, lease TTL → Phase 2, Copilot/Hermes flag matrix → Phase 8) are untouched by this plan.
 
+## Self-Check: PASSED
+
+All 15 content files verified present on disk; all 7 commits (`9a152c9`, `1a380af`, `28aefe5`, `aee632c`, `15b7a92`, `48684c1`, `95de4fa`) verified in `git log`.
+
 ---
 *Phase: 01-walking-skeleton-one-durable-run*
 *Completed: 2026-09-08*

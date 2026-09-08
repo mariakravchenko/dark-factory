@@ -35,16 +35,16 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Worker Abstraction
 
-- [ ] **WORK-01**: All agent runtimes implement one `CodingWorker` contract — `execute()`, `resume()`, `capabilities()`
+- [x] **WORK-01**: All agent runtimes implement one `CodingWorker` contract — `execute()`, `resume()`, `capabilities()`
 - [ ] **WORK-02**: A `WorkerRegistry` maps `claude-code` / `copilot` / `hermes` to adapters; worker creation is centralized
-- [ ] **WORK-03**: No worker-specific branching (`if worker == "claude-code"`) appears in the orchestrator or workflow code
+- [x] **WORK-03**: No worker-specific branching (`if worker == "claude-code"`) appears in the orchestrator or workflow code
 - [ ] **WORK-04**: `ClaudeCodeWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-05**: `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-06**: `HermesWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-07**: `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
-- [ ] **WORK-08**: Every adapter normalizes its output to one `WorkerResult` (status COMPLETED | NEEDS_INPUT | FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
+- [x] **WORK-08**: Every adapter normalizes its output to one `WorkerResult` (status COMPLETED | NEEDS_INPUT | FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
 - [ ] **WORK-09**: Any role can be assigned to any supported worker via configuration with no change to workflow code
-- [ ] **WORK-10**: A `FakeWorker` returns a scripted sequence of `WorkerResult`s for orchestration tests with no external AI call
+- [x] **WORK-10**: A `FakeWorker` returns a scripted sequence of `WorkerResult`s for orchestration tests with no external AI call
 
 ### Tools & Permissions
 
@@ -76,7 +76,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [ ] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
 - [ ] **STATE-05**: An `artifacts` table persists artifact metadata
 - [ ] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
-- [ ] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
+- [x] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
 - [ ] **STATE-08**: The complete execution of a run is reconstructable from persisted data alone
 
 ### Human-in-the-Loop, Pause & Resume
@@ -203,16 +203,16 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ROLE-04 | Phase 4 | Pending |
 | ROLE-05 | Phase 5 | Pending |
 | ROLE-06 | Phase 4 | Pending |
-| WORK-01 | Phase 1 | Pending |
+| WORK-01 | Phase 1 | Complete |
 | WORK-02 | Phase 3 | Pending |
-| WORK-03 | Phase 1 | Pending |
+| WORK-03 | Phase 1 | Complete |
 | WORK-04 | Phase 7 | Pending |
 | WORK-05 | Phase 8 | Pending |
 | WORK-06 | Phase 8 | Pending |
 | WORK-07 | Phase 7 | Pending |
-| WORK-08 | Phase 1 | Pending |
+| WORK-08 | Phase 1 | Complete |
 | WORK-09 | Phase 8 | Pending |
-| WORK-10 | Phase 1 | Pending |
+| WORK-10 | Phase 1 | Complete |
 | TOOL-01 | Phase 6 | Pending |
 | TOOL-02 | Phase 6 | Pending |
 | TOOL-03 | Phase 6 | Pending |
@@ -232,7 +232,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | STATE-04 | Phase 2 | Pending |
 | STATE-05 | Phase 4 | Pending |
 | STATE-06 | Phase 1 | Pending |
-| STATE-07 | Phase 1 | Pending |
+| STATE-07 | Phase 1 | Complete |
 | STATE-08 | Phase 1 | Pending |
 | HITL-01 | Phase 2 | Pending |
 | HITL-02 | Phase 2 | Pending |
@@ -277,6 +277,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | QUAL-04 | Phase 7 | Pending |
 
 **Coverage:**
+
 - v1 requirements: 89 total
 - Mapped to phases: 89 ✓
 - Unmapped: 0 ✓

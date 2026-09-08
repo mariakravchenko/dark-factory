@@ -80,7 +80,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A crash injected between the sub-writes of a transition leaves a consistent, resumable run: no state change exists without its `run_events` row, and no event exists without its state change.
   5. A task whose text contains a `DATABASE_URL`-shaped value shows redacted values in every persisted event payload and every log line.
 
-**Plans**: 1/9 plans executed
+**Plans**: 2/9 plans executed
 
 Plans:
 **Wave 1**
@@ -89,7 +89,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — Domain contracts: RunStatus, Signal, event catalog, NormalizedTask, WorkerResult, CodingWorker, WorkerRegistry, FakeWorker
+- [x] 01-02-PLAN.md — Domain contracts: RunStatus, Signal, event catalog, NormalizedTask, WorkerResult, CodingWorker, WorkerRegistry, FakeWorker
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -308,7 +308,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton — One Durable Run | 1/9 | In Progress|  |
+| 1. Walking Skeleton — One Durable Run | 2/9 | In Progress|  |
 | 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
