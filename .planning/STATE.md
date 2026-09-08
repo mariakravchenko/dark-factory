@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-08-PLAN.md
-last_updated: "2026-09-08T12:50:14.434Z"
+stopped_at: Completed 01-09-PLAN.md
+last_updated: "2026-09-08T13:21:40.934Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: 409ddb8e25386e3ae4bb1acd449aa75cae820b64
+state_head: c0d5a852a11ffff37e597f5327716b4d54fb3a3d
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 8 of 9
+Plan: 9 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -65,6 +65,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P06 | 26 min | 3 tasks | 17 files |
 | Phase 01 P07 | 40min | 3 tasks | 5 files |
 | Phase 01 P08 | 40min | 2 tasks | 7 files |
+| Phase 01 P09 | 45min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -98,6 +99,9 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-08: read_status lives in a new observability/ tier, does two selects (runs row + latest role_executions row), imports nothing from dark_factory.events transitively (AST import-graph guard), and performs no write — SC3 proven invariant under an inserted/deleted/corrupted run_events row
 - [Phase 01]: 01-08: source redaction for status output is applied by the CLI via an injected redactor (functools.partial(redact, known_secrets=...)), so RunView and the read path stay free of any dark_factory.events import while the source is still scrubbed in both text and --json modes
 - [Phase 01]: 01-08: RunView is a frozen pydantic DTO with the exact D-12 field set; as_text() and as_json() share one model_dump(mode=json) renderer and iterate model_fields so the text field set and JSON key set cannot drift
+- [Phase 01]: 01-09: SC5 proven end to end — a real run seeded with four credential shapes in its task text + a credential in the FakeWorker summary reaches COMPLETED, leaves a [redacted: token, and leaves zero seeded/configured secrets across every event payload, every role_executions result/error, a whole-table sweep, and a real structlog sink (presence-then-absence)
+- [Phase 01]: 01-09: phase acceptance gate (tests/integration/test_phase_acceptance.py) maps SC1-SC5 to named proof files and fails (never skips) on a missing/empty proof, criterion named in the message
+- [Phase 01]: 01-09: real-Neon human check DEFERRED to /gsd-verify-work — automated substitute run against throwaway PostgreSQL 18.6 (no Neon PG17 project provisioned); carried PG-18.6-vs-17 deviation since 01-01
 
 ### Pending Todos
 
@@ -123,6 +127,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T12:49:57.991Z
-Stopped at: Completed 01-08-PLAN.md
+Last session: 2026-09-08T13:21:28.751Z
+Stopped at: Completed 01-09-PLAN.md
 Resume file: None

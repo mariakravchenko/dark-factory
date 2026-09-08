@@ -80,7 +80,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A crash injected between the sub-writes of a transition leaves a consistent, resumable run: no state change exists without its `run_events` row, and no event exists without its state change.
   5. A task whose text contains a `DATABASE_URL`-shaped value shows redacted values in every persisted event payload and every log line.
 
-**Plans**: 8/9 plans executed
+**Plans**: 9/9 plans executed
 
 Plans:
 **Wave 1**
@@ -114,7 +114,7 @@ Plans:
 
 **Wave 8** *(blocked on Wave 7 completion)*
 
-- [ ] 01-09-PLAN.md — SC5 end-to-end redaction proof, phase acceptance gate, and the documented full-stack run command
+- [x] 01-09-PLAN.md — SC5 end-to-end redaction proof, phase acceptance gate, and the documented full-stack run command
 
 **Invariants**: single-transaction lifecycle mutation through one mutation path; every resume input is a persisted column; control state from columns not the event log; only the orchestrator mutates state; redaction from the first persistence code; no worker-name branching outside adapters.
 **Note**: The artifact-durability strategy (open decision 1) affects schema shape; record the intended approach here even though it is implemented in Phase 5. Retry-counter placement (columns on `runs` vs. derived) is settled with this schema.
@@ -308,7 +308,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton — One Durable Run | 8/9 | In Progress|  |
+| 1. Walking Skeleton — One Durable Run | 9/9 | In Progress|  |
 | 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
