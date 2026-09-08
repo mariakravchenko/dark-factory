@@ -80,7 +80,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. A crash injected between the sub-writes of a transition leaves a consistent, resumable run: no state change exists without its `run_events` row, and no event exists without its state change.
   5. A task whose text contains a `DATABASE_URL`-shaped value shows redacted values in every persisted event payload and every log line.
 
-**Plans**: 3/9 plans executed
+**Plans**: 4/9 plans executed
 
 Plans:
 **Wave 1**
@@ -97,7 +97,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — Schema: runs / role_executions / run_events and Alembic revision 0001 applied to a real PostgreSQL 17
+- [x] 01-04-PLAN.md — Schema: runs / role_executions / run_events and Alembic revision 0001 applied to a real PostgreSQL 17
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -308,7 +308,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton — One Durable Run | 3/9 | In Progress|  |
+| 1. Walking Skeleton — One Durable Run | 4/9 | In Progress|  |
 | 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |

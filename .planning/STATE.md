@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-09-08T08:18:48.431Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-09-08T08:43:42.171Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: 2e0339a300329d89e6a67bd975507b0f45502967
+state_head: ba315246f1d2ea021dfb042dafd7508e68f0cb18
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 3 of 9
+Plan: 4 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -60,6 +60,7 @@ Progress: [░░░░░░░░░░] 0%
 |------|----------|-------|-------|
 | Phase 01 P02 | 20min | 3 tasks | 19 files |
 | Phase 01 P03 | 15min | 2 tasks | 9 files |
+| Phase 01 P04 | 40min | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-03: Task 1 checkpoint decided known-values-only (D-18) — persisted task text scrubbed only for exact SecretStr values; full D-15 pattern redaction on events/results/logs
 - [Phase 01]: 01-03: one recursive redact() is the sole scrubbing path (D-14); scrub_known_values() is a patterns=False alias; idempotent; [redacted:<label>] tokens
 - [Phase 01]: 01-03: Settings.known_secret_values() walks model_fields + isinstance(SecretStr) so later-phase credentials are covered automatically; get_settings() lru_cache singleton
+- [Phase 01]: 01-04: Task 1 checkpoint = recommended (A1 UUID v4 keys + B1 sa.Enum native_enum=False ten-value CHECK status + C1 BigInteger IDENTITY run_events.seq); migration 0001_walking_skeleton applied + round-tripped against real PostgreSQL 18.6, alembic check shows no ORM drift
+- [Phase 01]: 01-04: migrations/env.py resolves the DDL URL DATABASE_URL_DIRECT -> DATABASE_URL -> DARK_FACTORY_TEST_DATABASE_URL and include_name-scopes alembic check to the three owned tables (shared throwaway DB); alembic.ini sqlalchemy.url stays blank
 
 ### Pending Todos
 
@@ -103,6 +106,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T08:18:48.409Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-09-08T08:43:33.196Z
+Stopped at: Completed 01-04-PLAN.md
 Resume file: None
