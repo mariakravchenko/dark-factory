@@ -45,7 +45,10 @@ def test_no_real_worker_runtime_name_leaks_into_the_core() -> None:
             haystack = _strip_comment(raw).lower()
             for name in _FORBIDDEN_RUNTIME_NAMES:
                 if name in haystack:
-                    offenders.append(f"{path}:{lineno}: {raw.strip()!r} mentions {name!r}")
-    assert not offenders, "worker-runtime name leaked outside workers/ and config/:\n" + "\n".join(
-        offenders
+                    offenders.append(
+                        f"{path}:{lineno}: {raw.strip()!r} mentions {name!r}"
+                    )
+    assert not offenders, (
+        "worker-runtime name leaked outside workers/ and config/:\n"
+        + "\n".join(offenders)
     )

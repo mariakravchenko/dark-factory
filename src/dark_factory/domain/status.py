@@ -27,7 +27,9 @@ class RunStatus(StrEnum):
     FAILED = "FAILED"
 
 
-TERMINAL_STATUSES: frozenset[RunStatus] = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+TERMINAL_STATUSES: frozenset[RunStatus] = frozenset(
+    {RunStatus.COMPLETED, RunStatus.FAILED}
+)
 """The states from which a run never advances again: delivery succeeded or failed."""
 
 STOP_STATUSES: frozenset[RunStatus] = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})

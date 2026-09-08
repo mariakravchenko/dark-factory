@@ -28,7 +28,9 @@ def test_coding_worker_subclass_missing_methods_cannot_be_instantiated() -> None
         Partial()  # type: ignore[abstract]
 
 
-def test_fake_worker_default_returns_one_completed_result_with_fake_session_id() -> None:
+def test_fake_worker_default_returns_one_completed_result_with_fake_session_id() -> (
+    None
+):
     worker = FakeWorker()
     result = worker.execute(None)
     assert result.status is WorkerResultStatus.COMPLETED

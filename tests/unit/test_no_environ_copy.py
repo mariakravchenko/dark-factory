@@ -43,4 +43,6 @@ def test_no_module_copies_the_process_environment_wholesale() -> None:
             for snippet in _FORBIDDEN_SNIPPETS:
                 if snippet.replace(" ", "") in collapsed:
                     offenders.append(f"{path}:{lineno}: {raw.strip()!r}")
-    assert not offenders, "wholesale process-environment copy found:\n" + "\n".join(offenders)
+    assert not offenders, "wholesale process-environment copy found:\n" + "\n".join(
+        offenders
+    )
