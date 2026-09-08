@@ -2,7 +2,9 @@
 
 ``read_status(run_id)`` reconstructs a :class:`RunView` from **two selects and no
 more**: the ``runs`` row, and the single latest ``role_executions`` row for that
-run (``ORDER BY attempt DESC LIMIT 1``). It issues **no** query against
+run (``ORDER BY created_at DESC, attempt DESC, id DESC LIMIT 1`` -- ``attempt``
+restarts at 1 per role, so it is not a "most recent" key once a pipeline has
+more than one role). It issues **no** query against
 ``run_events`` and this module imports **nothing** from ``dark_factory.events`` --
 ``tests/unit/test_status_import_graph.py`` walks the transitive import closure and
 fails on a violation.
@@ -69,7 +71,11 @@ def read_status(
         latest = session.scalar(
             select(RoleExecution)
             .where(RoleExecution.run_id == run_id)
-            .order_by(RoleExecution.attempt.desc())
+            .order_by(
+                RoleExecution.created_at.desc(),
+                RoleExecution.attempt.desc(),
+                RoleExecution.id.desc(),
+            )
             .limit(1)
         )
 

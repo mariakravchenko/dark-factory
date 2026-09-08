@@ -84,8 +84,17 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
     row. Returns ``None`` for an unknown run id and never fabricates a state.
 
     Two selects, both bound-parameterised: the ``runs`` row, then the single
-    highest-``attempt`` ``role_executions`` row for this run. ``run_events`` is
-    never queried (STATE-06).
+    most-recent ``role_executions`` row for this run. ``run_events`` is never
+    queried (STATE-06).
+
+    "Most recent" is ``ORDER BY created_at DESC, attempt DESC, id DESC``, not
+    ``attempt DESC`` alone: ``attempt`` restarts at 1 for every role, so once a
+    pipeline has more than one role, BA/Architect/Developer all tie at
+    ``attempt = 1`` and ``LIMIT 1`` would return an arbitrary row. ``created_at``
+    is the database clock at insert time (each role starts in its own
+    transaction, so values do not tie in practice); ``attempt`` then ``id`` are
+    deterministic tiebreakers so the result is stable even if two rows ever
+    share a timestamp.
     """
     run = session.get(Run, run_id)
     if run is None:
@@ -94,7 +103,11 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
     latest_row = session.scalar(
         select(RoleExecution)
         .where(RoleExecution.run_id == run_id)
-        .order_by(RoleExecution.attempt.desc())
+        .order_by(
+            RoleExecution.created_at.desc(),
+            RoleExecution.attempt.desc(),
+            RoleExecution.id.desc(),
+        )
         .limit(1)
     )
     latest = (
