@@ -233,9 +233,9 @@ None — no external service configuration. Every `Settings` test is hermetic (`
 - **Guard active:** `configure_logging()` is the only `structlog.configure` caller and `redact()` is the only redaction implementation — any later violation is catchable (an explicit sole-caller assertion test is a candidate for Plan 04/09).
 - **Open (unchanged):** `Settings.log_level` is declared but not yet consumed by `configure_logging()` — a later plan wires the level. The three research-flagged blockers (artifact durability → Phase 5, lease TTL → Phase 2, Copilot/Hermes flag matrix → Phase 8) are untouched.
 
-## Self-Check
+## Self-Check: PASSED
 
-See `## Self-Check` result appended below.
+All 10 content/marker files verified present on disk. All 5 commits (`6f0b697`, `b573868`, `db29bdb`, `41f812c`, `2e0339a`) verified in `git log`.
 
 ---
 *Phase: 01-walking-skeleton-one-durable-run*
