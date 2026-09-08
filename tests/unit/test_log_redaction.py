@@ -9,6 +9,7 @@ real log file leaks (RESEARCH Pitfall 5).
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -22,10 +23,28 @@ FAKE_LIVE_DB_URL = "postgresql+psycopg://real:l1vepass@prod-host.example/darkfac
 
 
 def test_this_module_uses_the_real_sink_not_structlog_testing() -> None:
-    src = Path(__file__).read_text(encoding="utf-8")
-    assert "from tests.support.log_sink import" in src
-    assert "structlog.testing" not in src
-    assert "capture_logs" not in src
+    """Architectural: the real-sink helper is imported; structlog.testing is not.
+
+    Checked against the parsed AST (not raw text) so this file's own prose about
+    why ``structlog.testing.capture_logs`` is banned does not trip the check.
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+
+    imports_real_sink = any(
+        isinstance(node, ast.ImportFrom) and node.module == "tests.support.log_sink"
+        for node in ast.walk(tree)
+    )
+    assert imports_real_sink
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            assert all(
+                not alias.name.startswith("structlog.testing") for alias in node.names
+            )
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert not node.module.startswith("structlog.testing")
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            assert not (node.value.id == "structlog" and node.attr == "testing")
 
 
 def test_pattern_shaped_secret_in_log_event_is_redacted(
@@ -43,7 +62,8 @@ def test_pattern_shaped_secret_in_log_event_is_redacted(
     try:
         with real_log_sink() as buffer:
             structlog.get_logger().info(
-                "run started", task="please use ghp_0123456789012345678901234567890123456789"
+                "run started",
+                task="please use ghp_0123456789012345678901234567890123456789",
             )
         output = buffer.getvalue()
     finally:
