@@ -19,10 +19,17 @@ The one-role happy path is therefore **two** committed ``advance`` calls --
 ``CREATED -> BA`` commits the role start, ``BA -> COMPLETED`` commits the worker
 result -- so there is a real committed intermediate state at ``BA`` for a later
 plan to kill at.
+
+``DARK_FACTORY_CRASH_AFTER`` is a **test-only** environment variable, honoured by
+:func:`_maybe_crash_after` in exactly one place, that abruptly ends the process
+immediately after a named transition commits. It is inert on every ordinary run
+and has no production role -- it exists so the SC2 fresh-process resume proof can
+kill a process at a precisely chosen, already-committed point.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any, cast
 from uuid import UUID
@@ -71,6 +78,11 @@ _ROLE_RUNNING = "RUNNING"
 _ROLE_COMPLETED = "COMPLETED"
 _ROLE_FAILED = "FAILED"
 
+# Test seam only -- consumed by ``_maybe_crash_after`` and nowhere else. Never set
+# on an ordinary run; see that function's docstring.
+_CRASH_AFTER_ENV = "DARK_FACTORY_CRASH_AFTER"
+_CRASH_EXIT_STATUS = 137
+
 SessionFactory = Callable[[], Session]
 TransitionCallback = Callable[[RunStatus, RunStatus], None]
 
@@ -109,6 +121,28 @@ def _build_context(run_id: UUID, state: RunState, node: RoleNode) -> dict[str, A
         "attempt": attempt,
         "task": state.normalized_task.model_dump(mode="json"),
     }
+
+
+def _maybe_crash_after(previous: RunStatus, new: RunStatus) -> None:
+    """Abruptly terminate the process after a just-committed transition -- a test
+    seam with **no production role**.
+
+    When ``DARK_FACTORY_CRASH_AFTER`` is set to the name of the transition that
+    just committed -- ``"<PREVIOUS>_<NEXT>"`` in status values, e.g.
+    ``"CREATED_BA"``, ``"BA_COMPLETED"`` or ``"BA_FAILED"`` -- this calls
+    :func:`os._exit`, which ends the interpreter immediately: no exception is
+    raised, so no ``finally`` block, context manager or handler runs, and no
+    rollback or further write can happen. That is what makes it a faithful
+    stand-in for a power loss the instant after the commit returned.
+
+    The variable is read from the environment on every call, never cached at
+    import, so the hook is inert on every ordinary run -- the function returns at
+    once when the variable is unset or names a different transition -- and a test
+    can arm it for a single subprocess.
+    """
+    target = os.environ.get(_CRASH_AFTER_ENV)
+    if target and target == f"{previous.value}_{new.value}":
+        os._exit(_CRASH_EXIT_STATUS)
 
 
 def start_run(
@@ -190,7 +224,7 @@ def _enter_first_role(
     node = current_node(pipeline, next_role)
     session = session_factory()
     try:
-        return apply_transition(
+        new_status = apply_transition(
             session,
             run_id=run_id,
             expected_status=RunStatus.CREATED,
@@ -210,6 +244,8 @@ def _enter_first_role(
                 )
             ],
         )
+        _maybe_crash_after(RunStatus.CREATED, new_status)
+        return new_status
     finally:
         session.close()
 
@@ -262,7 +298,7 @@ def _run_current_role(
 
     session = session_factory()
     try:
-        return apply_transition(
+        new_status = apply_transition(
             session,
             run_id=run_id,
             expected_status=state.status,
@@ -281,6 +317,8 @@ def _run_current_role(
             ),
             events=events,
         )
+        _maybe_crash_after(state.status, new_status)
+        return new_status
     finally:
         session.close()
 
