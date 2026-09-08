@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 01
 current_phase_name: Walking Skeleton — One Durable Run
 status: executing
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-09-08T08:43:42.171Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-09-08T09:05:08.463Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 01 execution started
-state_head: ba315246f1d2ea021dfb042dafd7508e68f0cb18
+state_head: 8bd310a7db632d9839980844a3ffaea8a63e239d
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 9
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 01 (Walking Skeleton — One Durable Run) — EXECUTING
-Plan: 4 of 9
+Plan: 5 of 9
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 01 execution started
 
@@ -61,6 +61,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 01 P02 | 20min | 3 tasks | 19 files |
 | Phase 01 P03 | 15min | 2 tasks | 9 files |
 | Phase 01 P04 | 40min | 3 tasks | 12 files |
+| Phase 01 P05 | 35min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-03: Settings.known_secret_values() walks model_fields + isinstance(SecretStr) so later-phase credentials are covered automatically; get_settings() lru_cache singleton
 - [Phase 01]: 01-04: Task 1 checkpoint = recommended (A1 UUID v4 keys + B1 sa.Enum native_enum=False ten-value CHECK status + C1 BigInteger IDENTITY run_events.seq); migration 0001_walking_skeleton applied + round-tripped against real PostgreSQL 18.6, alembic check shows no ORM drift
 - [Phase 01]: 01-04: migrations/env.py resolves the DDL URL DATABASE_URL_DIRECT -> DATABASE_URL -> DARK_FACTORY_TEST_DATABASE_URL and include_name-scopes alembic check to the three owned tables (shared throwaway DB); alembic.ini sqlalchemy.url stays blank
+- [Phase 01]: 01-05: create_run is a sibling of apply_transition in mutations.py (one module / one transaction discipline / one redact() call), not a call into it — the ∅→CREATED insert has no row for the expected_status guard
+- [Phase 01]: 01-05: apply_transition opens exactly one with session.begin(); no explicit commit call; redact() at the single call site before every result/error/payload write; attempt = SQL MAX(attempt)+1 per run+role inside the transaction (D-19)
+- [Phase 01]: 01-05: load_run_state returns a frozen detached RunState built from scalar columns + the single latest role_executions row; never queries run_events; imports nothing from dark_factory.events (STATE-06)
+- [Phase 01]: 01-05: test_single_mutation_path.py is an AST source-tree guard proving mutations.py is the only module that constructs RunEvent/RoleExecution or assigns .status
 
 ### Pending Todos
 
@@ -106,6 +111,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T08:43:33.196Z
-Stopped at: Completed 01-04-PLAN.md
+Last session: 2026-09-08T09:05:08.443Z
+Stopped at: Completed 01-05-PLAN.md
 Resume file: None

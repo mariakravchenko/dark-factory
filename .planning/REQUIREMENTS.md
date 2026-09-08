@@ -22,7 +22,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [ ] **ORCH-03**: The role pipeline is defined in configuration (`workflow.roles`) and can be shortened or reordered without changing orchestrator code
 - [ ] **ORCH-04**: Roles communicate through durable artifacts, not one shared agent conversation
 - [ ] **ORCH-05**: Only the orchestrator changes lifecycle state; a worker result never directly drives a transition
-- [ ] **ORCH-06**: Every lifecycle mutation (store result, transition state, create interaction, emit event) is written in a single database transaction through one mutation path
+- [x] **ORCH-06**: Every lifecycle mutation (store result, transition state, create interaction, emit event) is written in a single database transaction through one mutation path
 
 ### Engineering Roles
 
@@ -72,10 +72,10 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [x] **STATE-01**: The persistence stack is SQLAlchemy + Alembic + PostgreSQL (Neon); the application uses only `DATABASE_URL` and contains no provider-specific database logic
 - [ ] **STATE-02**: A `runs` table persists run identity, source, workflow, status, current role, current step, repository, base/working branch, PR number/URL, and timestamps
-- [ ] **STATE-03**: A `role_executions` table persists one row per attempt (role, worker, status, attempt number, worker_session_id, result/error JSONB, timestamps)
+- [x] **STATE-03**: A `role_executions` table persists one row per attempt (role, worker, status, attempt number, worker_session_id, result/error JSONB, timestamps)
 - [ ] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
 - [ ] **STATE-05**: An `artifacts` table persists artifact metadata
-- [ ] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
+- [x] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
 - [x] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
 - [ ] **STATE-08**: The complete execution of a run is reconstructable from persisted data alone
 
@@ -196,7 +196,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ORCH-03 | Phase 3 | Pending |
 | ORCH-04 | Phase 4 | Pending |
 | ORCH-05 | Phase 1 | Pending |
-| ORCH-06 | Phase 1 | Pending |
+| ORCH-06 | Phase 1 | Complete |
 | ROLE-01 | Phase 4 | Pending |
 | ROLE-02 | Phase 4 | Pending |
 | ROLE-03 | Phase 4 | Pending |
@@ -228,10 +228,10 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ART-04 | Phase 5 | Pending |
 | STATE-01 | Phase 1 | Complete |
 | STATE-02 | Phase 1 | Pending |
-| STATE-03 | Phase 1 | Pending |
+| STATE-03 | Phase 1 | Complete |
 | STATE-04 | Phase 2 | Pending |
 | STATE-05 | Phase 4 | Pending |
-| STATE-06 | Phase 1 | Pending |
+| STATE-06 | Phase 1 | Complete |
 | STATE-07 | Phase 1 | Complete |
 | STATE-08 | Phase 1 | Pending |
 | HITL-01 | Phase 2 | Pending |
