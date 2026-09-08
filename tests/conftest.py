@@ -254,9 +254,7 @@ def _schema_at_head(request: pytest.FixtureRequest) -> Iterator[None]:
 _FAKE_DB_URL = (
     "postgresql://df_fake_user:df_fake_pw_0123456789@fake-db.invalid:5432/df_fake_db"
 )
-_FAKE_DB_URL_DIRECT = (
-    "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
-)
+_FAKE_DB_URL_DIRECT = "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
 _FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
 
 

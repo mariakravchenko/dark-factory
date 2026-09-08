@@ -46,7 +46,9 @@ def _created_run(db_session: Session) -> object:
     return create_run(db_session, task=_task(), workflow={"roles": ["BA"]})
 
 
-def _start_ba(db_session: Session, run_id: object, *, worker: str = "fake") -> RunStatus:
+def _start_ba(
+    db_session: Session, run_id: object, *, worker: str = "fake"
+) -> RunStatus:
     return apply_transition(
         db_session,
         run_id=run_id,
@@ -117,9 +119,7 @@ def test_stale_expected_status_raises_concurrent_transition_and_writes_nothing(
     assert run is not None
     assert run.status is RunStatus.BA
     assert (
-        db_session.scalars(
-            select(RunEvent.id).where(RunEvent.run_id == run_id)
-        ).all()
+        db_session.scalars(select(RunEvent.id).where(RunEvent.run_id == run_id)).all()
         == before_events
     )
     assert (

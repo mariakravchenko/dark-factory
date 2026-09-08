@@ -49,9 +49,7 @@ def test_create_run_inserts_created_row_and_one_run_created_event(
     assert run.current_step is None
     assert run.workflow == {"roles": ["BA"]}
 
-    events = db_session.scalars(
-        select(RunEvent).where(RunEvent.run_id == run_id)
-    ).all()
+    events = db_session.scalars(select(RunEvent).where(RunEvent.run_id == run_id)).all()
     assert [e.type for e in events] == [EventType.RUN_CREATED.value]
 
 
@@ -101,8 +99,6 @@ def test_run_created_event_payload_is_pattern_redacted(db_session: Session) -> N
         workflow={"roles": ["BA"]},
     )
 
-    ev = db_session.scalars(
-        select(RunEvent).where(RunEvent.run_id == run_id)
-    ).one()
+    ev = db_session.scalars(select(RunEvent).where(RunEvent.run_id == run_id)).one()
     assert "hunter2" not in str(ev.payload)
     assert "redacted" in str(ev.payload)
