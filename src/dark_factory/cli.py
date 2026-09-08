@@ -33,11 +33,36 @@ from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
 from dark_factory.observability.status import UnknownRunError, read_status
-from dark_factory.orchestrator.runner import drive, run_state, start_run
+from dark_factory.orchestrator.lifecycle import IllegalTransitionError
+from dark_factory.orchestrator.runner import (
+    DriveLoopExhausted,
+    RunNotFoundError,
+    drive,
+    run_state,
+    start_run,
+)
+from dark_factory.persistence.mutations import ConcurrentTransition
+from dark_factory.workers.fake import ScriptExhaustedError
+from dark_factory.workers.registry import UnknownWorkerError
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
 _ARROW = "→"
+
+# Orchestration errors that mean "the run could not be advanced and nothing new
+# was persisted": distinct from a persisted FAILED terminal (exit 1). They exit
+# 2 -- the same "not a clean terminal outcome / nothing persisted" code as a bad
+# invocation -- rather than escaping as a traceback with Typer's default exit 1,
+# which an operator scripting the D-05 contract would misread as "failed and
+# recorded" (cli docstring; D-05).
+_ORCHESTRATION_ERRORS = (
+    ConcurrentTransition,
+    IllegalTransitionError,
+    DriveLoopExhausted,
+    RunNotFoundError,
+    ScriptExhaustedError,
+    UnknownWorkerError,
+)
 
 
 def _echo_transition(previous: RunStatus, new: RunStatus) -> None:
@@ -79,7 +104,15 @@ def _route_logs_to_stderr() -> None:
 
 
 def _drive_and_exit(run_id: UUID) -> None:
-    final = drive(run_id, on_transition=_echo_transition)
+    try:
+        final = drive(run_id, on_transition=_echo_transition)
+    except _ORCHESTRATION_ERRORS as exc:
+        typer.echo(
+            f"run {run_id} could not be advanced ({type(exc).__name__}): {exc}; "
+            "nothing new was persisted -- inspect with 'dark-factory status'",
+            err=True,
+        )
+        raise typer.Exit(code=2) from exc
     _echo_summary(run_id, final)
     raise typer.Exit(code=0 if final is RunStatus.COMPLETED else 1)
 
