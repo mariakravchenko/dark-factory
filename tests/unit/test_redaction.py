@@ -52,6 +52,34 @@ def test_tuple_becomes_list() -> None:
     assert redact(("a", "b"), known_secrets={}) == ["a", "b"]
 
 
+def test_set_and_frozenset_are_redacted_elementwise_as_a_list() -> None:
+    """IN-07: a set of secret strings must not pass through untouched."""
+    from dark_factory.events.redaction import redact
+
+    out = redact({FAKE_DB_URI}, known_secrets={})
+    assert out == ["[redacted:database_url]"]
+
+    out_frozen = redact(frozenset({"password=hunter2"}), known_secrets={})
+    assert out_frozen == ["password=[redacted:password]"]
+
+
+def test_bytes_credential_is_decoded_redacted_and_re_encoded() -> None:
+    """IN-07: a bytes credential is scrubbed, not returned verbatim."""
+    from dark_factory.events.redaction import redact
+
+    out = redact(f"connect {FAKE_DB_URI}".encode(), known_secrets={})
+    assert isinstance(out, bytes)
+    assert b"hunter2" not in out
+    assert b"[redacted:database_url]" in out
+
+
+def test_non_utf8_bytes_pass_through_unchanged() -> None:
+    from dark_factory.events.redaction import redact
+
+    raw = b"\xff\xfe\x00secret"
+    assert redact(raw, known_secrets={}) == raw
+
+
 # --- Pattern-table rows -----------------------------------------------------
 
 

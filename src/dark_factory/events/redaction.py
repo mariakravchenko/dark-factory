@@ -156,6 +156,11 @@ def redact(
       its value replaced by ``[redacted:<key>]`` regardless of the value's
       shape; every other value is redacted recursively.
     * ``list`` / ``tuple`` — redacted elementwise, always returned as a list.
+    * ``set`` / ``frozenset`` — redacted elementwise, returned as a list (JSONB
+      is JSON-typed, so this is defence-in-depth for a set of secret strings
+      that should never reach a payload in the first place; IN-07).
+    * ``bytes`` / ``bytearray`` — decoded as UTF-8, redacted as a string, and
+      re-encoded to ``bytes``; returned unchanged if it is not valid UTF-8.
     * ``str`` — known-value substitution first, then (when ``patterns``) the
       compiled D-15 table.
     * anything else (``int`` / ``float`` / ``bool`` / ``None`` / ...) — returned
@@ -173,11 +178,17 @@ def redact(
                     item, known_secrets=known_secrets, patterns=patterns
                 )
         return redacted
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return [
             redact(item, known_secrets=known_secrets, patterns=patterns)
             for item in value
         ]
+    if isinstance(value, (bytes, bytearray)):
+        try:
+            text = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            return value
+        return _redact_str(text, known_secrets, patterns=patterns).encode("utf-8")
     if isinstance(value, str):
         return _redact_str(value, known_secrets, patterns=patterns)
     return value
