@@ -178,7 +178,9 @@ def test_status_command_body_carries_no_lifecycle_logic() -> None:
     assert len(bodies) == 1, "expected exactly one `status` command function"
     (body,) = bodies
 
-    assert "read_status" in body, "the status command must source its data from read_status"
+    assert "read_status" in body, (
+        "the status command must source its data from read_status"
+    )
     assert "RunStatus" not in body, (
         "the status command compares a run status to a RunStatus member — that is "
         "the orchestrator's job, not a read command's"
