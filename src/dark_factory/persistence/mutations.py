@@ -109,8 +109,9 @@ def create_run(
 
     One ``with session.begin():`` block, one commit. ``normalized_task`` is scrubbed
     for **exact known secret values only** (D-18 — a task legitimately discussing
-    connection-string syntax persists as written); the ``RUN_CREATED`` payload gets
-    full pattern redaction like every other event payload.
+    connection-string syntax persists as written); the ``workflow`` snapshot and
+    the ``RUN_CREATED`` payload get full pattern redaction like every other JSONB
+    write in this module — no JSONB value reaches Neon without passing ``redact()``.
     """
     known = _known_secrets()
     run_id = uuid4()
@@ -124,7 +125,7 @@ def create_run(
                 normalized_task=scrub_known_values(
                     task.model_dump(mode="json"), known_secrets=known
                 ),
-                workflow=workflow,
+                workflow=redact(workflow, known_secrets=known),
                 status=RunStatus.CREATED,
                 current_role=None,
                 current_step=None,
