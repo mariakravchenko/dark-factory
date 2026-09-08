@@ -119,9 +119,7 @@ def test_load_run_state_never_queries_run_events(db_session: Session) -> None:
     run_id = _run_at_ba(db_session)
     before = load_run_state(db_session, run_id)
 
-    db_session.add(
-        RunEvent(run_id=run_id, type="ROLE_FAILED", payload={"bogus": True})
-    )
+    db_session.add(RunEvent(run_id=run_id, type="ROLE_FAILED", payload={"bogus": True}))
     db_session.flush()
     after = load_run_state(db_session, run_id)
 
