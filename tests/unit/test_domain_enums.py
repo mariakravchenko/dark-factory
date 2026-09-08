@@ -41,12 +41,14 @@ def test_run_status_is_str_enum() -> None:
 
 
 def test_terminal_statuses_is_completed_and_failed() -> None:
-    assert TERMINAL_STATUSES == frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+    expected = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+    assert expected == TERMINAL_STATUSES
     assert isinstance(TERMINAL_STATUSES, frozenset)
 
 
 def test_stop_statuses_equals_terminal_statuses_but_is_a_distinct_name() -> None:
-    assert STOP_STATUSES == frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+    expected = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+    assert expected == STOP_STATUSES
     assert STOP_STATUSES == TERMINAL_STATUSES
     assert STOP_STATUSES is not TERMINAL_STATUSES
 
