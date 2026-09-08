@@ -111,12 +111,63 @@ def test_bare_commit_sha_in_prose_survives() -> None:
     assert redact(text, known_secrets={}) == text
 
 
+@pytest.mark.parametrize(
+    "prefix",
+    ["commit", "commit:", "sha =", "revision #", "git commit"],
+)
+def test_forty_hex_in_a_git_object_context_survives(prefix: str) -> None:
+    from dark_factory.events.redaction import redact
+
+    text = f"{prefix} {SHA40} is the fix"
+    assert redact(text, known_secrets={}) == text
+
+
 def test_forty_hex_in_github_context_is_redacted() -> None:
     from dark_factory.events.redaction import redact
 
     out = redact(f"see the github mirror {SHA40} today", known_secrets={})
     assert SHA40 not in out
     assert "[redacted:github_token]" in out
+
+
+def test_bare_forty_hex_pat_without_github_context_is_redacted() -> None:
+    """WR-06: a 40-hex classic PAT in prose -- no nearby "github", space-separated
+    so the key=value rule does not fire either -- must still be scrubbed."""
+    from dark_factory.events.redaction import redact
+
+    for text in (
+        f"auth failed with {SHA40} today",
+        f"key: {SHA40}",
+        f"token was {SHA40}.",
+    ):
+        out = redact(text, known_secrets={})
+        assert SHA40 not in out, text
+        assert "[redacted:" in out
+
+
+def test_db_uri_with_special_characters_in_password_is_fully_redacted() -> None:
+    """WR-06: a password containing raw `/`, `:` and `+` must not defeat the URI
+    rule and leak the whole connection string."""
+    from dark_factory.events.redaction import redact
+
+    uri = "postgresql+psycopg://u:p/a:s+s.w0rd@host:5432/db"
+    out = redact(f"dsn is {uri} ok", known_secrets={})
+    assert "[redacted:database_url]" in out
+    assert "p/a:s+s.w0rd" not in out
+    assert "host:5432" not in out
+    assert out == "dsn is [redacted:database_url] ok"
+
+
+def test_base64_bearer_token_is_fully_redacted() -> None:
+    """WR-06: a standard-base64 bearer value (with `+` `/` `=`) must be consumed
+    whole, not leave a trailing fragment in the sink."""
+    from dark_factory.events.redaction import redact
+
+    token = "aB3+cD/4eF5gH6==" * 2
+    out = redact(f"Authorization: Bearer {token}", known_secrets={})
+    assert "[redacted:authorization]" in out
+    assert token not in out
+    assert "==" not in out.replace("[redacted:authorization]", "")
 
 
 # --- Known-value substitution ---------------------------------------------

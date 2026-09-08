@@ -52,6 +52,24 @@ def _kv_replacement(match: re.Match[str]) -> str:
     return f"{match.group(1)}{match.group(2)}[redacted:{match.group(1).lower()}]"
 
 
+# A 40-hex (classic PAT) or 64-hex token is redacted UNLESS the text right before
+# it names it as a git object -- ``commit`` / ``sha`` / ``revision`` followed only
+# by separators. Proximity to the literal "github" is deliberately NOT the gate:
+# a bare 40-hex PAT in prose ("auth failed with <40hex>", "key: <40hex>") must be
+# caught regardless (WR-06 / the D-15 pattern table is the only scrub for
+# third-party credentials echoed into a WorkerResult).
+_GIT_OBJECT_CONTEXT = re.compile(r"(?i)\b(?:commit|sha|revision)\b[\s:=#/-]*\Z")
+_HEX_TOKEN = re.compile(r"\b[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\b")
+
+
+def _hex_token_replacement(match: re.Match[str]) -> str:
+    """Redact a standalone 40/64-hex token unless it is introduced as a git
+    object hash (``commit <sha>`` etc.), which must survive (D-18)."""
+    if _GIT_OBJECT_CONTEXT.search(match.string[: match.start()]):
+        return match.group(0)
+    return "[redacted:github_token]"
+
+
 # --- Compiled pattern table (D-15). Compiled once at import. -----------------
 #
 # Order matters: the dedicated `Authorization: Bearer` rule and the token-shape
@@ -59,24 +77,26 @@ def _kv_replacement(match: re.Match[str]) -> str:
 # through the narrower `[^\s]+` capture of the generic rule.
 
 _PATTERNS: list[tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]] = [
-    # 1. Postgres / DB connection URI carrying embedded credentials.
+    # 1. Postgres / DB connection URI carrying embedded credentials. The
+    #    credential span is `[^\s@]+` (everything up to the `@`), so a password
+    #    containing a raw `/`, `:` or other special character does not defeat the
+    #    match and leak the whole URI (WR-06).
     (
-        re.compile(r"(?i)\bpostgres(?:ql)?(?:\+\w+)?://[^\s:/@]+:[^\s:/@]+@\S+"),
+        re.compile(r"(?i)\bpostgres(?:ql)?(?:\+\w+)?://[^\s@]+@\S+"),
         "[redacted:database_url]",
     ),
     # 3a. GitHub fine-grained PAT.
     (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}\b"), "[redacted:github_token]"),
     # 3b. GitHub classic / OAuth token shapes (ghp_/gho_/ghu_/ghs_/ghr_).
     (re.compile(r"\b(gh[porsu])_[A-Za-z0-9]{36,}\b"), "[redacted:github_token]"),
-    # 3c. 40-hex classic PAT — ONLY inside a github-ish context, so a bare git
-    #     commit SHA in prose is left untouched (D-18). [ASSUMED heuristic]
+    # 3c. Bare 40/64-hex token — redacted unconditionally except in a git-object
+    #     context (see _hex_token_replacement / _GIT_OBJECT_CONTEXT).
+    (_HEX_TOKEN, _hex_token_replacement),
+    # 4. `Authorization: Bearer <value>` header. The token class includes the
+    #    standard-base64 alphabet (`+`, `/`, `=`) so a base64 bearer value is
+    #    fully consumed rather than leaving a trailing fragment (WR-06).
     (
-        re.compile(r"(?i)(github\w*[^\n]{0,40}?)\b[0-9a-fA-F]{40}\b"),
-        r"\1[redacted:github_token]",
-    ),
-    # 4. `Authorization: Bearer <value>` header.
-    (
-        re.compile(r"(?i)authorization\"?\s*[:=]\s*\"?bearer\s+[A-Za-z0-9._\-]+"),
+        re.compile(r"(?i)authorization\"?\s*[:=]\s*\"?bearer\s+[A-Za-z0-9._\-+/=]+"),
         "[redacted:authorization]",
     ),
     # 2. Sensitive `key=value` / `key: value` pair.
