@@ -133,7 +133,28 @@ Plans:
   4. A process killed while owning a run loses its lease by database-clock expiry, and the next process claims the run and continues from the last committed step.
   5. A role step that runs longer than the lease TTL is not falsely stolen — the owner heartbeats the lease while the step is in flight.
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 02-01-PLAN.md — Wave 0: the `human_interactions` table and the two lease columns on `runs`, applied as Alembic revision 0003 (blocking)
+- [ ] 02-02-PLAN.md — Wave 0: WAITING_HUMAN as a stop status, the four Phase 2 event types, the lease TTL/heartbeat settings (Open Decision 2), and the two-real-process test harness
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 02-03-PLAN.md — TRACER: a run pauses for a human, releases its process, and a brand-new process resumes it with `resume --answer`, under a Postgres lease
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 02-04-PLAN.md — SC3 single-owner race and SC4 killed-owner expiry reclaim, across two real processes
+- [ ] 02-05-PLAN.md — SC5 heartbeat on a slow step, the no-transaction-across-the-worker proof, and the lease-lost abort
+- [ ] 02-06-PLAN.md — HITL-01 generic pause mechanism, pause/answer crash atomicity, and the redaction sweep over the new text fields
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 02-07-PLAN.md — Phase acceptance gate, operator documentation for the lease knobs and the pause/resume walkthrough
+
 **Invariants**: no database transaction held across a worker call; claim-don't-check concurrency (conditional `UPDATE` lease + guarded status update); all expiry checks use the database clock, never a process clock.
 **Decision**: Resolves open decision 2 — lease TTL and heartbeat policy, validated by a slow-step + competing-process test.
 
@@ -309,7 +330,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
-| 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
+| 2. Pause, Resume & Single-Owner Execution | 0/7 | Planned | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
