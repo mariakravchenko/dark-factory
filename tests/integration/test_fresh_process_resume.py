@@ -21,6 +21,8 @@ and is never printed or written anywhere this test keeps.
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
+from uuid import UUID
 
 import pytest
 from sqlalchemy import Engine, func, select
@@ -49,7 +51,9 @@ def _count_runs(engine: Engine) -> int:
 
 
 def test_killed_after_first_commit_then_resumed_by_a_separate_process(
-    pg_url: str, engine: Engine
+    pg_url: str,
+    engine: Engine,
+    force_lease_expiry: Callable[[UUID], None],
 ) -> None:
     # -- first process: dies the instant CREATED -> BA commits --
     p1 = spawn(
@@ -86,6 +90,13 @@ def test_killed_after_first_commit_then_resumed_by_a_separate_process(
             )
         )
         assert events == ["RUN_CREATED", "ROLE_STARTED"]
+
+    # The hard-killed first process (os._exit) never ran run_lease.__exit__, so
+    # its single-owner lease is still held with a ~TTL-in-the-future expiry
+    # (Phase 2). SC4 says an expired lease is reclaimable; forcing the expiry
+    # here with a server-clock UPDATE is the deterministic stand-in for waiting
+    # out the TTL, exactly as the dedicated reclaim proofs in 02-04 / 02-05 do.
+    force_lease_expiry(run_id)
 
     # -- second, entirely separate process: the hook is not in its environment --
     resume_env = child_env(pg_url)
