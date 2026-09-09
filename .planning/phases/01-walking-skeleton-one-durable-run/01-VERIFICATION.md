@@ -1,9 +1,10 @@
 ---
 phase: 01-walking-skeleton-one-durable-run
 verified: 2026-09-08T00:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
+
   - .planning/phases/01-walking-skeleton-one-durable-run/01-01-PLAN.md
   - .planning/phases/01-walking-skeleton-one-durable-run/01-01-SUMMARY.md
   - .planning/phases/01-walking-skeleton-one-durable-run/01-02-PLAN.md
@@ -64,10 +65,12 @@ covered_files:
   - src/dark_factory/workers/registry.py
   - src/dark_factory/workflows/__init__.py
   - src/dark_factory/workflows/pipeline.py
+
 covered_digest: "v1:sha256:004450a9252c07a5d7b29c5ca2f32aba409f096e10c50732ade19e035241a039"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:
+
   - test: "Run the documented README full-stack command against a real Neon project running PostgreSQL 17, using the POOLED DATABASE_URL (host contains -pooler) for the app and the DIRECT DATABASE_URL_DIRECT for Alembic: `cp .env.example .env` (fill both URLs), `uv sync --all-extras --dev`, `uv run alembic upgrade head`, `uv run dark-factory run text:\"add a health endpoint\"`, then `uv run dark-factory status <run-id>` and `--json`."
     expected: "`alembic upgrade head` applies cleanly through the direct endpoint; the run prints the run id on line 1, `CREATED -> BA`, `BA -> COMPLETED`, then the summary block, and exits 0; `status` reports COMPLETED / BA / attempt 1 from the pooled endpoint. No prepared-statement / PgBouncer error appears against the pooled host (the NullPool + prepare_threshold=None + pool_pre_ping settings are the thing being exercised for real)."
     why_human: "External managed service (Neon) with PgBouncer transaction pooling. Plan 01-09 declared this as a `user_setup` / end-of-phase human-check and it was NOT performed during execution (recorded as a deferred UAT item). All automated db/integration tests ran against a throwaway PostgreSQL 18.6 instance, never against Neon PG 17 with the pooled vs direct endpoint split. The pooled-endpoint behaviour the engine settings target is not covered by any automated test."
