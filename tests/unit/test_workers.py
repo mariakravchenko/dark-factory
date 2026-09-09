@@ -5,6 +5,8 @@ unit-test file for the worker behaviour itself (only the contract suite and the
 two abstraction guards). This file holds them.
 """
 
+import time
+
 import pytest
 
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
@@ -83,6 +85,64 @@ def test_fake_worker_explicit_empty_script_beats_env(
     worker = FakeWorker([])
     with pytest.raises(ScriptExhaustedError):
         worker.execute(None)
+
+
+_SLEEP_MS_ENV_VAR = "DARK_FACTORY_FAKE_SLEEP_MS"
+
+
+def _time_execute(worker: FakeWorker) -> float:
+    """Return how many milliseconds a single ``execute`` call took."""
+    start = time.perf_counter()
+    worker.execute(None)
+    return (time.perf_counter() - start) * 1000.0
+
+
+def test_fake_worker_sleep_ms_constructor_arg_delays_execute() -> None:
+    assert _time_execute(FakeWorker(sleep_ms=40)) >= 40.0
+
+
+def test_fake_worker_with_no_sleep_returns_well_under_the_delay() -> None:
+    assert _time_execute(FakeWorker()) < 40.0
+
+
+def test_fake_worker_reads_sleep_ms_env_at_call_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    worker = FakeWorker()
+    # armed AFTER construction -- the knob must be read inside execute()
+    monkeypatch.setenv(_SLEEP_MS_ENV_VAR, "40")
+    assert _time_execute(worker) >= 40.0
+
+
+def test_fake_worker_sleep_env_unset_performs_no_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(_SLEEP_MS_ENV_VAR, raising=False)
+    assert _time_execute(FakeWorker()) < 40.0
+
+
+def test_fake_worker_constructor_sleep_ms_overrides_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_SLEEP_MS_ENV_VAR, "500")
+    assert _time_execute(FakeWorker(sleep_ms=0)) < 100.0
+
+
+def test_fake_worker_resume_inherits_the_delay() -> None:
+    only = WorkerResult(status=WorkerResultStatus.COMPLETED, summary="once")
+    worker = FakeWorker([only], sleep_ms=40)
+    previous = WorkerResult(status=WorkerResultStatus.NEEDS_INPUT, questions=["q?"])
+    start = time.perf_counter()
+    assert worker.resume(None, previous, "an answer") is only
+    assert (time.perf_counter() - start) * 1000.0 >= 40.0
+
+
+def test_fake_worker_malformed_sleep_ms_env_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(_SLEEP_MS_ENV_VAR, "not-an-int")
+    with pytest.raises(ValueError):
+        FakeWorker().execute(None)
 
 
 def test_worker_registry_get_returns_a_fresh_instance() -> None:

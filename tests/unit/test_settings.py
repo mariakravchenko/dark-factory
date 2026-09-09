@@ -25,6 +25,8 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
         "DATABASE_URL_DIRECT": FAKE_DB_URL_DIRECT,
         "GITHUB_TOKEN": None,
         "LOG_LEVEL": None,
+        "LEASE_TTL_SECONDS": None,
+        "LEASE_HEARTBEAT_SECONDS": None,
     }
     values.update(overrides)
     for name, value in values.items():
@@ -174,6 +176,87 @@ def test_known_secret_values_omits_secret_shorter_than_8_chars(
 
     assert "short" not in known
     assert "github_token" not in known.values()
+
+
+def test_lease_settings_default_to_900_and_300(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch)
+    settings = Settings(_env_file=None)
+
+    assert settings.lease_ttl_seconds == 900
+    assert settings.lease_heartbeat_seconds == 300
+
+
+def test_lease_settings_are_read_from_env_as_plain_ints(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LEASE_TTL_SECONDS="2", LEASE_HEARTBEAT_SECONDS="1")
+    settings = Settings(_env_file=None)
+
+    assert settings.lease_ttl_seconds == 2
+    assert settings.lease_heartbeat_seconds == 1
+    assert type(settings.lease_ttl_seconds) is int
+    assert type(settings.lease_heartbeat_seconds) is int
+
+
+def test_heartbeat_equal_to_ttl_is_rejected_naming_both_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import ValidationError
+
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LEASE_TTL_SECONDS="10", LEASE_HEARTBEAT_SECONDS="10")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(_env_file=None)
+
+    message = str(exc_info.value)
+    assert "lease_heartbeat_seconds" in message
+    assert "lease_ttl_seconds" in message
+
+
+def test_heartbeat_greater_than_ttl_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import ValidationError
+
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LEASE_TTL_SECONDS="5", LEASE_HEARTBEAT_SECONDS="9")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+@pytest.mark.parametrize("bad_ttl", ["0", "-1"])
+def test_non_positive_ttl_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, bad_ttl: str
+) -> None:
+    from pydantic import ValidationError
+
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, LEASE_TTL_SECONDS=bad_ttl, LEASE_HEARTBEAT_SECONDS="0")
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_known_secret_values_never_contains_a_lease_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
+    known = Settings(_env_file=None).known_secret_values()
+
+    assert "lease_ttl_seconds" not in known.values()
+    assert "lease_heartbeat_seconds" not in known.values()
+    assert "900" not in known
+    assert "300" not in known
 
 
 def test_get_settings_returns_a_cached_singleton(

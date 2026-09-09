@@ -46,10 +46,21 @@ def test_terminal_statuses_is_completed_and_failed() -> None:
     assert isinstance(TERMINAL_STATUSES, frozenset)
 
 
-def test_stop_statuses_equals_terminal_statuses_but_is_a_distinct_name() -> None:
-    expected = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+def test_stop_statuses_adds_waiting_human_to_the_terminal_set() -> None:
+    expected = frozenset(
+        {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.WAITING_HUMAN}
+    )
     assert expected == STOP_STATUSES
-    assert STOP_STATUSES == TERMINAL_STATUSES
+    assert isinstance(STOP_STATUSES, frozenset)
+
+
+def test_waiting_human_is_a_stop_but_never_a_terminal() -> None:
+    assert RunStatus.WAITING_HUMAN in STOP_STATUSES
+    assert RunStatus.WAITING_HUMAN not in TERMINAL_STATUSES
+
+
+def test_terminal_statuses_is_a_strict_subset_of_stop_statuses() -> None:
+    assert TERMINAL_STATUSES < STOP_STATUSES
     assert STOP_STATUSES is not TERMINAL_STATUSES
 
 
@@ -98,6 +109,20 @@ def test_event_type_contains_the_six_phase_one_members() -> None:
         "RUN_FAILED",
     }
     assert required <= {m.name for m in EventType}
+
+
+def test_event_type_has_exactly_ten_members_with_the_four_phase_two_types() -> None:
+    # Exactly the six Phase 1 members plus the four Phase 2 writes -- the exact
+    # count is what stops a future contributor from pre-declaring the Phase 12
+    # members, which would advertise transitions that are never emitted.
+    assert len(list(EventType)) == 10
+    phase_two = {
+        "QUESTION_CREATED",
+        "RUN_PAUSED",
+        "HUMAN_ANSWER_RECEIVED",
+        "RUN_RESUMED",
+    }
+    assert phase_two <= {m.name for m in EventType}
 
 
 def test_event_type_value_equals_name_for_every_member() -> None:
