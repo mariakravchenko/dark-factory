@@ -32,11 +32,16 @@ TERMINAL_STATUSES: frozenset[RunStatus] = frozenset(
 )
 """The states from which a run never advances again: delivery succeeded or failed."""
 
-STOP_STATUSES: frozenset[RunStatus] = frozenset({RunStatus.COMPLETED, RunStatus.FAILED})
+STOP_STATUSES: frozenset[RunStatus] = frozenset(
+    {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.WAITING_HUMAN}
+)
 """States at which the drive loop stops calling ``advance(run_id)``.
 
-Equal to :data:`TERMINAL_STATUSES` in Phase 1, but kept as a separate name on
-purpose: Phase 2 adds ``WAITING_HUMAN`` to *this* set (and only this set) so the
-loop halts for a human answer without ``WAITING_HUMAN`` ever counting as terminal
-(D-06).
+A superset of :data:`TERMINAL_STATUSES`: it also contains ``WAITING_HUMAN``. The
+two sets are deliberately distinct and must stay that way. A run in
+``WAITING_HUMAN`` still has work left -- it is waiting on an answer, not
+finished -- so the drive loop must halt on it (stop) while ``advance`` must
+remain willing to act on it once an answer exists. ``TERMINAL_STATUSES`` is the
+narrower "never advances again" set (delivery succeeded or failed); nothing may
+resume a run from there (D-06).
 """

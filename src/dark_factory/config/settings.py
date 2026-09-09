@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import functools
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _VALID_LOG_LEVELS = frozenset(
@@ -32,6 +32,17 @@ class Settings(BaseSettings):
     because DDL and PgBouncer transaction pooling do not mix. ``GITHUB_TOKEN`` is
     loaded even though Phase 1 never calls GitHub — it is loaded so ``redact()``
     knows its literal value for exact-substring scrubbing (D-16).
+
+    ``lease_ttl_seconds`` (900) and ``lease_heartbeat_seconds`` (300) resolve the
+    roadmap's Open Decision 2. 900 s is the top of the roadmap's 5-to-15-minute
+    baseline, so a genuinely dead owner's run is reclaimable within fifteen
+    minutes, which is acceptable for a human-speed delivery pipeline. 300 s is
+    one third of the TTL, the standard lease-renewal ratio, chosen so that two
+    consecutive missed renewals still land inside the TTL before the lease is
+    lost. "Slow" and "dead" are not distinguished and are not meant to be:
+    liveness *is* a freshly pushed expiry, and an owner proves it by renewing,
+    not by anyone probing it. Both are ordinary integers (not credentials)
+    overridable from the environment, so a test can inject a 2-second lease.
     """
 
     model_config = SettingsConfigDict(
@@ -44,6 +55,8 @@ class Settings(BaseSettings):
     database_url_direct: SecretStr
     github_token: SecretStr | None = None
     log_level: str = "INFO"
+    lease_ttl_seconds: int = 900
+    lease_heartbeat_seconds: int = 300
 
     @field_validator("log_level")
     @classmethod
@@ -57,6 +70,30 @@ class Settings(BaseSettings):
                 f"(one of: {', '.join(sorted(_VALID_LOG_LEVELS))})"
             )
         return normalised
+
+    @model_validator(mode="after")
+    def _lease_intervals_are_coherent(self) -> Settings:
+        """Reject a lease configuration that would defeat itself.
+
+        A non-positive TTL is meaningless. The important one is the second check:
+        a heartbeat interval that fires no more often than the lease expires
+        guarantees the owner loses its own lease, which surfaces later as an
+        unreproducible mid-step abort rather than as a configuration error.
+        """
+        if self.lease_ttl_seconds <= 0:
+            raise ValueError(
+                f"lease_ttl_seconds must be strictly positive, got "
+                f"{self.lease_ttl_seconds!r}"
+            )
+        if self.lease_heartbeat_seconds >= self.lease_ttl_seconds:
+            raise ValueError(
+                f"lease_heartbeat_seconds ({self.lease_heartbeat_seconds!r}) must "
+                f"be strictly less than lease_ttl_seconds "
+                f"({self.lease_ttl_seconds!r}); a heartbeat that fires no more "
+                f"often than the lease expires guarantees the owner loses its "
+                f"own lease"
+            )
+        return self
 
     def known_secret_values(self) -> dict[str, str]:
         """Return ``{live secret value: label}`` for exact-value redaction.

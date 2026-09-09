@@ -12,6 +12,11 @@ shapes every setting here:
 * ``connect_args={"prepare_threshold": None}`` — psycopg 3's client-side
   prepared-statement cache is what breaks through PgBouncer transaction pooling;
   disabling it is the documented Neon-safe setting.
+* ``connect_args={"application_name": "dark-factory"}`` — PostgreSQL records this
+  literal in its per-backend activity view (``pg_stat_activity``). It is a
+  diagnostic label, not behaviour: it is what lets the HITL-08 proof count
+  *this* application's backends that are sitting idle inside a transaction
+  without also counting the test process's own connections.
 * a single ``tenacity`` retry-once-on-``OperationalError`` around the **initial**
   connect only, to absorb the Neon cold start (300-800 ms). Nothing else is
   wrapped — the drive loop's retries are orchestration logic with persisted
@@ -64,7 +69,10 @@ def build_engine() -> Engine:
         url,
         poolclass=NullPool,
         pool_pre_ping=True,
-        connect_args={"prepare_threshold": None},
+        connect_args={
+            "prepare_threshold": None,
+            "application_name": "dark-factory",
+        },
         future=True,
     )
 

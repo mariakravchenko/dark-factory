@@ -10,10 +10,20 @@ script in this order:
    ``WorkerResult.model_validate`` -- how the subprocess-level tests in Plans 05
    and 06 drive the failure arm across a process boundary;
 3. the D-10 default -- a single COMPLETED result with a ``fake-<uuid>`` session id.
+
+Test-only knob (alongside ``DARK_FACTORY_FAKE_SCRIPT``):
+``DARK_FACTORY_FAKE_SLEEP_MS`` makes ``execute()`` deliberately slow, so a step
+can be produced that outlives a short injected lease TTL (the heartbeat and race
+proofs). It is read from the environment on every ``execute()`` call, never
+cached at import, so it is inert on an ordinary run and a test can arm it for a
+single subprocess. The explicit ``sleep_ms`` constructor argument takes
+precedence over it. A malformed value raises rather than being silently ignored.
+``resume()`` inherits the delay because it delegates to ``execute()``.
 """
 
 import json
 import os
+import time
 from collections.abc import Sequence
 from uuid import uuid4
 
@@ -27,6 +37,7 @@ from dark_factory.workers.base import CodingWorker
 __all__ = ["FakeWorker", "ScriptExhaustedError"]
 
 _SCRIPT_ENV_VAR = "DARK_FACTORY_FAKE_SCRIPT"
+_SLEEP_MS_ENV_VAR = "DARK_FACTORY_FAKE_SLEEP_MS"
 
 
 class ScriptExhaustedError(RuntimeError):
@@ -50,18 +61,39 @@ def _script_from_env() -> list[WorkerResult] | None:
     return [WorkerResult.model_validate(item) for item in json.loads(raw)]
 
 
+def _resolve_sleep_ms(explicit: int | None) -> int | None:
+    """The delay for one ``execute()`` call: the constructor argument if given,
+    otherwise ``DARK_FACTORY_FAKE_SLEEP_MS`` parsed as an integer if set,
+    otherwise ``None`` (no delay). Read at call time, never cached at import."""
+    if explicit is not None:
+        return explicit
+    raw = os.environ.get(_SLEEP_MS_ENV_VAR)
+    if raw is None:
+        return None
+    return int(raw)  # a malformed value raises ValueError -- fail loudly
+
+
 class FakeWorker(CodingWorker):
     """Returns a fixed sequence of :class:`WorkerResult`s, one per ``execute()`` call."""
 
-    def __init__(self, script: Sequence[WorkerResult] | None = None) -> None:
+    def __init__(
+        self,
+        script: Sequence[WorkerResult] | None = None,
+        *,
+        sleep_ms: int | None = None,
+    ) -> None:
         if script is not None:
             self._script: list[WorkerResult] = list(script)
         else:
             from_env = _script_from_env()
             self._script = from_env if from_env is not None else _default_script()
         self._index = 0
+        self._sleep_ms = sleep_ms
 
     def execute(self, context: object) -> WorkerResult:
+        delay_ms = _resolve_sleep_ms(self._sleep_ms)
+        if delay_ms is not None and delay_ms > 0:
+            time.sleep(delay_ms / 1000)
         if self._index >= len(self._script):
             raise ScriptExhaustedError(
                 f"FakeWorker script exhausted after {self._index} result(s)"
