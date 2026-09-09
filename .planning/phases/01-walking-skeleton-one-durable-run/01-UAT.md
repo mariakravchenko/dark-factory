@@ -1,25 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 01-walking-skeleton-one-durable-run
 source: [01-09-SUMMARY.md, 01-VERIFICATION.md]
 started: 2026-09-08T00:00:00Z
-updated: 2026-09-08T00:00:00Z
+updated: 2026-09-09T09:15:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: Real-Neon full-stack run (pooled + direct endpoint split)
-expected: |
-  `alembic upgrade head` applies cleanly through the DIRECT endpoint (creates
-  `runs`, `role_executions`, `run_events`). `dark-factory run text:"add a health
-  endpoint"` prints the run id on line 1, then `CREATED -> BA`, `BA -> COMPLETED`,
-  then the summary block, and exits 0. `dark-factory status <run-id>` (and
-  `--json`) reports `COMPLETED` / `current_role: BA` / `latest_attempt: 1` read
-  through the POOLED endpoint. No PgBouncer / prepared-statement error appears
-  against the pooled host — the `NullPool` + `prepare_threshold=None` +
-  `pool_pre_ping` settings in `engine.py` are what this exercises for real.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -36,22 +25,29 @@ expected: |
   the summary block, exit 0; `status` reports `COMPLETED` / `current_role: BA` /
   `latest_attempt: 1` through the pooled endpoint; no prepared-statement / PgBouncer
   error against the pooled host.
-result: [pending]
-why_human: |
-  External managed service (Neon) with PgBouncer transaction pooling. Plan 01-09
-  declared this as a `user_setup` / end-of-phase human-check and it was NOT
-  performed during execution. All automated db/integration tests ran against a
-  throwaway PostgreSQL 18.6 instance with a single URL, never against Neon PG 17
-  with the pooled-vs-direct endpoint split. The pooled-endpoint behaviour the
-  `engine.py` / `migrations/env.py` settings target has no automated coverage.
+result: pass
+verified_by: operator against a real Neon PostgreSQL project on 2026-09-09
+observed: |
+  `uv run alembic upgrade head` applied `0001_walking_skeleton` then
+  `0002_role_exec_uniqueness` through the direct endpoint with no error.
+  `uv run dark-factory run text:"add a health endpoint"` (run twice) each printed
+  a UUID on line 1, then `CREATED -> BA`, `BA -> COMPLETED`, then the summary
+  block (terminal state COMPLETED, last role BA, attempt 1).
+  `uv run dark-factory status 51450902-ad80-4885-8b54-0d8914095555` ->
+  status COMPLETED / current_role BA / current_step 0 / latest_attempt 1 /
+  timestamps present / base_branch, working_branch = `-`.
+  `--json` -> the same fields as one JSON object (source_ref null, branches null).
+  No PgBouncer / prepared-statement error appeared against the pooled host.
 
 ## Summary
 
 total: 1
-passed: 0
+passed: 1
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+[none]
