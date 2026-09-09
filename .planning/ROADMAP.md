@@ -51,7 +51,7 @@ Three decisions were flagged during research and are resolved inside the phase t
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Walking Skeleton — One Durable Run** - A text task becomes a run that persists its whole lifecycle in Neon and is resumable from a fresh process
+- [x] **Phase 1: Walking Skeleton — One Durable Run** - A text task becomes a run that persists its whole lifecycle in Neon and is resumable from a fresh process (completed 2026-09-09)
 - [ ] **Phase 2: Pause, Resume & Single-Owner Execution** - A run stops for a human answer, releases its process, and is resumed later by exactly one process
 - [ ] **Phase 3: Configuration-Driven Pipeline** - Pipeline shape and role behaviour come from YAML, snapshotted per run for deterministic resume
 - [ ] **Phase 4: The Four-Role Pipeline & Artifact Handoffs** - BA → Architect → Developer → QA hand off through durable artifacts with machine-readable verdicts
@@ -308,7 +308,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Walking Skeleton — One Durable Run | 9/9 | In Progress|  |
+| 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 0/TBD | Not started | - |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
