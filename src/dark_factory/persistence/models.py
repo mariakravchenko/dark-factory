@@ -55,9 +55,10 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 
-__all__ = ["Base", "RoleExecution", "Run", "RunEvent"]
+__all__ = ["Base", "HumanInteraction", "RoleExecution", "Run", "RunEvent"]
 
 # VARCHAR + CHECK carrying every STATE-07 value from revision 0001 (B1). Shared
 # between the three places that must agree: this column, the CHECK constraint, and
@@ -68,6 +69,21 @@ _RUN_STATUS = sa.Enum(
     create_constraint=True,
     length=32,
     name="run_status",
+    values_callable=lambda enum: [member.value for member in enum],
+)
+
+# Exact structural mirror of ``_RUN_STATUS`` for ``human_interactions.status``
+# (STATE-04). ``native_enum=False`` is the load-bearing part: it produces a
+# ``VARCHAR`` + a named ``CHECK`` (``interaction_status``), so a future value edit
+# is an ordinary ``ALTER TABLE ... CHECK`` constraint change, never
+# ``ALTER TYPE ... ADD VALUE``. Shared by this column, the CHECK constraint and
+# migration 0003.
+_INTERACTION_STATUS = sa.Enum(
+    InteractionStatus,
+    native_enum=False,
+    create_constraint=True,
+    length=16,
+    name="interaction_status",
     values_callable=lambda enum: [member.value for member in enum],
 )
 
@@ -98,6 +114,17 @@ class Run(Base):
     # base_branch / working_branch: present from 0001, unused until Phase 5 (D-20).
     base_branch: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     working_branch: Mapped[str | None] = mapped_column(sa.String, nullable=True)
+    # owner_token / lock_expires_at: the single-owner lease (0003), declared now,
+    # exercised from plan 02-03 onward. NULL in both is exactly "unclaimed and
+    # claimable", so no back-fill of existing rows is needed.
+    # lock_expires_at is ONLY ever assigned from a SQL expression over the server
+    # clock (``func.now() + <interval>``); the value in the column and every
+    # comparison against it (``lock_expires_at < func.now()``) therefore live in
+    # one clock domain — the database's. No process clock ever writes this column.
+    owner_token: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid(), nullable=True)
+    lock_expires_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
     pr_number: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     pr_url: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     qa_developer_iterations: Mapped[int] = mapped_column(
@@ -184,4 +211,56 @@ class RunEvent(Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+    )
+
+
+class HumanInteraction(Base):
+    """One row per question asked of a human (STATE-04). ``status`` is a
+    ``VARCHAR`` + CHECK carrying exactly ``WAITING`` / ``ANSWERED`` / ``CANCELLED``
+    (never a native PG ``ENUM``), so a future value edit is a constraint change.
+
+    ``uq_one_waiting_interaction_per_run`` is a **partial** unique index on
+    ``run_id`` restricted to ``status = 'WAITING'``. It is what turns "find the
+    pending question for this run" into a single-row lookup, and it turns a
+    duplicate pause into a constraint violation rather than a silent second open
+    row — the same defence-in-depth philosophy as ``uq_role_exec_attempt`` on
+    ``role_executions``. Because it is partial, any number of ``ANSWERED`` /
+    ``CANCELLED`` rows may coexist for one run.
+
+    ``role_execution_id`` is NOT NULL: every question in the roadmap originates in
+    a role attempt, so the "which attempt asked this?" join is total, not
+    optional. ``question`` is a single ``TEXT`` column holding the newline-join of
+    ``WorkerResult.questions`` (already a ``list[str]``), redacted before write in
+    the one mutation path.
+    """
+
+    __tablename__ = "human_interactions"
+    __table_args__ = (
+        sa.Index(
+            "uq_one_waiting_interaction_per_run",
+            "run_id",
+            unique=True,
+            postgresql_where=sa.text("status = 'WAITING'"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), primary_key=True, default=uuid.uuid4
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), sa.ForeignKey("runs.id"), nullable=False, index=True
+    )
+    role_execution_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), sa.ForeignKey("role_executions.id"), nullable=False
+    )
+    question: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    answer: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    status: Mapped[InteractionStatus] = mapped_column(
+        _INTERACTION_STATUS, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
     )

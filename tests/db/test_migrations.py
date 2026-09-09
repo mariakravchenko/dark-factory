@@ -15,7 +15,9 @@ from tests.conftest import _alembic_config
 pytestmark = pytest.mark.db
 
 EXPECTED_TABLES = {"runs", "role_executions", "run_events"}
-FORBIDDEN_TABLES = {"human_interactions", "artifacts"}
+# ``human_interactions`` is created by revision 0003 (Phase 2) and is no longer
+# forbidden. ``artifacts`` is still Phase 4 and must not appear yet.
+FORBIDDEN_TABLES = {"artifacts"}
 
 
 @pytest.fixture
@@ -33,13 +35,13 @@ def _table_names(engine: Engine) -> set[str]:
     return set(inspect(engine).get_table_names())
 
 
-def test_upgrade_head_creates_exactly_the_three_phase_one_tables(
+def test_upgrade_head_creates_the_expected_owned_tables_and_no_future_ones(
     direct_engine: Engine,
 ) -> None:
     names = _table_names(direct_engine)
     assert names >= EXPECTED_TABLES
     assert not (FORBIDDEN_TABLES & names), (
-        "Phase 1 must not create human_interactions (Phase 2) or artifacts (Phase 4)"
+        "the schema must not create the Phase 4 artifacts table yet"
     )
 
 

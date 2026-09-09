@@ -33,6 +33,8 @@ RUN_COLUMNS = {
     "repository",
     "base_branch",
     "working_branch",
+    "owner_token",
+    "lock_expires_at",
     "pr_number",
     "pr_url",
     "qa_developer_iterations",
@@ -88,10 +90,12 @@ def test_models_and_base_are_importable() -> None:
     assert RunEvent is not None
 
 
-def test_metadata_has_exactly_the_three_phase_one_tables() -> None:
+def test_metadata_has_exactly_the_four_owned_tables() -> None:
     from dark_factory.persistence.models import Base
 
+    # ``human_interactions`` joins the set in revision 0003 (Phase 2).
     assert sorted(Base.metadata.tables) == [
+        "human_interactions",
         "role_executions",
         "run_events",
         "runs",
