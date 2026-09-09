@@ -133,7 +133,7 @@ Plans:
   4. A process killed while owning a run loses its lease by database-clock expiry, and the next process claims the run and continues from the last committed step.
   5. A role step that runs longer than the lease TTL is not falsely stolen — the owner heartbeats the lease while the step is in flight.
 
-**Plans**: 2/7 plans executed
+**Plans**: 3/7 plans executed
 
 Plans:
 **Wave 1**
@@ -143,7 +143,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-03-PLAN.md — TRACER: a run pauses for a human, releases its process, and a brand-new process resumes it with `resume --answer`, under a Postgres lease
+- [x] 02-03-PLAN.md — TRACER: a run pauses for a human, releases its process, and a brand-new process resumes it with `resume --answer`, under a Postgres lease
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -330,7 +330,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
-| 2. Pause, Resume & Single-Owner Execution | 2/7 | In Progress|  |
+| 2. Pause, Resume & Single-Owner Execution | 3/7 | In Progress|  |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |

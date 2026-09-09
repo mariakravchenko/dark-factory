@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
 status: executing
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-09-09T17:06:47.104Z"
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-09-09T17:59:13.293Z"
 last_activity: 2026-09-09
 last_activity_desc: Phase 02 execution started
-state_head: d257d93d7d8eb6158ffb5c470dd0372536e3ad38
+state_head: 487f45df5872a24b8696b365f3b33b7cd6ca20ba
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 16
-  completed_plans: 11
+  completed_plans: 12
   percent: 8
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
-Last activity: 2026-09-09 — Completed 02-02 (Phase 2 vocabulary, lease knobs, two-real-process test harness)
+Last activity: 2026-09-09 — Completed 02-03 (tracer: pause + resume --answer end to end under a Postgres lease)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -69,6 +69,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P09 | 45min | 2 tasks | 3 files |
 | Phase 02 P01 | 55min | 3 tasks | 7 files |
 | Phase 02 P02 | 11min | 2 tasks | 12 files |
+| Phase 02 P03 | 95min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -113,6 +114,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-02: Open Decision 2 resolved in code — Settings.lease_ttl_seconds=900 / lease_heartbeat_seconds=300 as plain env-overridable ints, with a model_validator(mode=after) rejecting a non-positive TTL and a heartbeat>=TTL (message names both fields); neither field enters known_secret_values()
 - [Phase 02]: 02-02: engine connect_args gains application_name=dark-factory (pg_stat_activity attribution for the HITL-08 idle-in-transaction proof); FakeWorker gains sleep_ms kwarg + DARK_FACTORY_FAKE_SLEEP_MS knob read at call time, inert when unset, inherited by resume()
 - [Phase 02]: 02-02: tests/support/subprocess_runner.py is the single child-env allowlist (child_env/spawn/popen/run_id_from_stdout/wait_for); test_fresh_process_resume.py imports it. Fixtures use_lease_settings (env + get_settings cache-clear, 2s/1s) and force_lease_expiry (server-clock UPDATE, since time-machine cannot move the PG clock). HumanInteraction added to _LIFECYCLE_CTORS AST guard
+- [Phase 02]: 02-03: claim-don't-check Postgres lease (one conditional UPDATE ... RETURNING) + run_lease context manager owning a daemon heartbeat; DB-clock-only expiry; token fence folded into apply_transition
+- [Phase 02]: 02-03: submit_answer checks WAITING_HUMAN + pending-question preconditions BEFORE claiming the lease (deviation from plan prose) so a terminal/non-waiting run yields NotWaitingForHuman/exit 2, not LeaseNotAcquired/exit 0
+- [Phase 02]: 02-03: column-driven resume — the persisted RESUMING marker on the role-execution row selects worker.resume() over worker.execute(); zero in-memory carryover across a crash
 
 ### Pending Todos
 
@@ -138,6 +142,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-09T17:05:30.022Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-09-09T17:59:13.264Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
