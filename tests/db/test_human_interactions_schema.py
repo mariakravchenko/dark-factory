@@ -1,21 +1,34 @@
-"""STATE-04 schema proof for ``human_interactions``, asserted against the **live**
-PostgreSQL database (reflection + real INSERTs), not against ORM metadata.
+"""STATE-04 / HITL-07 / HITL-08 schema proof, asserted against the **live**
+PostgreSQL database (reflection + real INSERTs and conditional UPDATEs), not
+against ORM metadata.
 
-Revision ``0003`` shape: the eight declared columns and their nullability, the
-three-value ``interaction_status`` CHECK enforced by PostgreSQL (not the ORM),
-the partial unique index that makes "at most one open question per run" a
-database invariant, and both foreign keys. The two ``runs`` lease columns are
-checked here for presence and nullability only.
+Two concerns share this module:
+
+1. **``human_interactions`` shape** (revision ``0003``) — the eight declared
+   columns and their nullability, the three-value ``interaction_status`` CHECK
+   enforced by PostgreSQL (not the ORM), the partial unique index that makes "at
+   most one open question per run" a database invariant, and both foreign keys.
+
+2. **The ``runs`` lease columns behave as a database-clock lease** — before any
+   ``orchestrator/lease.py`` exists. Claim-don't-check is shown as a single
+   ``UPDATE ... RETURNING`` statement: one process wins, a concurrent claim gets
+   zero rows, a forced-past expiry makes the run claimable again, a terminal run
+   is never claimable, and the expiry value is proven to be computed on the
+   server by comparing it against a separately selected ``now()``.
 
 Every deliberate violation runs in its own short transaction so it cannot poison
 the rest of the test, and every fixture row is cleaned up (the ``cleanup_runs``
-idiom from ``tests/db/test_transition_atomic.py``).
+idiom from ``tests/db/test_transition_atomic.py``). No reading of the Python
+process wall clock appears anywhere in this file — every expiry value and every
+expiry comparison is a SQL expression over the server clock, so the lease
+assertions live entirely in the database's clock domain.
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -93,6 +106,30 @@ _INSERT_INTERACTION = sa.text(
     " VALUES (gen_random_uuid(), :run_id, :role_execution_id, 'q', :answer,"
     " :status, now())"
 )
+
+
+def _claim(
+    conn: Any, run_id: uuid.UUID, token: uuid.UUID, ttl_seconds: int
+) -> list[Any]:
+    """The whole of claim-don't-check as one statement: no application-side check
+    between reading ownership and taking it. Both the expiry value written and
+    the expiry test in the WHERE are ``func.now()`` — one clock domain, the
+    server's."""
+    stmt = (
+        sa.update(Run)
+        .where(
+            Run.id == run_id,
+            Run.status.notin_([RunStatus.COMPLETED, RunStatus.FAILED]),
+            sa.or_(Run.owner_token.is_(None), Run.lock_expires_at < sa.func.now()),
+        )
+        .values(
+            owner_token=token,
+            lock_expires_at=sa.func.now() + timedelta(seconds=ttl_seconds),
+            updated_at=sa.func.now(),
+        )
+        .returning(Run.id)
+    )
+    return list(conn.execute(stmt).fetchall())
 
 
 # --------------------------------------------------------------------------- #
@@ -195,3 +232,108 @@ def test_a_nonexistent_run_id_is_rejected_by_the_foreign_key(engine: Engine) -> 
                 "status": "WAITING",
             },
         )
+
+
+# --------------------------------------------------------------------------- #
+# runs lease columns behave as a database-clock lease (HITL-07, HITL-08)
+# --------------------------------------------------------------------------- #
+
+
+def test_a_fresh_run_has_null_in_both_lease_columns(
+    engine: Engine, cleanup_runs: list[Any]
+) -> None:
+    run_id, _ = _seed_run_and_exec(engine, cleanup_runs)
+    with engine.begin() as conn:
+        row = conn.execute(
+            sa.select(Run.owner_token, Run.lock_expires_at).where(Run.id == run_id)
+        ).one()
+    assert row.owner_token is None
+    assert row.lock_expires_at is None
+
+
+def test_first_claim_wins_and_an_immediate_second_claim_gets_zero_rows(
+    engine: Engine, cleanup_runs: list[Any]
+) -> None:
+    run_id, _ = _seed_run_and_exec(engine, cleanup_runs)
+    first_token = uuid.uuid4()
+    second_token = uuid.uuid4()
+
+    with engine.begin() as conn:
+        first = _claim(conn, run_id, first_token, ttl_seconds=900)
+    with engine.begin() as conn:
+        second = _claim(conn, run_id, second_token, ttl_seconds=900)
+
+    assert len(first) == 1
+    assert second == []
+
+    with engine.begin() as conn:
+        owner = conn.execute(
+            sa.select(Run.owner_token).where(Run.id == run_id)
+        ).scalar_one()
+    assert owner == first_token
+
+
+def test_a_forced_past_expiry_makes_the_run_claimable_again(
+    engine: Engine, cleanup_runs: list[Any]
+) -> None:
+    run_id, _ = _seed_run_and_exec(engine, cleanup_runs)
+    first_token = uuid.uuid4()
+    third_token = uuid.uuid4()
+
+    with engine.begin() as conn:
+        assert len(_claim(conn, run_id, first_token, ttl_seconds=900)) == 1
+
+    # Force expiry with a server-clock-relative UPDATE (time-machine cannot move
+    # the PostgreSQL clock).
+    with engine.begin() as conn:
+        conn.execute(
+            sa.update(Run)
+            .where(Run.id == run_id)
+            .values(lock_expires_at=sa.func.now() - timedelta(seconds=1))
+        )
+
+    with engine.begin() as conn:
+        reclaimed = _claim(conn, run_id, third_token, ttl_seconds=900)
+    assert len(reclaimed) == 1
+
+    with engine.begin() as conn:
+        owner = conn.execute(
+            sa.select(Run.owner_token).where(Run.id == run_id)
+        ).scalar_one()
+    assert owner == third_token
+
+
+def test_lock_expires_at_is_computed_on_the_server_not_in_the_test_process(
+    engine: Engine, cleanup_runs: list[Any]
+) -> None:
+    run_id, _ = _seed_run_and_exec(engine, cleanup_runs)
+    ttl_seconds = 2
+
+    with engine.begin() as conn:
+        assert len(_claim(conn, run_id, uuid.uuid4(), ttl_seconds=ttl_seconds)) == 1
+
+    with engine.begin() as conn:
+        lock_expires_at = conn.execute(
+            sa.select(Run.lock_expires_at).where(Run.id == run_id)
+        ).scalar_one()
+        server_now = conn.execute(sa.select(sa.func.now())).scalar_one()
+
+    delta_seconds = (lock_expires_at - server_now).total_seconds()
+    # Strictly in the future, and by approximately the TTL (server_now is taken a
+    # moment after the claim, so the gap is a little under ttl_seconds).
+    assert 0 < delta_seconds <= ttl_seconds + 1
+
+
+def test_a_terminal_run_is_never_claimable(
+    engine: Engine, cleanup_runs: list[Any]
+) -> None:
+    run_id, _ = _seed_run_and_exec(engine, cleanup_runs, status=RunStatus.COMPLETED)
+    with engine.begin() as conn:
+        rows = _claim(conn, run_id, uuid.uuid4(), ttl_seconds=900)
+    assert rows == []
+
+    with engine.begin() as conn:
+        owner = conn.execute(
+            sa.select(Run.owner_token).where(Run.id == run_id)
+        ).scalar_one()
+    assert owner is None
