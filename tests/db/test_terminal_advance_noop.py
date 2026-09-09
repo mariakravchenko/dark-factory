@@ -1,10 +1,20 @@
-"""``advance`` on a terminal run is a proven zero-write no-op (D-05 idempotency).
+"""``advance`` is a proven zero-write no-op on a **stopped** run.
 
-Take a run to each terminal state, snapshot the ``runs`` row, the
-``role_executions`` rows and the ``run_events`` count, call ``advance`` twice
-more, and assert every snapshot is byte-for-byte unchanged and the returned
-status is the same terminal value both times. This is what makes ``resume`` safe
-to run repeatedly.
+This file now covers two distinct no-op classes:
+
+* **terminal** (``COMPLETED`` / ``FAILED``) — the run will never advance again.
+* **waiting** (``WAITING_HUMAN``) — the run *will* advance, but only once an
+  answer exists; until then ``advance`` must write nothing and must not reach
+  the worker.
+
+Conflating the two is exactly the mistake that ``STOP_STATUSES`` and
+``TERMINAL_STATUSES`` being separate constants prevents: a run that waits must
+not be treated as finished, and a run that waits must not quietly re-run its
+role with no answer (RESEARCH Pitfall 7).
+
+In every case: snapshot the ``runs`` row, the ``role_executions`` rows and the
+``run_events`` count, act, and assert every snapshot is byte-for-byte unchanged
+and the returned status is the same stop value.
 """
 
 from __future__ import annotations
@@ -127,3 +137,89 @@ def test_repeated_advance_on_a_completed_run_adds_no_events(
             is RunStatus.COMPLETED
         )
     assert _event_count() == before == 4
+
+
+# --------------------------------------------------------------------------- #
+# WAITING_HUMAN — the *other* no-op class: the run will advance, but only once
+# an answer exists. Until then advance() must write nothing and must not reach
+# the worker at all.
+# --------------------------------------------------------------------------- #
+
+_NEEDS_INPUT = WorkerResult(
+    status=WorkerResultStatus.NEEDS_INPUT,
+    questions=["which database?"],
+    worker_session_id="fake-waiting",
+)
+
+
+def _pause_a_run(
+    session_factory: SessionFactory, registry_builder: RegistryBuilder
+) -> Any:
+    run_id = start_run("text:pause on a question", session_factory=session_factory)
+    pausing_registry = registry_builder([_NEEDS_INPUT])
+    assert (
+        drive(run_id, session_factory=session_factory, registry=pausing_registry)
+        is RunStatus.WAITING_HUMAN
+    )
+    return run_id
+
+
+def test_advance_on_a_waiting_run_writes_nothing_and_never_calls_the_worker(
+    advance_session_factory: SessionFactory,
+    fake_worker_registry: RegistryBuilder,
+    use_fake_secrets: object,
+) -> None:
+    run_id = _pause_a_run(advance_session_factory, fake_worker_registry)
+
+    before = _snapshot(advance_session_factory, run_id)
+
+    # A registry whose worker raises on *any* call: "the worker was not invoked"
+    # is then proven by the absence of an exception, not by inspection.
+    exploding = fake_worker_registry([])
+    status = advance(
+        run_id, session_factory=advance_session_factory, registry=exploding
+    )
+
+    assert status is RunStatus.WAITING_HUMAN
+    assert _snapshot(advance_session_factory, run_id) == before
+
+
+def test_drive_that_reaches_waiting_stops_there_rather_than_looping(
+    advance_session_factory: SessionFactory,
+    fake_worker_registry: RegistryBuilder,
+    use_fake_secrets: object,
+) -> None:
+    run_id = start_run(
+        "text:reach waiting and stop", session_factory=advance_session_factory
+    )
+    # Script has a COMPLETED after the NEEDS_INPUT: drive must NOT consume it.
+    registry = fake_worker_registry(
+        [
+            _NEEDS_INPUT,
+            WorkerResult(status=WorkerResultStatus.COMPLETED, summary="unreached"),
+        ]
+    )
+    assert (
+        drive(run_id, session_factory=advance_session_factory, registry=registry)
+        is RunStatus.WAITING_HUMAN
+    )
+    snap = _snapshot(advance_session_factory, run_id)
+    assert snap["status"] is RunStatus.WAITING_HUMAN
+    assert len(snap["executions"]) == 1
+
+
+def test_drive_starting_from_waiting_returns_immediately_without_advancing(
+    advance_session_factory: SessionFactory,
+    fake_worker_registry: RegistryBuilder,
+    use_fake_secrets: object,
+) -> None:
+    run_id = _pause_a_run(advance_session_factory, fake_worker_registry)
+
+    before = _snapshot(advance_session_factory, run_id)
+
+    exploding = fake_worker_registry([])
+    assert (
+        drive(run_id, session_factory=advance_session_factory, registry=exploding)
+        is RunStatus.WAITING_HUMAN
+    )
+    assert _snapshot(advance_session_factory, run_id) == before

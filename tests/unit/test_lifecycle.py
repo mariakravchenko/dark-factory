@@ -82,6 +82,22 @@ class _FakeState:
             _TWO_ROLE,
             (RunStatus.ARCHITECTURE, "ARCHITECTURE", 1),
         ),
+        (
+            RunStatus.BA,
+            "BA",
+            0,
+            Signal.ROLE_NEEDS_INPUT,
+            _ONE_ROLE,
+            (RunStatus.WAITING_HUMAN, "BA", 0),
+        ),
+        (
+            RunStatus.ARCHITECTURE,
+            "ARCHITECTURE",
+            1,
+            Signal.ROLE_NEEDS_INPUT,
+            _TWO_ROLE,
+            (RunStatus.WAITING_HUMAN, "ARCHITECTURE", 1),
+        ),
     ],
 )
 def test_legal_transitions_produce_documented_next_state(
@@ -105,7 +121,13 @@ def test_legal_transitions_produce_documented_next_state(
         (RunStatus.COMPLETED, "BA", Signal.ROLE_COMPLETED, _ONE_ROLE),
         (RunStatus.FAILED, "BA", Signal.ROLE_FAILED, _ONE_ROLE),
         (RunStatus.ARCHITECTURE, "ARCHITECTURE", Signal.ROLE_COMPLETED, _ONE_ROLE),
-        (RunStatus.BA, "BA", Signal.ROLE_NEEDS_INPUT, _ONE_ROLE),
+        # WAITING_HUMAN is a stop, not a terminal: it is reachable, but leaving
+        # it is submit_answer's job, never the pure function's. Every signal
+        # applied to it is illegal here.
+        (RunStatus.WAITING_HUMAN, "BA", Signal.ENTER, _ONE_ROLE),
+        (RunStatus.WAITING_HUMAN, "BA", Signal.ROLE_COMPLETED, _ONE_ROLE),
+        (RunStatus.WAITING_HUMAN, "BA", Signal.ROLE_FAILED, _ONE_ROLE),
+        (RunStatus.WAITING_HUMAN, "BA", Signal.ROLE_NEEDS_INPUT, _ONE_ROLE),
     ],
 )
 def test_illegal_pairs_raise(
@@ -119,15 +141,18 @@ def test_illegal_pairs_raise(
         transition(state, signal, pipeline)
 
 
-def test_transition_is_pure_and_repeatable() -> None:
+@pytest.mark.parametrize(
+    "signal", [Signal.ROLE_COMPLETED, Signal.ROLE_FAILED, Signal.ROLE_NEEDS_INPUT]
+)
+def test_transition_is_pure_and_repeatable(signal: Signal) -> None:
     state = _FakeState(RunStatus.BA, "BA", 0)
     pipeline_nodes = _ONE_ROLE.nodes
 
-    first = transition(state, Signal.ROLE_COMPLETED, _ONE_ROLE)
-    second = transition(state, Signal.ROLE_COMPLETED, _ONE_ROLE)
+    first = transition(state, signal, _ONE_ROLE)
+    second = transition(state, signal, _ONE_ROLE)
 
     assert first == second
-    assert state == _FakeState(RunStatus.BA, "BA", 0)
+    assert state == _FakeState(RunStatus.BA, "BA", 0)  # arguments unmutated
     assert _ONE_ROLE.nodes is pipeline_nodes
 
 
