@@ -133,13 +133,13 @@ Plans:
   4. A process killed while owning a run loses its lease by database-clock expiry, and the next process claims the run and continues from the last committed step.
   5. A role step that runs longer than the lease TTL is not falsely stolen — the owner heartbeats the lease while the step is in flight.
 
-**Plans**: 1/7 plans executed
+**Plans**: 2/7 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 02-01-PLAN.md — Wave 0: the `human_interactions` table and the two lease columns on `runs`, applied as Alembic revision 0003 (blocking)
-- [ ] 02-02-PLAN.md — Wave 0: WAITING_HUMAN as a stop status, the four Phase 2 event types, the lease TTL/heartbeat settings (Open Decision 2), and the two-real-process test harness
+- [x] 02-02-PLAN.md — Wave 0: WAITING_HUMAN as a stop status, the four Phase 2 event types, the lease TTL/heartbeat settings (Open Decision 2), and the two-real-process test harness
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -330,7 +330,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
-| 2. Pause, Resume & Single-Owner Execution | 1/7 | In Progress|  |
+| 2. Pause, Resume & Single-Owner Execution | 2/7 | In Progress|  |
 | 3. Configuration-Driven Pipeline | 0/TBD | Not started | - |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |

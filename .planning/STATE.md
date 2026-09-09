@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-09T16:45:32.252Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-09T17:06:47.104Z"
 last_activity: 2026-09-09
 last_activity_desc: Phase 02 execution started
-state_head: a1e6b568acd024a7e8942ffaee652ab77891351f
+state_head: d257d93d7d8eb6158ffb5c470dd0372536e3ad38
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 16
-  completed_plans: 10
+  completed_plans: 11
   percent: 8
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
-Last activity: 2026-09-09 — Completed 02-01 (human_interactions + runs lease columns, revision 0003)
+Last activity: 2026-09-09 — Completed 02-02 (Phase 2 vocabulary, lease knobs, two-real-process test harness)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -38,7 +38,7 @@ Progress: [█░░░░░░░░░] 8%
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -47,7 +47,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 9 | - | - |
-| 02 | 1 | - | - |
+| 02 | 2 | - | - |
 
 **Recent Trend:**
 
@@ -68,6 +68,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P08 | 40min | 2 tasks | 7 files |
 | Phase 01 P09 | 45min | 2 tasks | 3 files |
 | Phase 02 P01 | 55min | 3 tasks | 7 files |
+| Phase 02 P02 | 11min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-01: _INTERACTION_STATUS is the _RUN_STATUS idiom reused at length=16 (VARCHAR+CHECK interaction_status, native_enum=False); WAITING/ANSWERED/CANCELLED enforced by PostgreSQL, CANCELLED declared but written nowhere this phase (inert CHECK value)
 - [Phase 02]: 02-01: partial unique index uq_one_waiting_interaction_per_run (run_id WHERE status='WAITING') makes 'one open question per run' a DB invariant; runs.owner_token/lock_expires_at nullable no-default (NULL == claimable); revision 0003 applied + round-tripped, alembic check clean over the four owned tables
 - [Phase 02]: 02-01: claim-don't-check proven before orchestrator/lease.py exists — one UPDATE ... WHERE (owner_token IS NULL OR lock_expires_at < func.now()) RETURNING; every expiry value/comparison is func.now(); db test module grep-clean of process-clock reads
+- [Phase 02]: 02-02: STOP_STATUSES gains WAITING_HUMAN and is now a strict superset of the unchanged TERMINAL_STATUSES; EventType gains exactly QUESTION_CREATED/RUN_PAUSED/HUMAN_ANSWER_RECEIVED/RUN_RESUMED, pinned at ten members by a unit test
+- [Phase 02]: 02-02: Open Decision 2 resolved in code — Settings.lease_ttl_seconds=900 / lease_heartbeat_seconds=300 as plain env-overridable ints, with a model_validator(mode=after) rejecting a non-positive TTL and a heartbeat>=TTL (message names both fields); neither field enters known_secret_values()
+- [Phase 02]: 02-02: engine connect_args gains application_name=dark-factory (pg_stat_activity attribution for the HITL-08 idle-in-transaction proof); FakeWorker gains sleep_ms kwarg + DARK_FACTORY_FAKE_SLEEP_MS knob read at call time, inert when unset, inherited by resume()
+- [Phase 02]: 02-02: tests/support/subprocess_runner.py is the single child-env allowlist (child_env/spawn/popen/run_id_from_stdout/wait_for); test_fresh_process_resume.py imports it. Fixtures use_lease_settings (env + get_settings cache-clear, 2s/1s) and force_lease_expiry (server-clock UPDATE, since time-machine cannot move the PG clock). HumanInteraction added to _LIFECYCLE_CTORS AST guard
 
 ### Pending Todos
 
@@ -133,6 +138,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-09T16:45:19.765Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-09-09T17:05:30.022Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
