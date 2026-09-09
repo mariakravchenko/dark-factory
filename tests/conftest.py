@@ -22,6 +22,7 @@ import re
 import subprocess
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from alembic.config import Config
@@ -340,15 +341,88 @@ def advance_session_factory(engine: Engine) -> Iterator[Callable[[], Session]]:
 
 
 @pytest.fixture
-def fake_worker_registry() -> Callable[[Sequence[WorkerResult]], object]:
-    """Return a builder: ``build(script) -> WorkerRegistry`` with ``"fake"`` bound
-    to a :class:`FakeWorker` seeded with ``script``."""
+def fake_worker_registry() -> Callable[..., object]:
+    """Return a builder: ``build(script, *, sleep_ms=None) -> WorkerRegistry`` with
+    ``"fake"`` bound to a :class:`FakeWorker` seeded with ``script``.
+
+    ``sleep_ms`` is optional and passes straight through to ``FakeWorker`` so the
+    heartbeat slow-step proof can produce a step that outlives a short lease; the
+    Phase 1 zero-keyword call form (``build(script)``) is unchanged.
+    """
     from dark_factory.workers.fake import FakeWorker
     from dark_factory.workers.registry import WorkerRegistry
 
-    def _build(script: Sequence[WorkerResult]) -> object:
+    def _build(
+        script: Sequence[WorkerResult], *, sleep_ms: int | None = None
+    ) -> object:
         registry = WorkerRegistry()
-        registry.register("fake", lambda: FakeWorker(list(script)))
+        registry.register("fake", lambda: FakeWorker(list(script), sleep_ms=sleep_ms))
         return registry
 
     return _build
+
+
+# --------------------------------------------------------------------------- #
+# Phase 2 kit — the lease test fixtures (Plan 02-02)
+# --------------------------------------------------------------------------- #
+#
+# `use_lease_settings` injects a short lease (TTL 2 s, heartbeat 1 s) through the
+# environment and clears the `get_settings` cache, so every consumer rebuilds
+# against it. `force_lease_expiry` returns a callable that ages a run's lease past
+# the server's clock in one short transaction — the fast path for reclaim tests,
+# because `time-machine` cannot move the PostgreSQL clock (02-RESEARCH Pitfall 4).
+
+
+@pytest.fixture
+def use_lease_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[Settings]:
+    """Set ``LEASE_TTL_SECONDS=2`` / ``LEASE_HEARTBEAT_SECONDS=1`` in the
+    environment, clear the ``get_settings`` cache, and yield the rebuilt
+    ``Settings``; clear the cache again on teardown so no later test inherits the
+    short values.
+
+    Environment + cache-clear rather than ``monkeypatch.setattr`` on a module
+    attribute, because (a) the module that will read these knobs for the lease
+    does not exist yet, and (b) the same short values must also be passable to a
+    child process via ``child_env``. Contrast ``use_fake_secrets``, which patches
+    ``mutations.get_settings`` directly precisely because it must *not* depend on
+    the environment at all.
+    """
+    from dark_factory.config.settings import get_settings
+
+    monkeypatch.setenv("LEASE_TTL_SECONDS", "2")
+    monkeypatch.setenv("LEASE_HEARTBEAT_SECONDS", "1")
+    get_settings.cache_clear()
+    try:
+        yield get_settings()
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.fixture
+def force_lease_expiry(engine: Engine) -> Callable[[UUID], None]:
+    """Return ``expire(run_id)`` which, in its own short transaction on the real
+    engine, sets that run's ``lock_expires_at`` to one second before the
+    server's current time.
+
+    The timestamp is a server-clock SQL expression (``now() - interval '1
+    second'``) and the run id is a bound parameter; the test process never
+    computes the timestamp. This fixture exists because the Python-side
+    time-travel library in the dev dependencies patches only the *test process's*
+    clock and cannot move the PostgreSQL clock, so an expiry test that
+    time-travelled in Python would silently assert nothing (02-RESEARCH Pitfall
+    4).
+    """
+    import sqlalchemy as sa
+
+    from dark_factory.persistence.models import Run
+
+    def expire(run_id: UUID) -> None:
+        stmt = (
+            sa.update(Run)
+            .where(Run.id == run_id)
+            .values(lock_expires_at=sa.text("now() - interval '1 second'"))
+        )
+        with engine.begin() as conn:
+            conn.execute(stmt)
+
+    return expire

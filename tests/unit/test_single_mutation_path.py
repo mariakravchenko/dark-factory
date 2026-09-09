@@ -9,8 +9,15 @@ own docstring (the AST walk ignores strings and comments entirely).
 A violation is any module under ``src/dark_factory/`` other than
 ``persistence/mutations.py`` that:
 
-* constructs a ``RunEvent(...)`` or ``RoleExecution(...)``, or
+* constructs a ``RunEvent(...)``, ``RoleExecution(...)`` or
+  ``HumanInteraction(...)``, or
 * assigns to a ``.status`` attribute (``obj.status = ...`` / ``obj.status += ...``).
+
+``HumanInteraction`` joins the list for Phase 2: a question row written outside
+the one mutation path would be a state change with no guarantee that its status
+transition and its audit event committed with it. The guard passes trivially
+today — nothing constructs the class yet — and becomes load-bearing the moment
+plan ``02-03`` writes the pause path.
 
 Class *definitions* in ``persistence/models.py`` and typed field *annotations*
 (``status: Mapped[...] = mapped_column(...)``) are not assignments and do not
@@ -29,7 +36,7 @@ pytestmark = pytest.mark.unit
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "dark_factory"
 _ALLOWED = {_SRC_ROOT / "persistence" / "mutations.py"}
-_LIFECYCLE_CTORS = {"RunEvent", "RoleExecution"}
+_LIFECYCLE_CTORS = {"RunEvent", "RoleExecution", "HumanInteraction"}
 
 
 def _modules() -> Iterator[Path]:
