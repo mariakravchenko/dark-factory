@@ -71,16 +71,20 @@ def test_exit_2_on_an_unrecognised_prefix_with_nothing_on_stdout(pg_url: str) ->
 def test_orchestration_error_exits_2_with_a_diagnostic_not_a_traceback(
     pg_url: str,
 ) -> None:
-    """A scripted NEEDS_INPUT result is a valid WorkerResult but Phase 1's
-    transition graph has no edge for it: transition() raises
-    IllegalTransitionError. That must surface as exit 2 with a one-line stderr
-    diagnostic, never as a Typer traceback with exit 1 (which the D-05 contract
-    reserves for a persisted FAILED)."""
-    script = json.dumps([{"status": "NEEDS_INPUT", "questions": ["which database?"]}])
+    """An orchestration error -- the run could not be advanced and nothing new
+    was persisted -- must surface as exit 2 with a one-line stderr diagnostic,
+    never as a Typer traceback with exit 1 (which the D-05 contract reserves for
+    a persisted FAILED).
+
+    An empty fake script drives it: ``FakeWorker`` honours ``[]`` as a real
+    (exhausted) script, so the first ``execute()`` raises ``ScriptExhaustedError``
+    -- one of the ``_ORCHESTRATION_ERRORS``. (A scripted ``NEEDS_INPUT`` result
+    is no longer an orchestration error since Phase 2 -- it is a clean pause that
+    exits 0.)"""
     proc = _cli(
-        ["run", "text:needs a human"],
+        ["run", "text:worker has nothing to say"],
         pg_url,
-        extra_env={"DARK_FACTORY_FAKE_SCRIPT": script},
+        extra_env={"DARK_FACTORY_FAKE_SCRIPT": json.dumps([])},
     )
     assert proc.returncode == 2, proc.stdout + proc.stderr
     UUID(proc.stdout.splitlines()[0].strip())  # the run was still created

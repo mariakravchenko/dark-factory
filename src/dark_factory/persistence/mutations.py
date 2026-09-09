@@ -2,9 +2,18 @@
 
 This module is the *entire* write surface for ``runs.status`` / ``runs.current_role``
 / ``runs.current_step`` / the two iteration counters, for every ``role_executions``
-row, and for every ``run_events`` row. Nothing else in ``dark_factory`` may write
-those — ``tests/unit/test_single_mutation_path.py`` walks the source tree and fails
-on any violation.
+row, for every ``run_events`` row, and (from Phase 2) for every
+``human_interactions`` row. Nothing else in ``dark_factory`` may write those —
+``tests/unit/test_single_mutation_path.py`` walks the source tree and fails on any
+violation.
+
+The single-owner **lease** columns (``runs.owner_token`` / ``runs.lock_expires_at``)
+are *claimed / renewed / released* by ``orchestrator/lease.py`` — that is ownership,
+not lifecycle state — but they are also *cleared here* whenever a transition
+reaches a stop status. The clear lives in this module, not the lease module,
+because the release must be atomic with the state change that stopped the run: a
+crash between "the run is WAITING_HUMAN" and "the lease is free" must be
+impossible.
 
 Two sibling functions, one discipline (RESEARCH Open Question 3): "one mutation
 path" means **one module, one transaction discipline, one redaction call** — not
@@ -39,15 +48,23 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from dark_factory.config.settings import get_settings
-from dark_factory.domain.status import RunStatus
+from dark_factory.domain.interaction import InteractionStatus
+from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.events.catalog import EventType
 from dark_factory.events.redaction import redact, scrub_known_values
-from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from dark_factory.persistence.models import (
+    HumanInteraction,
+    RoleExecution,
+    Run,
+    RunEvent,
+)
 
 __all__ = [
     "ConcurrentTransition",
     "EventWrite",
+    "HumanInteractionWrite",
+    "LeaseLost",
     "RoleExecutionWrite",
     "apply_transition",
     "create_run",
@@ -64,6 +81,14 @@ class ConcurrentTransition(RuntimeError):
     """Raised when ``apply_transition``'s ``expected_status`` guard fails: the row's
     current status is not what the caller expected, so another process advanced
     the run first. Nothing is written."""
+
+
+class LeaseLost(RuntimeError):
+    """Raised inside ``apply_transition`` when ``expected_owner_token`` was
+    supplied and does not match the already-locked ``runs`` row's
+    ``owner_token``: the lease was taken by another process while this one was
+    working. Nothing is written — the commit itself is fenced by the token, so a
+    stale owner can never write over the new owner's work (RESEARCH Pitfall 2)."""
 
 
 class RoleExecutionWrite(BaseModel):
@@ -92,6 +117,27 @@ class EventWrite(BaseModel):
     type: EventType
     role_execution_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class HumanInteractionWrite(BaseModel):
+    """Insert-or-update spec for the ``human_interactions`` row that accompanies a
+    pause (``ask``) or a resume (``answer``). Mirrors :class:`RoleExecutionWrite`:
+    ``question`` / ``answer`` are **raw** — redaction happens inside
+    ``apply_transition`` at the single call site, never in the caller.
+
+    * ``ask`` — requires ``role_execution_id`` and ``question``; inserts a
+      ``WAITING`` row.
+    * ``answer`` — requires ``answer``; the target row is the run's single
+      ``WAITING`` interaction, located inside the transaction (not by a caller
+      id) so the find and the write are one atomic step.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    mode: Literal["ask", "answer"]
+    role_execution_id: UUID | None = None
+    question: str | None = None
+    answer: str | None = None
 
 
 def _known_secrets() -> Mapping[str, str]:
@@ -161,6 +207,8 @@ def apply_transition(
     role_execution: RoleExecutionWrite | None = None,
     events: Sequence[EventWrite] = (),
     counter_increments: Mapping[str, int] | None = None,
+    expected_owner_token: UUID | None = None,
+    human_interaction: HumanInteractionWrite | None = None,
 ) -> RunStatus:
     """Apply one lifecycle transition atomically and return the new status.
 
@@ -168,15 +216,26 @@ def apply_transition(
 
     1. lock the ``runs`` row (``with_for_update``); ``LookupError`` if absent
     2. ``ConcurrentTransition`` if its status is not ``expected_status`` — no writes
-    3. insert or update the ``role_executions`` row; for an insert, ``attempt`` is
+    3. ``LeaseLost`` if ``expected_owner_token`` was supplied and the already-locked
+       row's ``owner_token`` differs — no writes. The row is already locked for
+       update, so this is a free, correct fence: no second select.
+    4. insert or update the ``role_executions`` row; for an insert, ``attempt`` is
        ``MAX(attempt) + 1`` for this run + role computed **in SQL, in this
        transaction** (D-19, RESEARCH Pitfall 2), never from an in-memory counter
-    4. assign ``status`` / ``current_role`` / ``current_step`` / ``updated_at``
-    5. apply each ``counter_increments`` entry to its column
-    6. append one ``RunEvent`` per ``EventWrite``
+    5. write the ``human_interactions`` row (``ask`` inserts the WAITING question;
+       ``answer`` fills in the run's single WAITING row), when supplied
+    6. assign ``status`` / ``current_role`` / ``current_step`` / ``updated_at``;
+       additionally, when ``next_status`` is a **stop** status, clear both lease
+       columns — the release must be atomic with the state change that stopped
+       the run, so a crash between the two is impossible (which is why the
+       *clear* lives here and not in ``orchestrator/lease.py``)
+    7. apply each ``counter_increments`` entry to its column
+    8. append one ``RunEvent`` per ``EventWrite``
 
-    ``result`` / ``error`` / every event ``payload`` pass through ``redact()``
-    immediately before assignment — the single scrubbing call site.
+    ``result`` / ``error`` / ``question`` / ``answer`` / every event ``payload``
+    pass through ``redact()`` immediately before assignment — the single
+    scrubbing call site. A new persisted text field that bypassed it would be an
+    unrecoverable leak, because a secret is only redactable before it is written.
 
     A status change (``next_status != expected_status``) with an empty ``events``
     sequence is rejected outright (``ValueError``) before the transaction opens: a
@@ -204,14 +263,24 @@ def apply_transition(
             raise ConcurrentTransition(
                 f"expected {expected_status.value}, found {run.status.value}"
             )
+        if expected_owner_token is not None and run.owner_token != expected_owner_token:
+            raise LeaseLost(
+                f"expected owner {expected_owner_token}, found {run.owner_token}"
+            )
 
         if role_execution is not None:
             _write_role_execution(session, run_id, role_execution, known)
+
+        if human_interaction is not None:
+            _write_human_interaction(session, run_id, human_interaction, known)
 
         run.status = next_status
         run.current_role = next_current_role
         run.current_step = next_current_step
         run.updated_at = func.now()
+        if next_status in STOP_STATUSES:
+            run.owner_token = None
+            run.lock_expires_at = None
 
         for name, delta in increments.items():
             setattr(run, name, getattr(run, name) + delta)
@@ -274,3 +343,53 @@ def _write_role_execution(
     row.result = result
     row.error = error
     row.updated_at = func.now()
+
+
+def _write_human_interaction(
+    session: Session,
+    run_id: UUID,
+    spec: HumanInteractionWrite,
+    known: Mapping[str, str],
+) -> None:
+    """Insert the WAITING question row (``ask``) or answer the open one
+    (``answer``). ``question`` / ``answer`` are redacted here, at the single call
+    site, exactly as ``_write_role_execution`` redacts its result and error.
+
+    In ``answer`` mode the row is located *inside* this transaction — the single
+    ``WAITING`` interaction for the run, taken with a row-level update lock —
+    rather than by an id from the caller: it keeps the find and the write in one
+    atomic step, and the partial unique index
+    ``uq_one_waiting_interaction_per_run`` guarantees at most one candidate.
+    """
+    if spec.mode == "ask":
+        if spec.role_execution_id is None:
+            raise ValueError(
+                "HumanInteractionWrite(mode='ask') requires role_execution_id"
+            )
+        if spec.question is None:
+            raise ValueError("HumanInteractionWrite(mode='ask') requires question")
+        session.add(
+            HumanInteraction(
+                run_id=run_id,
+                role_execution_id=spec.role_execution_id,
+                question=redact(spec.question, known_secrets=known),
+                status=InteractionStatus.WAITING,
+            )
+        )
+        return
+
+    if spec.answer is None:
+        raise ValueError("HumanInteractionWrite(mode='answer') requires answer")
+    row = session.scalar(
+        select(HumanInteraction)
+        .where(
+            HumanInteraction.run_id == run_id,
+            HumanInteraction.status == InteractionStatus.WAITING,
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise LookupError(f"no WAITING human_interaction for run {run_id}")
+    row.answer = redact(spec.answer, known_secrets=known)
+    row.status = InteractionStatus.ANSWERED
+    row.answered_at = func.now()

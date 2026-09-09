@@ -18,7 +18,12 @@ persisted column and appears as a ``RunState`` field:
 * ``qa_developer_iterations`` — ``runs.qa_developer_iterations``
 * ``quality_gate_iterations`` — ``runs.quality_gate_iterations``
 * ``latest_execution`` — the single latest ``role_executions`` row (id, role,
-  worker, status, attempt, worker_session_id), or ``None``
+  worker, status, attempt, worker_session_id, **result**), or ``None``. The
+  ``result`` is the persisted worker outcome — for a paused role it is the
+  ``NEEDS_INPUT`` dict a resume validates back into ``previous``.
+* ``pending_answer`` — the ``answer`` of the ``ANSWERED`` ``human_interactions``
+  row bound to ``latest_execution``, or ``None``. This is what a resume feeds to
+  ``worker.resume(context, previous, answer)``.
 
 If ``advance()`` needs a value it is added here; if it is not here, ``advance()``
 may not need it.
@@ -26,7 +31,11 @@ may not need it.
 **STATE-06 is architectural, not just behavioural.** This module imports nothing
 from ``dark_factory``'s event package and issues no query touching the audit
 log — control state comes from state columns, never from folding events. A read
-path that *can* fold the log will eventually be made to.
+path that *can* fold the log will eventually be made to. ``human_interactions``
+is a **state table**, not the audit log: reading ``answer`` / ``question`` here
+does not weaken that rule, because it is not reconstructing position by folding
+an append-only stream — it is reading one current-state column, exactly like
+``runs.status``.
 """
 
 from __future__ import annotations
@@ -38,11 +47,12 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.task import NormalizedTask
-from dark_factory.persistence.models import RoleExecution, Run
+from dark_factory.persistence.models import HumanInteraction, RoleExecution, Run
 
-__all__ = ["LatestExecution", "RunState", "load_run_state"]
+__all__ = ["LatestExecution", "RunState", "load_run_state", "pending_question"]
 
 
 class LatestExecution(BaseModel):
@@ -56,6 +66,7 @@ class LatestExecution(BaseModel):
     status: str
     attempt: int
     worker_session_id: str | None = None
+    result: dict[str, Any] | None = None
 
 
 class RunState(BaseModel):
@@ -77,6 +88,7 @@ class RunState(BaseModel):
     qa_developer_iterations: int
     quality_gate_iterations: int
     latest_execution: LatestExecution | None
+    pending_answer: str | None
 
 
 def load_run_state(session: Session, run_id: UUID) -> RunState | None:
@@ -118,10 +130,24 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
             status=latest_row.status,
             attempt=latest_row.attempt,
             worker_session_id=latest_row.worker_session_id,
+            result=latest_row.result,
         )
         if latest_row is not None
         else None
     )
+
+    pending_answer: str | None = None
+    if latest_row is not None:
+        pending_answer = session.scalar(
+            select(HumanInteraction.answer)
+            .where(
+                HumanInteraction.run_id == run_id,
+                HumanInteraction.role_execution_id == latest_row.id,
+                HumanInteraction.status == InteractionStatus.ANSWERED,
+            )
+            .order_by(HumanInteraction.answered_at.desc())
+            .limit(1)
+        )
 
     return RunState(
         run_id=run.id,
@@ -133,4 +159,20 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
         qa_developer_iterations=run.qa_developer_iterations,
         quality_gate_iterations=run.quality_gate_iterations,
         latest_execution=latest,
+        pending_answer=pending_answer,
+    )
+
+
+def pending_question(session: Session, run_id: UUID) -> str | None:
+    """The question text of this run's single ``WAITING`` interaction, or ``None``.
+
+    Used by ``orchestrator/answers.submit_answer`` as a precondition check. The
+    partial unique index ``uq_one_waiting_interaction_per_run`` guarantees at
+    most one candidate row.
+    """
+    return session.scalar(
+        select(HumanInteraction.question).where(
+            HumanInteraction.run_id == run_id,
+            HumanInteraction.status == InteractionStatus.WAITING,
+        )
     )

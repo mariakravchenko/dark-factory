@@ -34,18 +34,23 @@ from collections.abc import Callable
 from typing import Any
 from uuid import UUID
 
+import structlog
 from sqlalchemy.orm import Session
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from dark_factory.domain.signal import Signal, signal_from_result
-from dark_factory.domain.status import STOP_STATUSES, TERMINAL_STATUSES, RunStatus
+from dark_factory.domain.status import STOP_STATUSES, RunStatus
+from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
+from dark_factory.orchestrator.lease import LeaseHandle, run_lease
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
 from dark_factory.persistence.engine import new_session
 from dark_factory.persistence.mutations import (
     EventWrite,
+    HumanInteractionWrite,
+    LeaseLost,
     RoleExecutionWrite,
     apply_transition,
     create_run,
@@ -74,9 +79,16 @@ _MAX_DRIVE_ITERATIONS = 1000
 
 # ``role_executions.status`` values. "RUNNING" is the in-flight marker written
 # when a role starts; the worker outcome overwrites it in the same attempt row.
+# "WAITING_HUMAN" marks an attempt paused on a question; "RESUMING" marks the
+# same attempt row once an answer has been submitted, and is what tells
+# ``_run_current_role`` to call ``worker.resume`` rather than ``worker.execute``.
 _ROLE_RUNNING = "RUNNING"
 _ROLE_COMPLETED = "COMPLETED"
 _ROLE_FAILED = "FAILED"
+_ROLE_WAITING_HUMAN = "WAITING_HUMAN"
+_ROLE_RESUMING = "RESUMING"
+
+_log = structlog.get_logger(__name__)
 
 # Test seam only -- consumed by ``_maybe_crash_after`` and nowhere else. Never set
 # on an ordinary run; see that function's docstring.
@@ -115,6 +127,7 @@ def _build_context(run_id: UUID, state: RunState, node: RoleNode) -> dict[str, A
         "worker": node.worker,
         "attempt": attempt,
         "task": state.normalized_task.model_dump(mode="json"),
+        "answer": state.pending_answer,
     }
 
 
@@ -185,7 +198,16 @@ def advance(
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline = DEFAULT_PIPELINE,
 ) -> RunStatus:
-    """Reconstruct from Neon, execute exactly one committed step, return the new status."""
+    """Reconstruct from Neon, execute exactly one committed step under the lease,
+    return the new status.
+
+    A run already in a **stop** status -- terminal *or* ``WAITING_HUMAN`` -- is
+    returned immediately, without claiming a lease and without writing anything
+    (RESEARCH Pitfall 7). Only ``submit_answer`` moves a run out of
+    ``WAITING_HUMAN``. Otherwise the lease is claimed for this single step and
+    released when it returns; ``LeaseNotAcquired`` propagates unchanged when
+    another process owns the run.
+    """
     read_session = session_factory()
     try:
         state = load_run_state(read_session, run_id)
@@ -194,15 +216,50 @@ def advance(
 
     if state is None:
         raise RunNotFoundError(run_id)
-    if state.status in TERMINAL_STATUSES:
+    if state.status in STOP_STATUSES:
+        return state.status
+
+    with run_lease(run_id, session_factory=session_factory) as lease:
+        return _advance_once(
+            run_id,
+            session_factory=session_factory,
+            registry=registry,
+            pipeline=pipeline,
+            lease=lease,
+        )
+
+
+def _advance_once(
+    run_id: UUID,
+    *,
+    session_factory: SessionFactory,
+    registry: WorkerRegistry,
+    pipeline: Pipeline,
+    lease: LeaseHandle,
+) -> RunStatus:
+    """One reconstruct-and-commit step. **Assumes the lease is already held** and
+    never claims it -- ``drive`` claims once for the whole loop, ``advance``
+    claims once for its single call. Returns the new status.
+    """
+    read_session = session_factory()
+    try:
+        state = load_run_state(read_session, run_id)
+    finally:
+        read_session.close()
+
+    if state is None:
+        raise RunNotFoundError(run_id)
+    if state.status in STOP_STATUSES:
         return state.status
 
     attempt = state.latest_execution.attempt if state.latest_execution else None
     bind_contextvars(run_id=str(run_id), role=state.current_role, attempt=attempt)
     try:
         if state.status is RunStatus.CREATED:
-            return _enter_first_role(run_id, state, pipeline, session_factory)
-        return _run_current_role(run_id, state, pipeline, registry, session_factory)
+            return _enter_first_role(run_id, state, pipeline, session_factory, lease)
+        return _run_current_role(
+            run_id, state, pipeline, registry, session_factory, lease
+        )
     finally:
         unbind_contextvars("run_id", "role", "attempt")
 
@@ -212,6 +269,7 @@ def _enter_first_role(
     state: RunState,
     pipeline: Pipeline,
     session_factory: SessionFactory,
+    lease: LeaseHandle,
 ) -> RunStatus:
     """Commit ``CREATED -> <first role>``: insert the attempt row, emit ROLE_STARTED."""
     next_status, next_role, next_step = transition(state, Signal.ENTER, pipeline)
@@ -238,6 +296,7 @@ def _enter_first_role(
                     payload={"role": node.name, "worker": node.worker},
                 )
             ],
+            expected_owner_token=lease.token,
         )
         _maybe_crash_after(RunStatus.CREATED, new_status)
         return new_status
@@ -251,8 +310,22 @@ def _run_current_role(
     pipeline: Pipeline,
     registry: WorkerRegistry,
     session_factory: SessionFactory,
+    lease: LeaseHandle,
 ) -> RunStatus:
-    """Run the current role's worker outside any transaction, then commit the outcome."""
+    """Run the current role's worker outside any transaction, then commit the outcome.
+
+    The execute-versus-resume choice is read from the **persisted** latest
+    role-execution status: a ``RESUMING`` marker means an answer was submitted, so
+    ``worker.resume(context, previous, answer)`` is called with the persisted
+    ``NEEDS_INPUT`` result and the stored answer; otherwise ``worker.execute``.
+    Reading the decision from a column (never from anything held in memory) is
+    what makes a crash between storing the answer and dispatching the role
+    recoverable by the next process.
+
+    A ``NEEDS_INPUT`` outcome pauses the run: the branch keys off the *signal*,
+    never a role name, so every present and future pipeline node gets the
+    ask-a-human mechanism with no per-role code (HITL-01).
+    """
     node = current_node(pipeline, state.current_role)
     latest = state.latest_execution
     if latest is None:
@@ -261,11 +334,28 @@ def _run_current_role(
         )
 
     worker = registry.get(node.worker)
-    result = worker.execute(_build_context(run_id, state, node))
+    context = _build_context(run_id, state, node)
+    if latest.status == _ROLE_RESUMING:
+        previous = WorkerResult.model_validate(latest.result)
+        result = worker.resume(context, previous, state.pending_answer)
+    else:
+        result = worker.execute(context)
+
+    # The lease-loss Event races with the worker call returning; it is only a
+    # fast abort. When it is set, discard the result and write nothing -- the
+    # commit itself is fenced by the token inside ``apply_transition``, so the
+    # step re-runs cleanly on the same attempt from the next process.
+    if lease.lease_lost.is_set():
+        _log.warning("lease.lost_mid_step", run_id=str(run_id), role=node.name)
+        raise LeaseLost(
+            f"lease for run {run_id} was lost while the worker call was running"
+        )
+
     signal = signal_from_result(result)
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
     outcome = result.model_dump(mode="json")
+    human_interaction: HumanInteractionWrite | None = None
     if signal is Signal.ROLE_COMPLETED:
         re_status = _ROLE_COMPLETED
         re_result: dict[str, Any] | None = outcome
@@ -296,8 +386,27 @@ def _run_current_role(
             ),
             EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
         ]
+    elif signal is Signal.ROLE_NEEDS_INPUT:
+        # Mirror the failure arm's shape. The serialised NEEDS_INPUT outcome MUST
+        # be stored, not discarded: it is what a resume validates back into
+        # ``previous``.
+        re_status = _ROLE_WAITING_HUMAN
+        re_result = outcome
+        re_error = None
+        events = [
+            EventWrite(
+                type=EventType.QUESTION_CREATED,
+                payload={"role": node.name, "questions": list(result.questions)},
+            ),
+            EventWrite(type=EventType.RUN_PAUSED, payload={"role": node.name}),
+        ]
+        human_interaction = HumanInteractionWrite(
+            mode="ask",
+            role_execution_id=latest.id,
+            question="\n".join(result.questions),
+        )
     else:  # pragma: no cover - transition() already rejects any other signal
-        raise IllegalTransitionError(f"runner cannot act on {signal.value} in Phase 1")
+        raise IllegalTransitionError(f"runner cannot act on {signal.value}")
 
     session = session_factory()
     try:
@@ -319,6 +428,8 @@ def _run_current_role(
                 error=re_error,
             ),
             events=events,
+            expected_owner_token=lease.token,
+            human_interaction=human_interaction,
         )
         _maybe_crash_after(state.status, new_status)
         return new_status
@@ -334,11 +445,16 @@ def drive(
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline = DEFAULT_PIPELINE,
 ) -> RunStatus:
-    """Loop ``advance`` until the run reaches a stop status; return that status.
+    """Loop one step until the run reaches a stop status; return that status.
 
     ``on_transition(previous, new)`` is invoked once per status change. The stop
     condition is the named constant :data:`STOP_STATUSES` -- Phase 2 adds
     ``WAITING_HUMAN`` to that set and nothing else (D-06).
+
+    The lease is claimed **once** for the whole loop (not once per step), so a
+    re-claim can never race the process's own token; the private per-step
+    function assumes it is held. A run already in a stop status returns
+    immediately without claiming anything.
     """
     read_session = session_factory()
     try:
@@ -349,18 +465,23 @@ def drive(
         raise RunNotFoundError(run_id)
 
     status = state.status
-    for _ in range(_MAX_DRIVE_ITERATIONS):
-        if status in STOP_STATUSES:
-            return status
-        new_status = advance(
-            run_id,
-            session_factory=session_factory,
-            registry=registry,
-            pipeline=pipeline,
-        )
-        if new_status != status and on_transition is not None:
-            on_transition(status, new_status)
-        status = new_status
+    if status in STOP_STATUSES:
+        return status
+
+    with run_lease(run_id, session_factory=session_factory) as lease:
+        for _ in range(_MAX_DRIVE_ITERATIONS):
+            if status in STOP_STATUSES:
+                return status
+            new_status = _advance_once(
+                run_id,
+                session_factory=session_factory,
+                registry=registry,
+                pipeline=pipeline,
+                lease=lease,
+            )
+            if new_status != status and on_transition is not None:
+                on_transition(status, new_status)
+            status = new_status
 
     raise DriveLoopExhausted(
         f"drive loop for {run_id} exceeded {_MAX_DRIVE_ITERATIONS} iterations"

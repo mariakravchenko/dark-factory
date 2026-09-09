@@ -33,6 +33,12 @@ from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
 from dark_factory.observability.status import UnknownRunError, read_status
+from dark_factory.orchestrator.answers import (
+    NoPendingInteraction,
+    NotWaitingForHuman,
+    submit_answer,
+)
+from dark_factory.orchestrator.lease import LeaseNotAcquired
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError
 from dark_factory.orchestrator.runner import (
     DriveLoopExhausted,
@@ -41,7 +47,7 @@ from dark_factory.orchestrator.runner import (
     run_state,
     start_run,
 )
-from dark_factory.persistence.mutations import ConcurrentTransition
+from dark_factory.persistence.mutations import ConcurrentTransition, LeaseLost
 from dark_factory.workers.fake import ScriptExhaustedError
 from dark_factory.workers.registry import UnknownWorkerError
 
@@ -62,6 +68,9 @@ _ORCHESTRATION_ERRORS = (
     RunNotFoundError,
     ScriptExhaustedError,
     UnknownWorkerError,
+    LeaseLost,
+    NotWaitingForHuman,
+    NoPendingInteraction,
 )
 
 
@@ -103,18 +112,38 @@ def _route_logs_to_stderr() -> None:
     configure_logging(structlog.PrintLoggerFactory(file=sys.stderr))
 
 
+_CLEAN_FINALS = (RunStatus.COMPLETED, RunStatus.WAITING_HUMAN)
+
+
+def _report_orchestration_error(run_id: UUID, exc: Exception) -> typer.Exit:
+    typer.echo(
+        f"run {run_id} could not be advanced ({type(exc).__name__}): {exc}; "
+        "nothing new was persisted -- inspect with 'dark-factory status'",
+        err=True,
+    )
+    return typer.Exit(code=2)
+
+
+def _report_lease_not_acquired(run_id: UUID) -> typer.Exit:
+    # Losing the race for ownership is a normal result, not a fault: exit 0.
+    typer.echo(
+        f"run {run_id} is owned by another process; exiting without changes",
+        err=True,
+    )
+    return typer.Exit(code=0)
+
+
 def _drive_and_exit(run_id: UUID) -> None:
     try:
         final = drive(run_id, on_transition=_echo_transition)
+    except LeaseNotAcquired as exc:
+        raise _report_lease_not_acquired(run_id) from exc
     except _ORCHESTRATION_ERRORS as exc:
-        typer.echo(
-            f"run {run_id} could not be advanced ({type(exc).__name__}): {exc}; "
-            "nothing new was persisted -- inspect with 'dark-factory status'",
-            err=True,
-        )
-        raise typer.Exit(code=2) from exc
+        raise _report_orchestration_error(run_id, exc) from exc
     _echo_summary(run_id, final)
-    raise typer.Exit(code=0 if final is RunStatus.COMPLETED else 1)
+    # A clean pause (WAITING_HUMAN) is a success -- the operator's process did
+    # exactly what it was supposed to and there is nothing to retry.
+    raise typer.Exit(code=0 if final in _CLEAN_FINALS else 1)
 
 
 @app.command()
@@ -131,8 +160,22 @@ def run(source: str) -> None:
 
 
 @app.command()
-def resume(run_id: str) -> None:
-    """Resume an existing run by id -- the identical drive loop, no other argument (D-03)."""
+def resume(
+    run_id: str,
+    answer: str | None = typer.Option(
+        None,
+        "--answer",
+        help="Answer the run's open human question, then resume it.",
+    ),
+) -> None:
+    """Resume an existing run by id.
+
+    Without ``--answer`` this is the identical Phase 1 drive loop (D-03): re-drive
+    a run that stopped for a non-human reason. With ``--answer`` it first records
+    the answer to the run's open question (``submit_answer``) and then enters the
+    same loop. The command never inspects the run status to decide what to do --
+    it branches on the presence of the option and on exception types only.
+    """
     _route_logs_to_stderr()
     try:
         parsed = UUID(run_id)
@@ -143,6 +186,13 @@ def resume(run_id: str) -> None:
         typer.echo(f"unknown run: {run_id}", err=True)
         raise typer.Exit(code=2)
     typer.echo(str(parsed))
+    if answer is not None:
+        try:
+            submit_answer(parsed, answer)
+        except LeaseNotAcquired as exc:
+            raise _report_lease_not_acquired(parsed) from exc
+        except _ORCHESTRATION_ERRORS as exc:
+            raise _report_orchestration_error(parsed, exc) from exc
     _drive_and_exit(parsed)
 
 

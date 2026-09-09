@@ -13,9 +13,13 @@ unit-testable with no database and no mocks::
     CREATED --ENTER-------------> <first role>         (current_role = that role)
     <role>  --ROLE_COMPLETED----> <next role>          (or COMPLETED when last)
     <role>  --ROLE_FAILED-------> FAILED               (current_role retained)
+    <role>  --ROLE_NEEDS_INPUT--> WAITING_HUMAN        (current_role retained)
 
 Any (status, signal) pair not in the graph raises :class:`IllegalTransitionError`
-rather than defaulting to some status.
+rather than defaulting to some status. Leaving ``WAITING_HUMAN`` is **not** a
+transition this pure function performs — that is ``orchestrator/answers``'s job,
+driven by a persisted answer — so every ``(WAITING_HUMAN, signal)`` pair is
+illegal here.
 """
 
 from __future__ import annotations
@@ -69,6 +73,14 @@ def transition(
             f"{status.value} is terminal; no transition for {signal.value}"
         )
 
+    if status is RunStatus.WAITING_HUMAN:
+        # A stop, not a terminal: the run still has work left. But the pure
+        # function never leaves WAITING_HUMAN — only ``submit_answer`` does,
+        # driven by a persisted answer. Every signal here is illegal.
+        raise IllegalTransitionError(
+            f"WAITING_HUMAN is left by submitting an answer, not by {signal.value}"
+        )
+
     if status is RunStatus.CREATED:
         if signal is Signal.ENTER:
             first = pipeline.nodes[0]
@@ -97,5 +109,10 @@ def transition(
 
     if signal is Signal.ROLE_FAILED:
         return RunStatus.FAILED, role, state.current_step
+
+    if signal is Signal.ROLE_NEEDS_INPUT:
+        # Retain the role, exactly as the failure arm does: a resume needs to
+        # know which node to return to once a human answer exists.
+        return RunStatus.WAITING_HUMAN, role, state.current_step
 
     raise IllegalTransitionError(f"no transition from {status.value} on {signal.value}")
