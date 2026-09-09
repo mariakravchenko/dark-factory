@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 2
+current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
 status: executing
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-09-09T13:56:57.056Z"
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-09T16:45:32.252Z"
 last_activity: 2026-09-09
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: d1e6f82be88d11fab4a9785c13bc1f1da828c686
+last_activity_desc: Phase 02 execution started
+state_head: a1e6b568acd024a7e8942ffaee652ab77891351f
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 16
-  completed_plans: 9
+  completed_plans: 10
   percent: 8
 ---
 
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-06)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 01 — Walking Skeleton — One Durable Run
+**Current focus:** Phase 02 — Pause, Resume & Single-Owner Execution
 
 ## Current Position
 
-Phase: 2 (Pause, Resume & Single-Owner Execution) — READY TO EXECUTE
-Plan: Not started
+Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-09-09 — Phase 01 complete, transitioned to Phase 2
+Last activity: 2026-09-09 — Completed 02-01 (human_interactions + runs lease columns, revision 0003)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -38,7 +38,7 @@ Progress: [█░░░░░░░░░] 8%
 
 **Velocity:**
 
-- Total plans completed: 9
+- Total plans completed: 10
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -47,6 +47,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01 | 9 | - | - |
+| 02 | 1 | - | - |
 
 **Recent Trend:**
 
@@ -66,6 +67,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 01 P07 | 40min | 3 tasks | 5 files |
 | Phase 01 P08 | 40min | 2 tasks | 7 files |
 | Phase 01 P09 | 45min | 2 tasks | 3 files |
+| Phase 02 P01 | 55min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -102,6 +104,10 @@ Recent decisions affecting current work:
 - [Phase 01]: 01-09: SC5 proven end to end — a real run seeded with four credential shapes in its task text + a credential in the FakeWorker summary reaches COMPLETED, leaves a [redacted: token, and leaves zero seeded/configured secrets across every event payload, every role_executions result/error, a whole-table sweep, and a real structlog sink (presence-then-absence)
 - [Phase 01]: 01-09: phase acceptance gate (tests/integration/test_phase_acceptance.py) maps SC1-SC5 to named proof files and fails (never skips) on a missing/empty proof, criterion named in the message
 - [Phase 01]: 01-09: real-Neon human check DEFERRED to /gsd-verify-work — automated substitute run against throwaway PostgreSQL 18.6 (no Neon PG17 project provisioned); carried PG-18.6-vs-17 deviation since 01-01
+- [Phase 02]: 02-01: Task 1 checkpoint = recommended (A2-TEXT + A3-NOT-NULL + A4-ONE-REVISION) — human_interactions.question is a single TEXT column (newline-join of WorkerResult.questions), role_execution_id is NOT NULL, and one revision 0003_pause_resume_lease carries the table + partial unique index + the two runs lease columns together
+- [Phase 02]: 02-01: _INTERACTION_STATUS is the _RUN_STATUS idiom reused at length=16 (VARCHAR+CHECK interaction_status, native_enum=False); WAITING/ANSWERED/CANCELLED enforced by PostgreSQL, CANCELLED declared but written nowhere this phase (inert CHECK value)
+- [Phase 02]: 02-01: partial unique index uq_one_waiting_interaction_per_run (run_id WHERE status='WAITING') makes 'one open question per run' a DB invariant; runs.owner_token/lock_expires_at nullable no-default (NULL == claimable); revision 0003 applied + round-tripped, alembic check clean over the four owned tables
+- [Phase 02]: 02-01: claim-don't-check proven before orchestrator/lease.py exists — one UPDATE ... WHERE (owner_token IS NULL OR lock_expires_at < func.now()) RETURNING; every expiry value/comparison is func.now(); db test module grep-clean of process-clock reads
 
 ### Pending Todos
 
@@ -127,6 +133,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-08T13:21:28.751Z
-Stopped at: Phase 01 complete, ready to plan Phase 2
+Last session: 2026-09-09T16:45:19.765Z
+Stopped at: Completed 02-01-PLAN.md
 Resume file: None
