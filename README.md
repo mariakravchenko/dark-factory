@@ -44,6 +44,21 @@ Edit `.env` and set:
   one** because DDL and PgBouncer transaction pooling do not mix — running
   migrations through the pooled endpoint is unreliable.
 
+Two optional, **non-secret** variables tune the single-owner lease (Phase 2).
+Leave them unset to take the production defaults; `.env.example` documents both
+in full.
+
+| Variable | Default | Unit | What it controls |
+|----------|---------|------|------------------|
+| `LEASE_TTL_SECONDS` | `900` | seconds | How long a claimed run stays owned without a renewal. After a hard crash the run is unclaimable until this elapses on the database clock — there is no earlier-steal escape hatch in this phase. |
+| `LEASE_HEARTBEAT_SECONDS` | `300` | seconds | How often the owning process pushes its lease expiry forward while a step runs. Must be strictly less than `LEASE_TTL_SECONDS` (settings loading fails otherwise); one third of the TTL is the standard ratio. |
+
+The `900` / `300` production values are inherited from the roadmap's Open
+Decision 2. The pause/resume and heartbeat **mechanism** is proven in the test
+suite at short injected TTLs; confirming the real-scale numbers against a live
+Neon endpoint is a pending operator smoke check (a crashed run being unclaimable
+for up to ~15 minutes is the trade-off being confirmed).
+
 ```bash
 # 2. Install the pinned dependency set into a project virtualenv.
 uv sync --all-extras --dev
@@ -114,8 +129,149 @@ adds no transition lines.
 | Code | Meaning |
 |------|---------|
 | `0` | The run reached `COMPLETED`. |
+| `0` | The run stopped **cleanly waiting for a human** (`WAITING_HUMAN`) — the process did exactly what it was asked to and there is nothing to retry. |
+| `0` | **Another process owns the run** and this one declined to act — it printed `run <id> is owned by another process; exiting without changes` on stderr and changed nothing. This is a normal outcome of two processes touching one run, not a fault. |
 | `1` | The run reached `FAILED` — a real, persisted terminal delivery failure. |
-| `2` | Bad invocation — unresolvable input, unknown run id, config/validation error. **Nothing was persisted or advanced.** |
+| `2` | Bad invocation or an orchestration error where **nothing new was persisted** — unresolvable input, unknown run id, bad UUID, config/validation error, answering a run that is not waiting, a lost lease. |
+
+The two extra `0` cases are the ones a wrapper script is most likely to
+misread: a clean pause and a declined ownership race are **successes**. Only `1`
+(persisted `FAILED`) and `2` (nothing advanced) are failures.
+
+## Pause a run for a human, then resume it (Phase 2)
+
+A role can stop mid-run to ask the operator a question. The run goes to
+`WAITING_HUMAN`, the owning process releases its lease and exits `0`, and any
+later process — on any machine sharing the database — answers the question and
+carries the run to a terminal state.
+
+Every command below was run as written against a real Neon database; the output
+shown is what the process actually printed.
+
+### 1. Make a run pause
+
+In the walking skeleton the worker is `FakeWorker`, so a `NEEDS_INPUT` result is
+produced with the `DARK_FACTORY_FAKE_SCRIPT` environment variable — a JSON array
+of scripted worker results. The first asks a question; the second (used after
+the answer) completes.
+
+```bash
+DARK_FACTORY_FAKE_SCRIPT='[
+  {"status":"NEEDS_INPUT","summary":"need a decision before I can proceed",
+   "questions":["Which database should the health endpoint report on -- primary or replica?"],
+   "worker_session_id":"fake-operator-walkthrough-001"},
+  {"status":"COMPLETED","summary":"done","worker_session_id":"fake-operator-walkthrough-001"}
+]' uv run dark-factory run text:"add a health endpoint"
+```
+
+```
+e9de8336-56f6-4ce8-be34-9914d67ed3eb
+CREATED → BA
+BA → WAITING_HUMAN
+
+run e9de8336-56f6-4ce8-be34-9914d67ed3eb
+  terminal state: WAITING_HUMAN
+  last role:      BA
+  attempt:        1
+```
+
+Exit code `0`. The run id is on the first line. The `terminal state:` label in
+the summary block is the generic "where the drive loop stopped" line — here it
+stopped at `WAITING_HUMAN`, which is a pause, not a terminal state.
+
+### 2. See that the run is waiting, and for what
+
+```bash
+uv run dark-factory status e9de8336-56f6-4ce8-be34-9914d67ed3eb
+```
+
+```
+run_id: e9de8336-56f6-4ce8-be34-9914d67ed3eb
+source_kind: text
+source_ref: -
+status: WAITING_HUMAN
+current_role: BA
+current_step: 0
+latest_attempt: 1
+created_at: 2026-09-10T08:14:52.308996Z
+updated_at: 2026-09-10T08:15:02.556575Z
+base_branch: -
+working_branch: -
+```
+
+`status: WAITING_HUMAN` on `current_role: BA` tells you the run is paused and
+which role asked. The **question text** itself is persisted on the
+`human_interactions` row; there is no dedicated CLI surface for it yet (operator
+question intake over GitHub comments arrives in Phase 10). Until then, read it
+with the project's own session:
+
+```bash
+uv run python -c "
+from uuid import UUID
+from sqlalchemy import select
+from dark_factory.persistence.engine import new_session
+from dark_factory.persistence.models import HumanInteraction
+with new_session() as s:
+    q = s.scalar(select(HumanInteraction).where(
+        HumanInteraction.run_id == UUID('e9de8336-56f6-4ce8-be34-9914d67ed3eb')))
+    print(q.status.value, '|', q.question)
+"
+```
+
+```
+WAITING | Which database should the health endpoint report on -- primary or replica?
+```
+
+### 3. Resume with an answer, from a different shell
+
+Nothing from the original process is needed — only the run id and the database.
+Open a new shell (no `DARK_FACTORY_FAKE_SCRIPT` set) and:
+
+```bash
+uv run dark-factory resume e9de8336-56f6-4ce8-be34-9914d67ed3eb \
+  --answer "Report on the primary Postgres cluster"
+```
+
+```
+e9de8336-56f6-4ce8-be34-9914d67ed3eb
+BA → COMPLETED
+
+run e9de8336-56f6-4ce8-be34-9914d67ed3eb
+  terminal state: COMPLETED
+  last role:      BA
+  attempt:        1
+```
+
+Exit code `0`. `resume` also writes one `run.resumed` info line to **stderr**
+(structured JSON); it does not touch the stdout contract above. The run
+continues on the **same role execution and attempt** — it is not a new run. A
+second `resume --answer` for the same pause exits `2` with `not waiting` on
+stderr: the answer is accept-once.
+
+### 4. Two processes touching the same run at once
+
+While one process owns a run (it holds the lease), a second `resume` on the same
+run does not wait and does not fail — it declines:
+
+```bash
+uv run dark-factory resume ff7a698c-72ec-44ee-91fa-cb1fe88e4a5b --answer "primary"
+```
+
+```
+ff7a698c-72ec-44ee-91fa-cb1fe88e4a5b
+run ff7a698c-72ec-44ee-91fa-cb1fe88e4a5b is owned by another process; exiting without changes
+```
+
+Exit code `0`, nothing changed. This is the normal result of a race, **not an
+error** — a wrapper script that retries or alerts on it is retrying pointlessly.
+
+### 5. When a process is killed while it owns a run
+
+A hard-killed owner never releases its lease. Nothing else can claim that run
+until its `lock_expires_at` passes — `LEASE_TTL_SECONDS` (default `900`) after
+its last heartbeat, measured on the **database** clock. After that, any process
+`resume`s it from the last committed step. This phase has no command to force an
+earlier steal.
 
 ## Running the tests
 
@@ -165,10 +321,25 @@ the walking skeleton:
 - **No independent quality gate** and no bounded feedback loops (Phase 9).
 - **No configuration file** — the one-role pipeline is a hardcoded Python
   default; `.dark-factory.yaml` and role YAML arrive in Phase 3.
-- **No human pause and resume** — `WAITING_HUMAN`, `resume --answer "..."` and
-  safe process release are Phase 2.
-- **No concurrency lease** — the Postgres single-owner lease / heartbeat is
-  Phase 2.
+
+_(Human pause/resume and the Postgres single-owner lease **were** added in
+Phase 2 — see the walkthrough above and the section below.)_
+
+## What Phase 2 deliberately does not do
+
+Pause, resume and single-owner execution are in place; the following is
+deliberately still out:
+
+- **No forced lease steal.** There is no command to take another process's lease
+  before it expires — a crashed owner's run waits out `LEASE_TTL_SECONDS`.
+- **No way to cancel a waiting run.** `WAITING_HUMAN` is left until it is
+  answered; there is no `cancel`. (`CANCELLED` exists in the schema as an inert
+  value, written nowhere yet.)
+- **No per-question answering.** A pause carries **all** of the role's questions
+  as one block, and `--answer` supplies one answer for that block.
+- **No non-command-line answer intake.** The only way in is
+  `resume <run-id> --answer "..."`. Answering via GitHub comment arrives in
+  Phase 10; picking a paused run up on a *different machine* is Phase 11.
 
 ## Decisions recorded here, enforced later
 
