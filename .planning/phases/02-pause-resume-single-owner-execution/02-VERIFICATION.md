@@ -19,9 +19,6 @@ covered_files:
   - ".planning/phases/02-pause-resume-single-owner-execution/02-06-SUMMARY.md"
   - ".planning/phases/02-pause-resume-single-owner-execution/02-07-PLAN.md"
   - ".planning/phases/02-pause-resume-single-owner-execution/02-07-SUMMARY.md"
-  - ".planning/phases/02-pause-resume-single-owner-execution/02-REVIEW.md"
-  - ".planning/phases/02-pause-resume-single-owner-execution/02-REVIEW-FIX.md"
-  - ".planning/phases/02-pause-resume-single-owner-execution/02-UAT.md"
   - "migrations/env.py"
   - "migrations/versions/0003_pause_resume_lease.py"
   - "src/dark_factory/cli.py"
@@ -39,7 +36,7 @@ covered_files:
   - "src/dark_factory/persistence/repositories.py"
   - "src/dark_factory/workers/fake.py"
   - "tests/integration/test_phase2_acceptance.py"
-covered_digest: "v1:sha256:6d7a1d83d8f719249cb9a70426ff25ebee122fa43cbcbc34d10b744d1d55c94a"
+covered_digest: "v1:sha256:715690c92088ff3297f82d061f3951a5524727f91d13ef5e7b4cb6371de1d9f7"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
