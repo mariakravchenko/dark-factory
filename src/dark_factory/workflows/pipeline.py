@@ -1,18 +1,29 @@
-"""The Phase-1 pipeline: a hardcoded ordered list of one role (D-09).
+"""The role pipeline: an ordered list of :class:`RoleNode`, length never assumed.
 
 The orchestrator iterates this ordered list. It must never encode a role
 *count* -- no "call these N roles", no index arithmetic that assumes exactly one
-entry. Phase 3 replaces :data:`DEFAULT_PIPELINE` with a snapshot loaded from
-``.dark-factory.yaml`` and must not need to touch the orchestrator to do it.
+entry. :func:`pipeline_from_snapshot` builds the pipeline from the persisted
+effective-config snapshot (Phase 3, ORCH-02); :data:`DEFAULT_PIPELINE` is
+retained only as a fixture for the Phase 1 / Phase 2 test suites -- plan 03-03
+removes the last orchestrator parameter-default reference to it.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from dark_factory.roles.registry import ba_role
 
-__all__ = ["DEFAULT_PIPELINE", "Pipeline", "RoleNode", "current_node", "next_node"]
+__all__ = [
+    "DEFAULT_PIPELINE",
+    "Pipeline",
+    "RoleNode",
+    "current_node",
+    "next_node",
+    "pipeline_from_snapshot",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +49,35 @@ class Pipeline:
 
 
 DEFAULT_PIPELINE = Pipeline(nodes=(RoleNode(name=ba_role.name, worker=ba_role.worker),))
-"""Phase 1's hardcoded default: the single BA role, performed by the fake worker."""
+"""Retained as a test fixture only.
+
+The single-BA pipeline the Phase 1 / Phase 2 suites import directly. Production
+code builds its pipeline with :func:`pipeline_from_snapshot` from the persisted
+run snapshot; the orchestrator's remaining parameter-default reference is removed
+in plan 03-03. No new code should reference this object.
+"""
+
+
+def pipeline_from_snapshot(snapshot: Mapping[str, Any]) -> Pipeline:
+    """Build the :class:`Pipeline` from the persisted effective-config snapshot.
+
+    ``snapshot["roles"]`` is the ordered role list. Two shapes are accepted:
+
+    * the legacy Phase 1 / Phase 2 shape -- a list of bare role-name strings,
+      each mapped to ``worker="fake"``;
+    * the Phase 3 shape -- a list of ``{"name": ..., "worker": ...}`` mappings.
+
+    Raises ``KeyError`` when ``"roles"`` is absent: a run with no persisted
+    snapshot is a bug, not a case to paper over with a hardcoded default.
+    """
+    return Pipeline(
+        nodes=tuple(
+            RoleNode(name=entry, worker="fake")
+            if isinstance(entry, str)
+            else RoleNode(name=entry["name"], worker=entry["worker"])
+            for entry in snapshot["roles"]
+        )
+    )
 
 
 def current_node(pipeline: Pipeline, current_role: str | None) -> RoleNode:

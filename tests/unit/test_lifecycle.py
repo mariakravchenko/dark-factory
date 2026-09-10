@@ -17,7 +17,7 @@ import pytest
 from dark_factory.domain.signal import Signal
 from dark_factory.domain.status import RunStatus
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
-from dark_factory.workflows.pipeline import Pipeline, RoleNode
+from dark_factory.workflows.pipeline import Pipeline, RoleNode, pipeline_from_snapshot
 
 pytestmark = pytest.mark.unit
 
@@ -154,6 +154,36 @@ def test_transition_is_pure_and_repeatable(signal: Signal) -> None:
     assert first == second
     assert state == _FakeState(RunStatus.BA, "BA", 0)  # arguments unmutated
     assert _ONE_ROLE.nodes is pipeline_nodes
+
+
+_SNAPSHOT_THREE = pipeline_from_snapshot(
+    {
+        "roles": [
+            {"name": "BA", "worker": "fake"},
+            {"name": "ARCHITECTURE", "worker": "fake"},
+            {"name": "DEVELOPMENT", "worker": "fake"},
+        ]
+    }
+)
+
+
+@pytest.mark.parametrize(
+    ("current_role", "current_step", "expected"),
+    [
+        ("BA", 0, (RunStatus.ARCHITECTURE, "ARCHITECTURE", 1)),
+        ("ARCHITECTURE", 1, (RunStatus.DEVELOPMENT, "DEVELOPMENT", 2)),
+        ("DEVELOPMENT", 2, (RunStatus.COMPLETED, "DEVELOPMENT", 2)),
+    ],
+)
+def test_snapshot_built_pipeline_walks_identically_to_a_hand_built_one(
+    current_role: str,
+    current_step: int,
+    expected: tuple[RunStatus, str | None, int | None],
+) -> None:
+    """The pure transition function walks an N-node snapshot-built pipeline the
+    same way it walks a hand-built ``Pipeline`` -- no role-count assumption."""
+    state = _FakeState(RunStatus(current_role), current_role, current_step)
+    assert transition(state, Signal.ROLE_COMPLETED, _SNAPSHOT_THREE) == expected
 
 
 def test_lifecycle_module_has_no_persistence_import_and_no_session() -> None:
