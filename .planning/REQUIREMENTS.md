@@ -36,7 +36,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Worker Abstraction
 
 - [x] **WORK-01**: All agent runtimes implement one `CodingWorker` contract — `execute()`, `resume()`, `capabilities()`
-- [ ] **WORK-02**: A `WorkerRegistry` maps `claude-code` / `copilot` / `hermes` to adapters; worker creation is centralized
+- [x] **WORK-02**: A `WorkerRegistry` maps `claude-code` / `copilot` / `hermes` to adapters; worker creation is centralized
 - [x] **WORK-03**: No worker-specific branching (`if worker == "claude-code"`) appears in the orchestrator or workflow code
 - [ ] **WORK-04**: `ClaudeCodeWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-05**: `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
@@ -204,7 +204,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ROLE-05 | Phase 5 | Pending |
 | ROLE-06 | Phase 4 | Pending |
 | WORK-01 | Phase 1 | Complete |
-| WORK-02 | Phase 3 | Pending |
+| WORK-02 | Phase 3 | Complete |
 | WORK-03 | Phase 1 | Complete |
 | WORK-04 | Phase 7 | Pending |
 | WORK-05 | Phase 8 | Pending |
