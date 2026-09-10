@@ -16,6 +16,7 @@ dependencies = [
     "typer>=0.27,<1",
     "structlog>=25,<27",
     "tenacity>=9,<10",
+    "pyyaml>=6,<7",
 ]
 
 [project.scripts]
@@ -30,6 +31,7 @@ dev = [
     "time-machine>=3,<4",
     "ruff>=0.16",
     "mypy>=2.3",
+    "types-pyyaml>=6,<7",
 ]
 
 [build-system]
