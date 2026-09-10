@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-09-09T17:59:13.293Z"
-last_activity: 2026-09-09
-last_activity_desc: Phase 02 execution started
-state_head: 487f45df5872a24b8696b365f3b33b7cd6ca20ba
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-09-10T05:43:14.257Z"
+last_activity: 2026-09-10
+last_activity_desc: Completed 02-04 (single-owner race + killed-owner expiry reclaim proofs)
+state_head: dc18ef4fd49f4798fd2784600f51579eec1ec15e
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 16
-  completed_plans: 12
+  completed_plans: 13
   percent: 8
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
-Last activity: 2026-09-09 — Completed 02-03 (tracer: pause + resume --answer end to end under a Postgres lease)
+Last activity: 2026-09-10 — Completed 02-04 (SC3 two-process race → one execution + one clean exit; SC4 killed-owner lease not stolen before DB-clock expiry, reclaimed after)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -70,6 +70,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 02 P01 | 55min | 3 tasks | 7 files |
 | Phase 02 P02 | 11min | 2 tasks | 12 files |
 | Phase 02 P03 | 95min | 2 tasks | 13 files |
+| Phase 02 P04 | close-out | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -117,6 +118,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-03: claim-don't-check Postgres lease (one conditional UPDATE ... RETURNING) + run_lease context manager owning a daemon heartbeat; DB-clock-only expiry; token fence folded into apply_transition
 - [Phase 02]: 02-03: submit_answer checks WAITING_HUMAN + pending-question preconditions BEFORE claiming the lease (deviation from plan prose) so a terminal/non-waiting run yields NotWaitingForHuman/exit 2, not LeaseNotAcquired/exit 0
 - [Phase 02]: 02-03: column-driven resume — the persisted RESUMING marker on the role-execution row selects worker.resume() over worker.execute(); zero in-memory carryover across a crash
+- [Phase 02]: 02-04: no production code changed — plan is proof-only for the 02-03 lease; HITL-07 proven adversarially by a 16-thread statement-level claim and a two-real-process race asserting invariants (one role-execution row, one ROLE_COMPLETED) not winners
+- [Phase 02]: 02-04: SC4 reclaim proven twice — forced server-clock expiry (fast path) and a genuine 2s injected-TTL real elapsed wait (honesty check that the DB clock, not the forcing UPDATE, drives expiry); no time_machine/freezegun anywhere (they cannot move the Postgres clock)
+- [Phase 02]: 02-04: race test synchronises on the committed DB condition status==BA AND owner_token IS NOT NULL via wait_for (never a fixed sleep); slow-step window set to 15s as a generous upper bound on a remote-Neon child cold-start, not a timing assertion
 
 ### Pending Todos
 
@@ -142,6 +146,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-09T17:59:13.264Z
-Stopped at: Completed 02-03-PLAN.md
+Last session: 2026-09-10T05:42:28.602Z
+Stopped at: Completed 02-04-PLAN.md
 Resume file: None
