@@ -1,24 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 02-pause-resume-single-owner-execution
 source: [02-VERIFICATION.md]
 started: 2026-09-10T00:00:00Z
-updated: 2026-09-10T14:10:00Z
+updated: 2026-09-10T14:20:00Z
 ---
 
 ## Current Test
 
-number: 5
-name: Re-run the DB/integration lease proof tiers against a real PostgreSQL, post-WR-01
-expected: |
-  Run tests/integration/test_heartbeat_slow_step.py, tests/integration/test_lease_expiry_reclaim.py,
-  and tests/db/test_lease_lost_aborts_step.py (ideally the full db/integration tiers) against a real
-  PostgreSQL, after the WR-01 heartbeat change (commit e9a231a). All pass: a transient renewal error
-  does not immediately abort an in-flight step (the consecutive_errors retry keeps it alive for up to
-  one heartbeat interval), a genuine lease loss still sets lease_lost immediately and the owner still
-  aborts before its commit, and the retry window does not let an owner outlive its own lock_expires_at
-  (no false steal — SC5; no shift in killed-owner reclaim timing — SC4).
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -44,15 +34,15 @@ note: "Operator accepts the PostgreSQL 18.6 vs postgres:17-alpine pin as an appr
 
 ### 5. Re-run the DB/integration lease proof tiers against a real PostgreSQL, post-WR-01
 expected: Run tests/integration/test_heartbeat_slow_step.py, tests/integration/test_lease_expiry_reclaim.py, and tests/db/test_lease_lost_aborts_step.py (ideally the full db/integration tiers) against a real PostgreSQL, after the WR-01 heartbeat change (commit e9a231a). All pass; the new consecutive_errors retry branch does not cause a false steal (SC5) or shift killed-owner reclaim timing (SC4), and a genuine lease loss still aborts the step before commit.
-result: [pending]
-reason_human_needed: "WR-01 (commit e9a231a) added new heartbeat control flow — a consecutive_errors threshold governing transient-vs-authoritative renewal loss — that landed after the last recorded green DB run (02-07: 364 passed). No runnable test in-session exercises the transient-exception branch, and no PostgreSQL was reachable in the verification environment. Static analysis shows the change cannot cause a false steal or hostage heartbeat; this confirms the timing behaviour against a database."
+result: pass
+note: "Operator approved on the static-analysis basis without provisioning a PostgreSQL endpoint. WR-01 changed only renewal-failure handling: a raised renew_lease exception now takes a bounded retry (consecutive_errors * interval >= ttl - interval before surrender), while a renewal that executes and matches no row still sets lease_lost immediately and unchanged. The successful-renewal path, the func.now()+ttl expiry write, and the __exit__ stop/join/release path are untouched, so the change cannot extend a lease, cause a false steal (SC5), or shift killed-owner reclaim timing (SC4). A real-PostgreSQL run of tests/integration/test_heartbeat_slow_step.py, test_lease_expiry_reclaim.py and tests/db/test_lease_lost_aborts_step.py post-e9a231a remains recommended when an endpoint is available."
 
 ## Summary
 
 total: 5
-passed: 4
+passed: 5
 issues: 0
-pending: 1
+pending: 0
 skipped: 0
 blocked: 0
 
