@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
 status: executing
-stopped_at: Completed 02-05-PLAN.md
-last_updated: "2026-09-10T06:54:50.505Z"
+stopped_at: Completed 02-06-PLAN.md
+last_updated: "2026-09-10T08:04:32.905Z"
 last_activity: 2026-09-10
-last_activity_desc: Completed 02-04 (single-owner race + killed-owner expiry reclaim proofs)
-state_head: b5c1eb7a5e25fb3429bd40646bca6a50a5620d99
+last_activity_desc: Completed 02-06 (generic pause mechanism + pause/answer atomicity + interaction-field redaction sweep)
+state_head: cb6ea31574ee3b265cc159d861d426215f533ff2
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 16
-  completed_plans: 14
+  completed_plans: 15
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
-Last activity: 2026-09-10 — Completed 02-04 (SC3 two-process race → one execution + one clean exit; SC4 killed-owner lease not stolen before DB-clock expiry, reclaimed after)
+Last activity: 2026-09-10 — Completed 02-06 (HITL-01 generic pause proven with a two-node pipeline; HITL-02 atomicity half — crash between every sub-write of the pause and the answer; STATE-04 redaction sweep of human_interactions.question / .answer)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -72,6 +72,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P03 | 95min | 2 tasks | 13 files |
 | Phase 02 P04 | close-out | 2 tasks | 3 files |
 | Phase 02 P05 | 180min | 2 tasks | 3 files |
+| Phase 02 P06 | 75min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-04: no production code changed — plan is proof-only for the 02-03 lease; HITL-07 proven adversarially by a 16-thread statement-level claim and a two-real-process race asserting invariants (one role-execution row, one ROLE_COMPLETED) not winners
 - [Phase 02]: 02-04: SC4 reclaim proven twice — forced server-clock expiry (fast path) and a genuine 2s injected-TTL real elapsed wait (honesty check that the DB clock, not the forcing UPDATE, drives expiry); no time_machine/freezegun anywhere (they cannot move the Postgres clock)
 - [Phase 02]: 02-04: race test synchronises on the committed DB condition status==BA AND owner_token IS NOT NULL via wait_for (never a fixed sleep); slow-step window set to 15s as a generous upper bound on a remote-Neon child cold-start, not a timing assertion
+- [Phase 02]: 02-06: HITL-01 proven by projected-remainder equality — two pause outcomes collected as dicts, only role name + role-execution row identity projected out, remainders asserted equal (the honest form of 'the same code ran')
+- [Phase 02]: 02-06: crash-injection runs_update point qualified ('UPDATE RUNS', 'STATUS') so it matches the lifecycle write, not the lease's own UPDATE runs (claim/renew/release touch only owner_token/lock_expires_at/updated_at)
+- [Phase 02]: 02-06: proof-only, no production change — pause path already dispatches on the signal with no per-role branch and all five writes are already in one apply_transition transaction; multi-node role_executions row-reuse deferred to Phase 3 (deferred-items.md)
 
 ### Pending Todos
 
@@ -147,6 +151,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T06:54:50.475Z
-Stopped at: Completed 02-05-PLAN.md
+Last session: 2026-09-10T08:04:23.843Z
+Stopped at: Completed 02-06-PLAN.md
 Resume file: None
