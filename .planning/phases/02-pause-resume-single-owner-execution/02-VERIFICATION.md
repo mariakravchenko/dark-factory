@@ -19,6 +19,9 @@ covered_files:
   - ".planning/phases/02-pause-resume-single-owner-execution/02-06-SUMMARY.md"
   - ".planning/phases/02-pause-resume-single-owner-execution/02-07-PLAN.md"
   - ".planning/phases/02-pause-resume-single-owner-execution/02-07-SUMMARY.md"
+  - ".planning/phases/02-pause-resume-single-owner-execution/02-REVIEW.md"
+  - ".planning/phases/02-pause-resume-single-owner-execution/02-REVIEW-FIX.md"
+  - ".planning/phases/02-pause-resume-single-owner-execution/02-UAT.md"
   - "migrations/env.py"
   - "migrations/versions/0003_pause_resume_lease.py"
   - "src/dark_factory/cli.py"
@@ -36,22 +39,26 @@ covered_files:
   - "src/dark_factory/persistence/repositories.py"
   - "src/dark_factory/workers/fake.py"
   - "tests/integration/test_phase2_acceptance.py"
-covered_digest: "v1:sha256:eba7fae6099b5fe98b9423fc3a11c90e64bb4a9be0e09b8dce16a8de2dc6e1d9"
+covered_digest: "v1:sha256:6d7a1d83d8f719249cb9a70426ff25ebee122fa43cbcbc34d10b744d1d55c94a"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: human_needed
+  previous_score: 5/5
+  gaps_closed:
+    - "WR-01 — heartbeat now distinguishes a transient renewal exception (bounded retry via consecutive_errors) from an authoritative loss (renew_lease matched no row); fix present at lease.py:231-263, re-inspected, does not regress SC5."
+    - "WR-02 — lease.py module docstring now states the guarantee is 'no concurrent durable mutation', not 'no concurrent execution' (lease.py:35-49)."
+    - "WR-03 — LookupError and ValueError added to cli._ORCHESTRATION_ERRORS (cli.py:81-82); bare mutation-path errors now route to clean exit 2 per the D-05 contract."
+    - "Prior human item 1 (fresh-eyes README pause/resume walkthrough vs real Neon) — completed, PASS in 02-UAT.md (commit a8beb21)."
+    - "Prior human item 2 (production-scale lease timing 900s/300s vs real Neon PgBouncer) — completed, PASS in 02-UAT.md: pre-expiry claim declined, post-expiry claim succeeded, lock_expires_at advanced during a slow step."
+    - "Prior human item 3 (accept the 900s/300s defaults / ~15-min dead-owner reclaim ceiling) — completed, PASS in 02-UAT.md: operator accepts."
+    - "Prior human item 4 (accept PostgreSQL 18.6 vs postgres:17-alpine env deviation) — completed, PASS in 02-UAT.md: operator accepts the deviation carried since 01-01."
+  gaps_remaining: []
+  regressions: []
 human_verification:
-  - test: "Fresh-eyes README pause/resume walkthrough against a real Neon endpoint"
-    expected: "A reader who has never seen the repo can start a scripted pause, read the recorded question via `dark-factory status`, and resume with `resume <id> --answer \"...\"` from a second shell, following only the README section — with no step they had to guess at, and the exit-code table making it unmistakable that a clean pause (exit 0) and a declined ownership race (exit 0) are successes, not faults."
-    why_human: "Legibility / operator-experience judgment; the commands were run and the mechanism is proven by the automated suite, but 'can a stranger follow this' is not something a test can settle (02-03 <human-check>, 02-07 <human-check>)."
-  - test: "Production-scale lease timing against a real Neon PgBouncer transaction-pooled endpoint at the shipped 900 s TTL / 300 s heartbeat"
-    expected: "Pause a run, kill the owner, confirm a second process does not claim before `lock_expires_at`, then claims after; run a deliberately slow step and confirm `lock_expires_at` advances while it runs. Behaviour matches the short-injected-TTL proofs at production scale."
-    why_human: "A real-minutes end-to-end timing test is impractical in CI; the injected 6 s/2 s (TTL/3 ratio) integration proofs establish the mechanism, the production-scale timing is an operator smoke check (02-VALIDATION.md Manual-Only Verifications; 02-05 coverage D9)."
-  - test: "Confirm the Open Decision 2 production defaults (900 s TTL / 300 s heartbeat) are acceptable"
-    expected: "A genuinely dead owner's run is unclaimable for up to ~15 minutes and this phase provides no force-steal escape hatch. Either accept the ceiling, or change it (a one-line `Settings` default edit)."
-    why_human: "A product/operations judgment about an acceptable reclaim-delay ceiling, not something a test can settle (02-05 <human-check>, coverage D9 human_judgment: true)."
-  - test: "Accept (or re-run against PostgreSQL 17) the db/integration proof tiers, which executed against PostgreSQL 18.6"
-    expected: "Operator confirms the PG 18.6 vs the `postgres:17-alpine` pin in CLAUDE.md is an approved environmental deviation (carried since 01-01) or provisions a PG 17 endpoint for a confirmation run."
-    why_human: "Operator-approved environmental deviation; verifier cannot decide it. No PostgreSQL of any version was reachable in the verification environment, so the db/integration tiers were not re-executed here — this verdict rests on the executor-recorded green runs, static source inspection, and the acceptance gate."
+  - test: "Re-run the DB/integration lease proof tiers against a real PostgreSQL — specifically tests/integration/test_heartbeat_slow_step.py, tests/integration/test_lease_expiry_reclaim.py, and tests/db/test_lease_lost_aborts_step.py — after the WR-01 heartbeat change (commit e9a231a)."
+    expected: "All three pass. In particular: a transient renewal error does not immediately abort an in-flight step (the consecutive_errors retry keeps the step alive for up to one heartbeat interval), while a genuine lease loss (renew_lease matches no row) still sets lease_lost immediately and the owner still aborts before its commit; and the retry window does not let an owner outlive its own lock_expires_at such that a competitor false-steals. No PostgreSQL of any version was reachable in this verification environment, and the last recorded green DB run (02-07: 364 passed) predates commit e9a231a."
+    why_human: "The WR-01 fix adds new heartbeat control flow (a consecutive_errors threshold governing transient-vs-authoritative loss and its interaction with lease_ttl_seconds reclaim timing). No executed test in this session exercises the transient-exception branch — the existing DB heartbeat proofs cover only the happy renewal path and the authoritative-loss path, both unchanged by the fix — and the code-fixer's own report (02-REVIEW-FIX.md) explicitly recommends a real-PostgreSQL run of these tiers 'before the phase proceeds'. Static analysis shows the change cannot cause a false steal or a hostage heartbeat, so SC5 as written holds; this check confirms the new branch's timing behaviour against a database rather than by inspection alone."
 ---
 
 # Phase 2: Pause, Resume & Single-Owner Execution — Verification Report
@@ -59,36 +66,60 @@ human_verification:
 **Phase Goal:** A run can stop mid-role to ask a human a question, release its process safely, and later be resumed by exactly one process — even after the original process died.
 **Verified:** 2026-09-10
 **Status:** human_needed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — after three code-review fix commits (e9a231a, 3617bb3, 19f4ccb) landed on `lease.py` / `cli.py`, and after 02-UAT.md (commit a8beb21) resolved all four human items from the prior report.
 
-## Verification constraints
+## Re-verification scope and constraints
 
-No PostgreSQL (any version) was reachable in the verification environment, so the
-`db` and `integration` test tiers could not be re-executed. Per the task's
-stated fallback, this verdict rests on:
+The prior 02-VERIFICATION.md verdict (`human_needed`, 5/5) rested on static
+inspection + the acceptance gate + `unit`/`contract` + `mypy`/`ruff` + executor-recorded
+`db`/`integration` runs, and carried four outstanding human confirmations. Since
+then:
 
-1. **Static inspection of the delivered source** against each success criterion
-   and each phase invariant (all 16 impl/migration files read in full).
-2. **The acceptance-gate file** `tests/integration/test_phase2_acceptance.py`
-   read in full — it maps all 5 success criteria and all 6 requirement ids to
-   named proof files; every one of the 12 distinct proof files was confirmed
-   present on disk, non-empty, and containing `def test_` functions whose
-   bodies assert the criterion-specific properties (not stubs).
-3. **The `unit`/`contract` tier, re-run here: 200 passed, 0 failed** (0.43 s).
-4. **`mypy --strict src/dark_factory`: clean (39 files); `ruff check`: clean** —
-   re-run here.
-5. **Executor-recorded full-suite runs** across the phase: 02-03 (310 passing),
-   02-04 (db 82 / integration 41), 02-05 (db 89 / integration 46), 02-06
-   (349 passed), 02-07 (**364 passed, 0 skipped**, `alembic check` clean).
-6. **02-REVIEW.md** (independent code review, 0 Critical) which traced the four
-   phase invariants in code and found them holding.
+1. **02-UAT.md (commit a8beb21) closed all four prior human items — 4 passed, 0
+   issues.** The operator ran the README walkthrough verbatim against a real Neon
+   endpoint, confirmed production-scale lease timing against a real Neon PgBouncer
+   endpoint (pre-expiry claim declined, post-expiry claim succeeded,
+   `lock_expires_at` advanced during a slow step), accepted the 900 s / 300 s
+   defaults and the ~15-minute dead-owner reclaim ceiling, and accepted the
+   PostgreSQL 18.6 vs `postgres:17-alpine` deviation carried since 01-01. These
+   are recorded as `gaps_closed` and are **not** re-listed as open below.
 
-The success criteria are behaviour-dependent (state transitions, cancellation /
-cleanup / ordering invariants). Their proof files exist, are substantive, and
-are recorded green by the executors and by an independent code review — but they
-were not re-executed in this environment. That, plus the genuinely outstanding
-human items below, is why the phase routes to `human_needed` rather than
-`passed`.
+2. **The three code-review Warnings (WR-01/02/03) are all fixed** and were
+   re-inspected in the current tree:
+   - **WR-01** (`lease.py:231-263`): `_heartbeat` now increments a
+     `consecutive_errors` counter on a raised `renew_lease` exception, logs
+     `lease.renew_error` with the attempt number, and `continue`s; it surrenders
+     the lease on a transient error only once
+     `consecutive_errors * interval >= ttl - interval`. A renewal that *executes
+     and matches no row* still sets `lease_lost` and returns immediately —
+     unchanged. `finally: hb_session.close()` still runs on every path including
+     `continue`. The stop path (`while not stop.wait(interval)` + `stop.set()` in
+     `__exit__`) is untouched, so the "heartbeat never outlives its owner"
+     prohibition still holds.
+   - **WR-02** (`lease.py:35-49`): new module-docstring paragraph "What the lease
+     guarantees — and what it does not", stating the guarantee is *no concurrent
+     durable mutation*, not *no concurrent execution*, and naming the two Phase-7
+     mitigations. Docstring-only; zero behavioural change.
+   - **WR-03** (`cli.py:81-82`): `LookupError` and `ValueError` added to
+     `_ORCHESTRATION_ERRORS` with an explanatory comment. `apply_transition` and
+     its helpers raise bare `LookupError` (missing `runs` row at lock time,
+     missing `role_executions` row, no WAITING interaction in answer mode) and
+     bare `ValueError` (`RoleExecutionWrite` / `HumanInteractionWrite` guards);
+     these now route through `_report_orchestration_error` → exit 2 instead of an
+     unhandled traceback → Typer exit 1. The earlier `except ValueError` for
+     `UUID(run_id)` parsing in `resume` / `status` is a separate, earlier catch
+     and is unaffected.
+
+3. **Re-run here:** `uv run pytest -q -m unit` → **193 passed**, 171 deselected
+   (0.42 s); `uv run mypy src/dark_factory` → clean (39 files); `uv run ruff
+   check src/dark_factory` → clean. Matches 02-REVIEW-FIX.md's recorded gates.
+
+4. **Still not runnable here:** the `db` / `integration` tiers (164 tests) — no
+   PostgreSQL of any version is reachable (no Docker, no local `initdb`,
+   `DARK_FACTORY_TEST_DATABASE_URL` unset). The last recorded green DB run
+   (02-07: 364 passed, 0 skipped) **predates** commit e9a231a, so the WR-01
+   heartbeat change has not been exercised against a database. This is the sole
+   reason the phase remains `human_needed` — see Human Verification Required.
 
 ## Goal Achievement
 
@@ -96,144 +127,194 @@ human items below, is why the phase routes to `human_needed` rather than
 
 | # | Truth | Status | Evidence |
 | --- | ----- | ------ | -------- |
-| SC1 | A role returning `NEEDS_INPUT` leaves the run `WAITING_HUMAN` with the question, the worker result, the worker session id and the current role persisted; the process exits 0 holding no open DB transaction. | ✓ VERIFIED | `runner._run_current_role` `ROLE_NEEDS_INPUT` branch: `re_status="WAITING_HUMAN"`, `re_result=outcome` (serialised NEEDS_INPUT), `worker_session_id=result.worker_session_id`, events `QUESTION_CREATED`→`RUN_PAUSED`, `human_interaction=HumanInteractionWrite(mode="ask")`; `lifecycle.transition` `ROLE_NEEDS_INPUT` arm retains the role; `apply_transition` clears both lease columns because `WAITING_HUMAN ∈ STOP_STATUSES`; commit is one `with session.begin()`, session closed in `finally`. `cli._drive_and_exit` exits 0 for `final ∈ (COMPLETED, WAITING_HUMAN)`. Proof: `tests/integration/test_pause_exit_zero.py` asserts all five writes + lease NULL + exit 0 as one block (recorded pass). |
-| SC2 | `dark-factory resume <run-id> --answer "..."` from a brand-new process continues the same role execution and attempt — never creates a new run and needs nothing from the original process. | ✓ VERIFIED | `cli.resume` → `submit_answer` (one `apply_transition`: `WAITING_HUMAN`→`RunStatus(current_role)`, same role-execution row `id=latest.id` marked `RESUMING`, interaction `ANSWERED`) → `drive` → `_run_current_role` reads the persisted `RESUMING` marker and calls `worker.resume(context, previous, answer)` with `previous` validated from the stored NEEDS_INPUT dict and `answer` from `RunState.pending_answer`. No `create_run` on this path. Proof: `tests/integration/test_resume_with_answer.py` asserts same `role_executions.id`, same `attempt`, run-count unchanged, fresh child env, `HUMAN_ANSWER_RECEIVED`→`RUN_RESUMED` (recorded pass; 3 tests incl. two negative cases). |
-| SC3 | Two processes racing `advance` on the same run: one executes, the other exits cleanly without changing status and without duplicating work. | ✓ VERIFIED | `run_lease` claims via one conditional `UPDATE runs ... WHERE (owner_token IS NULL OR lock_expires_at < now()) ... RETURNING id`; the loser gets `None` → `LeaseNotAcquired` → `cli._report_lease_not_acquired` prints `is owned by another process` on stderr and **exits 0** having written nothing; the winner's every `apply_transition` is fenced by `expected_owner_token`. Proof: `tests/integration/test_single_owner_race.py` (deterministic-loser + tight race, invariant assertions: exactly one `ROLE_COMPLETED`, one BA row @ attempt 1, both exit 0, no traceback) + `tests/db/test_lease_claim_atomic.py` (16 barrier-synchronised threads → exactly one token). Recorded pass; 4× flake-smoke clean. |
-| SC4 | A process killed while owning a run loses its lease by database-clock expiry, and the next process claims the run and continues from the last committed step. | ✓ VERIFIED | Killed owner (`os._exit` via `DARK_FACTORY_CRASH_AFTER`) leaves `owner_token` + future `lock_expires_at`; `claim_lease` predicate rejects the second process before expiry (`LeaseNotAcquired` → exit 0, no steal); after the server clock passes `lock_expires_at` the claim succeeds and `_advance_once` reconstructs wholly from Neon (`load_run_state`) and continues on the same `attempt`. Expiry is lazy — no reaper/scheduler/sweeper (structural grep test). Proof: `tests/integration/test_lease_expiry_reclaim.py` (3 tests: forced expiry + field-by-field snapshot equality for the not-stolen half + honest short-TTL real-wait reclaim + no-reaper). Recorded pass. |
-| SC5 | A role step that runs longer than the lease TTL is not falsely stolen — the owner heartbeats the lease while the step is in flight. | ✓ VERIFIED | `run_lease` starts a daemon heartbeat thread that calls `renew_lease` every `heartbeat_seconds` on **its own** session, pushing `lock_expires_at = func.now() + ttl`; a competing `claim_lease` keeps matching zero rows. `__exit__` always stops/joins/best-effort-releases on every exit path (normal, exception, clean pause). Proof: `tests/integration/test_heartbeat_slow_step.py` (≥3 strict expiry advances over a step >3× TTL, owner token constant, every competitor loses & exits 0, release-on-exception with default 900 s TTL, structural no-liveness-probe grep) + `tests/db/test_lease_lost_aborts_step.py` (7 tests: token fence + in-memory flag each independently sufficient, `LeaseLost` distinct from `ConcurrentTransition`, re-runnable on same attempt). Recorded pass; 3× flake-smoke clean. |
+| SC1 | A role returning `NEEDS_INPUT` leaves the run `WAITING_HUMAN` with the question, the worker result, the worker session id and the current role persisted; the process exits 0 holding no open DB transaction. | ✓ VERIFIED | `runner._run_current_role` `Signal.ROLE_NEEDS_INPUT` arm (runner.py:389-431): one `apply_transition` carrying `re_status`/`re_result` (serialised NEEDS_INPUT), `worker_session_id`, retained `current_role`, `human_interaction=HumanInteractionWrite(mode="ask")`, `expected_owner_token=lease.token`; `lifecycle` retains the role; `apply_transition` clears both lease columns because `WAITING_HUMAN ∈ STOP_STATUSES` (mutations.py:281-283). `cli._drive_and_exit` exits 0 for `final ∈ _CLEAN_FINALS = (COMPLETED, WAITING_HUMAN)`. Proof file `tests/integration/test_pause_exit_zero.py` present + non-empty; acceptance gate maps SC1 to it; executor-recorded green; operator UAT item 1 exercised pause→`WAITING_HUMAN` exit 0 against real Neon. Unchanged by the three fix commits. |
+| SC2 | `dark-factory resume <run-id> --answer "..."` from a brand-new process continues the same role execution and attempt — never creates a new run and needs nothing from the original process. | ✓ VERIFIED | `cli.resume` → `submit_answer` (answers.py: one `apply_transition`, `expected_status=WAITING_HUMAN`, same role-execution row `id=latest.id` marked `RESUMING`, interaction `mode="answer"`) → `_drive_and_exit` → `_run_current_role` reads `latest.status == _ROLE_RESUMING` (runner.py:338) and calls `worker.resume(context, previous, state.pending_answer)`. No `create_run`/`start_run` on this path. Proof file `tests/integration/test_resume_with_answer.py` present; acceptance gate maps SC2 to it; executor-recorded green; operator UAT item 1 resumed from a second shell to `COMPLETED` exit 0. Unchanged by the fix commits. |
+| SC3 | Two processes racing `advance` on the same run: one executes, the other exits cleanly without changing status and without duplicating work. | ✓ VERIFIED | `run_lease` claims via one conditional `UPDATE runs ... WHERE (owner_token IS NULL OR lock_expires_at < now()) AND status NOT IN terminal ... RETURNING id` (lease.py:119-145); loser gets `None` → `LeaseNotAcquired` → `cli._report_lease_not_acquired` prints to stderr and **exits 0** having written nothing; winner's every `apply_transition` is fenced by `expected_owner_token`. Proof files `tests/integration/test_single_owner_race.py` + `tests/db/test_lease_claim_atomic.py` present; acceptance gate maps SC3; executor-recorded green (4× flake-smoke clean). Claim path untouched by the fix commits. |
+| SC4 | A process killed while owning a run loses its lease by database-clock expiry, and the next process claims the run and continues from the last committed step. | ✓ VERIFIED | Killed owner leaves `owner_token` + a future `lock_expires_at`; `claim_lease` predicate rejects the second process before `func.now()` passes `lock_expires_at` (`LeaseNotAcquired` → exit 0, no steal); after the DB clock passes it the claim succeeds and `_advance_once` reconstructs wholly from Neon (`load_run_state`) on the same attempt. Expiry is lazy — no reaper (structural grep). Proof file `tests/integration/test_lease_expiry_reclaim.py` present; acceptance gate maps SC4; executor-recorded green; operator UAT item 2 confirmed pre-expiry decline + post-expiry reclaim at production scale against real Neon. See Human Verification — this file should be re-run post-WR-01. |
+| SC5 | A role step that runs longer than the lease TTL is not falsely stolen — the owner heartbeats the lease while the step is in flight. | ✓ VERIFIED | `run_lease` starts a daemon heartbeat that calls `renew_lease` every `interval` on its **own** session, pushing `lock_expires_at = func.now() + ttl`; a competing `claim_lease` keeps matching zero rows. `__exit__` always `stop.set()` → `join` → best-effort `release_lease` on every exit path. WR-01 changed only the *failure* handling (transient exception → bounded retry; authoritative "matched no row" → immediate `lease_lost` as before); it does not touch the successful-renewal path and cannot extend the lease or cause a false steal. Proof files `tests/integration/test_heartbeat_slow_step.py` + `tests/db/test_lease_lost_aborts_step.py` present; acceptance gate maps SC5; executor-recorded green (3× flake-smoke) — **but recorded before commit e9a231a**; operator UAT item 2 observed `lock_expires_at` advancing during a slow step against real Neon. See Human Verification. |
 
-**Score:** 5/5 success criteria verified (static + acceptance-gate + executor-recorded runs; not re-executed here — see constraints).
+**Score:** 5/5 success criteria verified (static inspection of the post-fix tree + acceptance gate + executor-recorded runs + independent code review + operator UAT against real Neon). The `db`/`integration` proofs for SC4/SC5 were not re-executed here after the WR-01 change — see Human Verification Required.
 
 ### Phase Invariants
 
 | Invariant | Status | Evidence |
 | --------- | ------ | -------- |
-| No DB transaction held across a worker call | ✓ VERIFIED | `_advance_once` opens a read session, calls `load_run_state`, closes it in `finally`; `_run_current_role` runs `worker.execute`/`worker.resume` with **no** session open; the write session is opened only for the `apply_transition` commit. Heartbeat renews in a sub-second `with session.begin()` per beat. `test_no_txn_across_worker.py` asserts zero `dark-factory` backends with a transaction lingering `> 3 s` during a 12 s worker call, plus a positive `not session.in_transaction()` after `create_run` / `apply_transition`. 02-REVIEW.md confirms. |
-| Claim-don't-check concurrency (conditional `UPDATE` lease + guarded status update) | ✓ VERIFIED | `claim_lease` is exactly one `sa.update(Run).where(id, status NOT IN terminal, owner_token IS NULL OR lock_expires_at < func.now()).values(...).returning(Run.id)`. `apply_transition` uses `with_for_update` row lock + `expected_status` guard + `expected_owner_token` fence. `grep` of `lease.py` for `pg_advisory` / `SKIP LOCKED` / `skip_locked` → 0. No distributed-lock service. |
-| All expiry checks use the database clock, never a process clock | ✓ VERIFIED | Every expiry value in `lease.py` is `func.now() + timedelta(seconds=ttl)`; every comparison is `lock_expires_at < func.now()`. `grep` of `lease.py` for `datetime.now` / `datetime.utcnow` → 0. The only `time`/`Event.wait` use is the heartbeat's inter-renewal delay (not a timestamp). |
-| Infrastructure credentials never reach `human_interactions.question`/`.answer` or any worker/event/log | ✓ VERIFIED (recorded) | `mutations._write_human_interaction` applies `redact(spec.question, ...)` / `redact(spec.answer, ...)` at the single mutation-path call site; `HumanInteractionWrite` carries raw text by contract. `tests/unit/test_single_mutation_path.py` `_LIFECYCLE_CTORS` includes `HumanInteraction` (re-run here: passes). `tests/integration/test_redaction_interactions.py` sweeps every interaction column + every event payload + `role_executions.result` + a real structlog sink, presence-then-absence (recorded pass). |
+| No DB transaction held across a worker call | ✓ VERIFIED | `_advance_once` opens a read session, calls `load_run_state`, closes it in `finally`; `_run_current_role` runs `worker.execute`/`worker.resume` with no session open; the write session is opened only for the `apply_transition` commit. Heartbeat renews in a sub-second `with session.begin()` per beat on its own session (`renew_lease`, lease.py:148-163). WR-01 did not change the transaction shape of a beat. `test_no_txn_across_worker.py` present; executor-recorded green; 02-REVIEW.md confirms in code. |
+| Claim-don't-check concurrency (conditional `UPDATE` lease + guarded status update) | ✓ VERIFIED | `claim_lease` is exactly one `sa.update(Run).where(id, status NOT IN terminal, owner_token IS NULL OR lock_expires_at < func.now()).values(...).returning(Run.id)`. `apply_transition` uses `session.get(Run, run_id, with_for_update=True)` + `expected_status` guard + `expected_owner_token` fence (mutations.py:259-268). `grep` of `lease.py` for `pg_advisory` / `SKIP LOCKED` / `skip_locked` → 0. |
+| All expiry checks use the database clock, never a process clock | ✓ VERIFIED | Every expiry value in `lease.py` is `func.now() + timedelta(seconds=ttl)`; every comparison is `lock_expires_at < func.now()`. `grep` of `lease.py` for `datetime.now` / `datetime.utcnow` → 0. The only `threading.Event.wait` use is the heartbeat's inter-renewal delay (a duration, not a timestamp) — WR-01 kept it a delay. |
+| Infrastructure credentials never reach `human_interactions.question`/`.answer` or any worker/event/log | ✓ VERIFIED (recorded) | `mutations._write_human_interaction` applies `redact(spec.question, ...)` / `redact(spec.answer, ...)` at the single mutation-path call site (mutations.py:375, 393); `HumanInteractionWrite` carries raw text by contract. `tests/unit/test_single_mutation_path.py` `_LIFECYCLE_CTORS` includes `HumanInteraction` (re-run here: passes). `tests/integration/test_redaction_interactions.py` sweeps every interaction column + event payload + `role_executions.result` + a real structlog sink (executor-recorded green). |
 
 ## Requirements Coverage
 
 Union of `requirements:` across all 7 PLAN frontmatters = `{STATE-04, HITL-01,
-HITL-02, HITL-03, HITL-07, HITL-08}` — exactly the six phase requirement ids in
-ROADMAP.md. No orphans, no extras.
+HITL-02, HITL-03, HITL-07, HITL-08}` — **exactly** the six phase requirement ids
+in ROADMAP.md. No orphans, no extras.
 
 | Requirement | Source Plans | Status | Evidence |
 | ----------- | ------------ | ------ | -------- |
-| STATE-04 | 02-01, 02-02, 02-06, 02-07 | ✓ SATISFIED | `human_interactions` table (id, run_id, role_execution_id, question, answer, status, created_at, answered_at); `status` is `VARCHAR(16)` + named CHECK `interaction_status` carrying exactly `WAITING`/`ANSWERED`/`CANCELLED` (DB-enforced); partial unique index `uq_one_waiting_interaction_per_run`; both FKs. Migration `0003_pause_resume_lease` reversible. Proof: `tests/db/test_human_interactions_schema.py` (12 tests). REQUIREMENTS.md line 76 / 232 = Complete. |
-| HITL-01 | 02-03, 02-06, 02-07 | ✓ SATISFIED | The only pause mechanism is a `NEEDS_INPUT` worker result; `_run_current_role` branches on `signal_from_result(result)`, never a role name. Proof: `tests/db/test_pause_mechanism_generic.py` injects a two-node pipeline (`BA` + an invented `ARCHITECTURE` node) and asserts both nodes pause through structurally identical code (projected-remainder equality). |
-| HITL-02 | 02-02, 02-03, 02-06, 02-07 | ✓ SATISFIED | On `NEEDS_INPUT`: result + worker session id + `current_role` + interaction row + `QUESTION_CREATED`/`RUN_PAUSED` all in one `apply_transition` transaction; lease cleared atomically; process exits 0. Proof: `tests/integration/test_pause_exit_zero.py` + `tests/db/test_pause_path_atomic.py` (crash injected between every sub-write of pause **and** answer → all-or-nothing, run stays resumable, attempt unchanged). |
-| HITL-03 | 02-02, 02-03, 02-07 | ✓ SATISFIED | `dark-factory resume <run-id> --answer "..."` from a brand-new process; decision driven entirely by persisted columns (`RESUMING` marker, `pending_answer`). Proof: `tests/integration/test_resume_with_answer.py`. |
-| HITL-07 | 02-01, 02-02, 02-03, 02-04, 02-05, 02-07 | ✓ SATISFIED | Single-owner via conditional `UPDATE` lease + `with_for_update` + token fence; no distributed-lock service. Proof: `tests/integration/test_single_owner_race.py` + `tests/db/test_lease_claim_atomic.py` + `tests/integration/test_lease_expiry_reclaim.py` + `tests/db/test_lease_lost_aborts_step.py`. See WR-02 below for the documented stalled-owner limitation. |
-| HITL-08 | 02-01, 02-02, 02-03, 02-05, 02-07 | ✓ SATISFIED | No transaction spans the worker call; ownership is a column with DB-clock expiry renewed by a thread on its own session. Proof: `tests/integration/test_no_txn_across_worker.py` (`pg_stat_activity` by `application_name`, `xact_start`-age filter) + `test_heartbeat_slow_step.py`. |
+| STATE-04 | 02-01, 02-02, 02-06, 02-07 | ✓ SATISFIED | `human_interactions` table (id, run_id, role_execution_id, question, answer, status, created_at, answered_at); `status` VARCHAR(16) + named CHECK `interaction_status` carrying exactly `WAITING`/`ANSWERED`/`CANCELLED`; partial unique index `uq_one_waiting_interaction_per_run`; both FKs. Migration `0003_pause_resume_lease` reversible. Proof `tests/db/test_human_interactions_schema.py` present. REQUIREMENTS.md line 76 `[x]` / line 232 Complete. |
+| HITL-01 | 02-03, 02-06, 02-07 | ✓ SATISFIED | The only pause mechanism is a `NEEDS_INPUT` worker result; `_run_current_role` branches on `signal_from_result(result)` (runner.py:354, 389), never a role name. Proof `tests/db/test_pause_mechanism_generic.py` (two-node pipeline, both nodes pause through structurally identical code) present. REQUIREMENTS.md line 84 `[x]` / line 237 Complete. |
+| HITL-02 | 02-02, 02-03, 02-06, 02-07 | ✓ SATISFIED | On `NEEDS_INPUT`: result + worker session id + `current_role` + interaction row + `QUESTION_CREATED`/`RUN_PAUSED` all in one `apply_transition` transaction; lease cleared atomically; process exits 0. Proofs `tests/integration/test_pause_exit_zero.py` + `tests/db/test_pause_path_atomic.py` present. REQUIREMENTS.md line 85 `[x]` / line 238 Complete. |
+| HITL-03 | 02-02, 02-03, 02-07 | ✓ SATISFIED | `dark-factory resume <run-id> --answer "..."` from a brand-new process; decision driven entirely by persisted columns (`RESUMING` marker, `pending_answer`). Proof `tests/integration/test_resume_with_answer.py` present. WR-03 tightened the exit-code contract on this path (bare `LookupError`/`ValueError` → exit 2). REQUIREMENTS.md line 86 `[x]` / line 239 Complete. |
+| HITL-07 | 02-01, 02-02, 02-03, 02-04, 02-05, 02-07 | ✓ SATISFIED | Single-owner via conditional `UPDATE` lease + `with_for_update` + `expected_owner_token` fence; no distributed-lock service. Proofs `tests/integration/test_single_owner_race.py` + `tests/db/test_lease_claim_atomic.py` + `tests/integration/test_lease_expiry_reclaim.py` + `tests/db/test_lease_lost_aborts_step.py` present. WR-02 records in the module docstring that the guarantee is "no concurrent durable mutation", not "no concurrent execution" (a stalled owner past TTL — benign for `FakeWorker`, Phase-7 mitigation named). REQUIREMENTS.md line 90 `[x]` / line 243 Complete. |
+| HITL-08 | 02-01, 02-02, 02-03, 02-05, 02-07 | ✓ SATISFIED | No transaction spans the worker call; ownership is a column with DB-clock expiry renewed by a thread on its own session. Proofs `tests/integration/test_no_txn_across_worker.py` + `test_heartbeat_slow_step.py` present. REQUIREMENTS.md line 91 `[x]` / line 244 Complete. |
 
 ## Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `src/dark_factory/orchestrator/lease.py` | claim-don't-check lease + `run_lease` context manager + heartbeat | ✓ VERIFIED | 250 lines. `claim_lease` / `renew_lease` / `release_lease` (one guarded `UPDATE...RETURNING` each), `run_lease` contextmanager, `LeaseHandle`, `LeaseNotAcquired`. Imported by `runner.py` and `answers.py`. All three invariant greps → 0. |
-| `src/dark_factory/orchestrator/answers.py` | `submit_answer` — one guarded transition out of `WAITING_HUMAN` | ✓ VERIFIED | 151 lines. Precheck (RunNotFound / NotWaitingForHuman / NoPendingInteraction) then one `apply_transition` inside `run_lease`; constructs no ORM row. Imported by `cli.py`. |
-| `src/dark_factory/orchestrator/lifecycle.py` | `ROLE_NEEDS_INPUT → WAITING_HUMAN` arm, role retained; `WAITING_HUMAN` illegal to leave | ✓ VERIFIED | Pure function; imports nothing from `dark_factory.persistence`. New arm present; every `(WAITING_HUMAN, *)` raises `IllegalTransitionError`. |
-| `src/dark_factory/orchestrator/runner.py` | lease-wrapped `advance`/`drive`, stop-set early return, execute-vs-resume dispatch, needs-input branch, lease-loss abort | ✓ VERIFIED | `advance`/`drive` early-return on the whole `STOP_STATUSES` set without claiming; `_advance_once` assumes lease held; `_run_current_role` reads persisted `RESUMING` marker, checks `lease.lease_lost` after the worker call, pauses on the signal. Every `apply_transition` passes `expected_owner_token=lease.token`. |
-| `src/dark_factory/persistence/mutations.py` | `apply_transition` + `expected_owner_token` fence + `human_interaction` + lease clear on stop | ✓ VERIFIED | `LeaseLost`, `HumanInteractionWrite` exported. Fence raises against the already-locked `runs` row. `_write_human_interaction` redacts `question`/`answer` at the single call site. Lease columns cleared when `next_status ∈ STOP_STATUSES`. |
-| `src/dark_factory/persistence/repositories.py` | `LatestExecution.result`, `RunState.pending_answer`, `pending_question` | ✓ VERIFIED | Third bound-parameterised select for the `ANSWERED` interaction bound to the latest attempt; `run_events` never queried. |
+| `src/dark_factory/orchestrator/lease.py` | claim-don't-check lease + `run_lease` context manager + heartbeat | ✓ VERIFIED | 283 lines. `claim_lease` / `renew_lease` / `release_lease` (one guarded `UPDATE...RETURNING` each), `run_lease` contextmanager, `LeaseHandle`, `LeaseNotAcquired`. Imported by `runner.py` and `answers.py`. All three invariant greps → 0. WR-01 heartbeat retry + WR-02 docstring present and re-inspected. |
+| `src/dark_factory/orchestrator/answers.py` | `submit_answer` — one guarded transition out of `WAITING_HUMAN` | ✓ VERIFIED | Precheck (`RunNotFoundError` / `NotWaitingForHuman` / `NoPendingInteraction`) then one `apply_transition` inside `run_lease`; constructs no ORM row. Imported by `cli.py`. |
+| `src/dark_factory/orchestrator/lifecycle.py` | `ROLE_NEEDS_INPUT → WAITING_HUMAN` arm, role retained; `WAITING_HUMAN` illegal to leave | ✓ VERIFIED | Pure function; imports nothing from `dark_factory.persistence`. Unchanged by the fix commits. |
+| `src/dark_factory/orchestrator/runner.py` | lease-wrapped `advance`/`drive`, stop-set early return, execute-vs-resume dispatch, needs-input branch, lease-loss abort | ✓ VERIFIED | `advance`/`drive` early-return on the whole `STOP_STATUSES` set without claiming (runner.py:219, 468); `_advance_once` assumes lease held; `_run_current_role` reads persisted `_ROLE_RESUMING` marker (line 338), checks `lease.lease_lost.is_set()` after the worker call (line 348) → `raise LeaseLost`, pauses on `Signal.ROLE_NEEDS_INPUT`. Every `apply_transition` passes `expected_owner_token=lease.token` (lines 299, 431). Unchanged by the fix commits. |
+| `src/dark_factory/persistence/mutations.py` | `apply_transition` + `expected_owner_token` fence + `human_interaction` + lease clear on stop | ✓ VERIFIED | `LeaseLost`, `HumanInteractionWrite` exported. Fence raises against the already-`with_for_update`-locked `runs` row (lines 259-268). `_write_human_interaction` redacts `question`/`answer` at the single call site (lines 375, 393). Lease columns cleared when `next_status ∈ STOP_STATUSES` (lines 281-283). Unchanged by the fix commits. |
+| `src/dark_factory/persistence/repositories.py` | `LatestExecution.result`, `RunState.pending_answer`, `pending_question` | ✓ VERIFIED | Bound-parameterised select for the `ANSWERED` interaction bound to the latest attempt; `run_events` never queried on this path. |
 | `src/dark_factory/persistence/models.py` | `HumanInteraction` ORM, `_INTERACTION_STATUS`, `Run.owner_token` / `Run.lock_expires_at` | ✓ VERIFIED | 8-column table + partial unique index; two nullable lease columns, no server default. `_INTERACTION_STATUS` built `native_enum=False, create_constraint=True`. |
-| `migrations/versions/0003_pause_resume_lease.py` | Alembic revision, reversible | ✓ VERIFIED | `down_revision = "0002_role_exec_uniqueness"`, id ≤ 32 chars; `upgrade()` creates table + both indexes + two `runs` columns; `downgrade()` mirrors. `migrations/env.py` `_OWNED_TABLES` gains `human_interactions`. Executor-recorded `alembic check` clean + down/up round trip. |
-| `src/dark_factory/config/settings.py` | `lease_ttl_seconds` (900) / `lease_heartbeat_seconds` (300) + coherence validator | ✓ VERIFIED | Plain ints; `@model_validator(mode="after") _lease_intervals_are_coherent` rejects non-positive TTL and `heartbeat >= TTL` naming both fields; neither enters `known_secret_values()`. Unit tier re-run here: passes. |
-| `src/dark_factory/cli.py` | `resume --answer`; exit 0 for `COMPLETED`/`WAITING_HUMAN`; exit 0 + notice on lost race | ✓ VERIFIED | `_CLEAN_FINALS = (COMPLETED, WAITING_HUMAN)`; `LeaseNotAcquired` caught before `_ORCHESTRATION_ERRORS` → exit 0 with stderr notice. See WR-03 below for the `LookupError`/`ValueError` gap. |
-| `tests/integration/test_phase2_acceptance.py` | acceptance gate: 5 SC + 6 req mapped to named proofs, fails-not-skips | ✓ VERIFIED | 230 lines, 6 test fns, 0 `pytest.skip`. All 12 mapped proof files confirmed present, non-empty, containing `def test_`. Drift-guard against `02-VALIDATION.md`'s per-requirement map. Marked `integration` so it needs a DB to *run*, but its assertions are pure file-existence — statically confirmed here. |
-| `.env.example` / `README.md` | lease knobs documented; pause/resume walkthrough; 5-outcome exit-code table | ✓ VERIFIED | `.env.example` carries `LEASE_TTL_SECONDS=900` / `LEASE_HEARTBEAT_SECONDS=300` with unit + consequence comments. `README.md` §"Pause a run for a human, then resume it (Phase 2)" + exit-code table with both new zero cases + "What Phase 2 deliberately does not do". |
+| `migrations/versions/0003_pause_resume_lease.py` | Alembic revision, reversible | ✓ VERIFIED | `down_revision = "0002_role_exec_uniqueness"`; `upgrade()` creates table + both indexes + two `runs` columns; `downgrade()` mirrors. `migrations/env.py` `_OWNED_TABLES` includes `human_interactions`. Executor-recorded `alembic check` clean + down/up round trip. |
+| `src/dark_factory/config/settings.py` | `lease_ttl_seconds` (900) / `lease_heartbeat_seconds` (300) + coherence validator | ✓ VERIFIED | Plain ints; `@model_validator(mode="after")` rejects non-positive TTL and `heartbeat >= TTL` naming both fields; neither enters `known_secret_values()`. `tests/unit/test_settings.py` re-run here: passes (defaults 900/300 asserted; equal-to-TTL and greater-than-TTL both rejected naming `lease_heartbeat_seconds`). |
+| `src/dark_factory/cli.py` | `resume --answer`; exit 0 for `COMPLETED`/`WAITING_HUMAN`; exit 0 + notice on lost race | ✓ VERIFIED | `_CLEAN_FINALS = (COMPLETED, WAITING_HUMAN)`; `LeaseNotAcquired` caught before `_ORCHESTRATION_ERRORS` in both `_drive_and_exit` and the `--answer` branch → exit 0 with stderr notice. **WR-03 fix present:** `_ORCHESTRATION_ERRORS` now includes `LookupError, ValueError` (lines 81-82) with an explanatory comment. |
+| `tests/integration/test_phase2_acceptance.py` | acceptance gate: 5 SC + 6 req mapped to named proofs, fails-not-skips | ✓ VERIFIED | `grep -c 'pytest.skip'` → 0. All 12 mapped proof files confirmed present + non-empty on disk this session. Marked `integration` so it needs a DB to *run*, but its assertions are pure file-existence — statically confirmed here. |
+| `.env.example` / `README.md` | lease knobs documented; pause/resume walkthrough; 3-way exit-code contract | ✓ VERIFIED | `.env.example` carries `LEASE_TTL_SECONDS=900` / `LEASE_HEARTBEAT_SECONDS=300` with unit + consequence comments. `README.md` pause/resume section + exit-code table with both new zero cases; operator UAT item 1 followed it verbatim against real Neon with no guessed step. |
 
 ## Key Link Verification
 
 | From | To | Via | Status |
 | ---- | -- | --- | ------ |
-| `runner.advance`/`drive` | `orchestrator/lease.run_lease` | `with run_lease(run_id, ...) as lease:` wraps the whole loop / single step | ✓ WIRED |
-| `runner._run_current_role` | `persistence/mutations.apply_transition` | pause branch passes `human_interaction=HumanInteractionWrite(mode="ask")` + `expected_owner_token=lease.token` into one call | ✓ WIRED |
-| `orchestrator/answers.submit_answer` | `persistence/mutations.apply_transition` | exactly one guarded call, `human_interaction=HumanInteractionWrite(mode="answer")`, no direct ORM writes | ✓ WIRED |
-| `runner._run_current_role` | `persistence/repositories.load_run_state` | execute-vs-resume read from `latest.status == "RESUMING"` (persisted column, never in-memory) | ✓ WIRED |
-| `cli.resume --answer` | `orchestrator/answers.submit_answer` | called before the drive loop; command holds no lifecycle logic | ✓ WIRED |
-| `mutations.apply_transition` | `runs.owner_token` (already-locked row) | `LeaseLost` if `expected_owner_token != run.owner_token` — free fence, no second select | ✓ WIRED |
-| `mutations.apply_transition` | `runs.owner_token`/`lock_expires_at` | cleared to NULL when `next_status ∈ STOP_STATUSES` — atomic with the state change | ✓ WIRED |
+| `runner.advance`/`drive` | `orchestrator/lease.run_lease` | `with run_lease(run_id, session_factory=...) as lease:` wraps the loop / single step (runner.py:222, 471) | ✓ WIRED |
+| `runner._run_current_role` | `persistence/mutations.apply_transition` | pause branch passes `human_interaction=HumanInteractionWrite(mode="ask")` + `expected_owner_token=lease.token` into one call (runner.py:413-431) | ✓ WIRED |
+| `orchestrator/answers.submit_answer` | `persistence/mutations.apply_transition` | exactly one guarded call inside `run_lease`, `human_interaction=HumanInteractionWrite(mode="answer")`, no direct ORM writes (answers.py:99-144) | ✓ WIRED |
+| `runner._run_current_role` | persisted `role_executions.status` | execute-vs-resume read from `latest.status == _ROLE_RESUMING` (runner.py:338), never in-memory | ✓ WIRED |
+| `cli.resume --answer` | `orchestrator/answers.submit_answer` | called before the drive loop (cli.py:198-205); command holds no lifecycle logic | ✓ WIRED |
+| `mutations.apply_transition` | `runs.owner_token` (already-locked row) | `LeaseLost` if `expected_owner_token != run.owner_token` — free fence, no second select (mutations.py:266-268) | ✓ WIRED |
+| `mutations.apply_transition` | `runs.owner_token`/`lock_expires_at` | cleared to NULL when `next_status ∈ STOP_STATUSES` — atomic with the state change (mutations.py:281-283) | ✓ WIRED |
+| `cli._ORCHESTRATION_ERRORS` | `mutations.apply_transition` bare `LookupError`/`ValueError` | WR-03: both types now in the tuple → `_report_orchestration_error` → exit 2 instead of Typer default exit 1 | ✓ WIRED |
 
 ## Data-Flow Trace
 
 | Value | Source | Status |
 | ----- | ------ | ------ |
-| `human_interactions.question` | `"\n".join(result.questions)` from the worker's `NEEDS_INPUT` result → `redact()` → INSERT in `_write_human_interaction` | ✓ FLOWING |
-| `human_interactions.answer` | `--answer` argv → `submit_answer` → `HumanInteractionWrite(mode="answer")` → `redact()` → UPDATE of the run's single `WAITING` row located inside the txn | ✓ FLOWING |
+| `human_interactions.question` | worker `NEEDS_INPUT` result → `HumanInteractionWrite(mode="ask")` → `redact()` → INSERT in `_write_human_interaction` | ✓ FLOWING |
+| `human_interactions.answer` | `--answer` argv → `submit_answer` → `HumanInteractionWrite(mode="answer")` → `redact()` → UPDATE of the run's single `WAITING` row located inside the txn with `.with_for_update()` | ✓ FLOWING |
 | `RunState.pending_answer` | `SELECT answer FROM human_interactions WHERE role_execution_id = latest.id AND status = 'ANSWERED'` | ✓ FLOWING |
 | resume dispatch decision | `role_executions.status == 'RESUMING'` (persisted) | ✓ FLOWING |
-| `lock_expires_at` | `func.now() + timedelta(seconds=ttl)` — server clock, both write and compare | ✓ FLOWING |
+| `lock_expires_at` | `func.now() + timedelta(seconds=ttl)` — server clock, both write and compare, including every WR-01 retry iteration | ✓ FLOWING |
 
 ## Behavioural Spot-Checks
 
 | Behaviour | Command | Result | Status |
 | --------- | ------- | ------ | ------ |
-| unit + contract tier | `uv run pytest -q -m "unit or contract"` | 200 passed, 164 deselected (0.43 s) | ✓ PASS |
-| strict typing | `uv run mypy src/dark_factory` | Success: no issues in 39 files | ✓ PASS |
-| lint | `uv run ruff check src tests migrations` | All checks passed | ✓ PASS |
-| lease.py — no process clock | `grep -c 'datetime\.now\|datetime\.utcnow'` (comments stripped) | 0 | ✓ PASS |
-| lease.py — no second coordination primitive | `grep -c 'pg_advisory\|SKIP LOCKED\|skip_locked'` | 0 | ✓ PASS |
-| lease.py — no liveness probe | `grep -c 'pg_stat_activity\|os.getpid\|psutil'` | 0 | ✓ PASS |
+| unit tier | `uv run pytest -q -m unit` | 193 passed, 171 deselected (0.42 s) | ✓ PASS |
+| strict typing | `uv run mypy src/dark_factory` | Success: no issues in 39 source files | ✓ PASS |
+| lint | `uv run ruff check src/dark_factory` | All checks passed | ✓ PASS |
+| WR-01 present | read `lease.py:231-263` | `consecutive_errors` counter + `lease.renew_error` log + threshold `consecutive_errors * interval >= ttl - interval`; authoritative "matched no row" path unchanged | ✓ PASS |
+| WR-02 present | read `lease.py:35-49` | "What the lease guarantees — and what it does not" paragraph present | ✓ PASS |
+| WR-03 present | `grep -n 'LookupError\|ValueError' cli.py` | both in `_ORCHESTRATION_ERRORS` (lines 81-82) with comment | ✓ PASS |
+| debt markers in changed src | `grep -nE 'TODO\|FIXME\|XXX\|HACK\|PLACEHOLDER\|not implemented' lease.py cli.py` | none | ✓ PASS |
 | acceptance gate — no skip | `grep -c 'pytest.skip' tests/integration/test_phase2_acceptance.py` | 0 | ✓ PASS |
-| all 12 mapped proof files present + non-empty + contain `def test_` | filesystem check | 12/12 | ✓ PASS |
-| debt markers in phase source | `grep -nE 'TODO\|FIXME\|XXX\|HACK\|PLACEHOLDER\|not implemented'` over 14 impl files + migration | none | ✓ PASS |
-| db / integration tiers | — | not runnable (no PostgreSQL reachable) | ? SKIP → human_needed |
+| all 12 mapped proof files present + non-empty | filesystem check | 12/12 | ✓ PASS |
+| db / integration tiers (incl. post-WR-01 heartbeat/reclaim proofs) | — | not runnable (no PostgreSQL reachable) | ? SKIP → human_needed |
 
 ## Probe Execution
 
 No project probes (`scripts/*/tests/probe-*.sh`) exist; this is not a
 migration/tooling phase in the probe sense. The phase's own acceptance mechanism
-is `tests/integration/test_phase2_acceptance.py` (assessed above under Required
-Artifacts and Behavioural Spot-Checks).
+is `tests/integration/test_phase2_acceptance.py` (assessed above).
 
 ## Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| — | — | — | — | None. No debt markers, no stub returns, no hardcoded empty data feeding a rendered value, no disabled tests linked to a requirement. |
+| — | — | — | — | None. No debt markers in the changed files, no stub returns, no hardcoded empty data feeding a rendered value, no disabled tests linked to a requirement. |
 
-## Code-Review Findings Carried From 02-REVIEW.md (assessed against Phase 2 SCs + invariants)
+## Code-Review Findings (02-REVIEW.md → 02-REVIEW-FIX.md, re-assessed)
 
-| ID | Finding | Undermines a SC / invariant? | Disposition |
-| -- | ------- | ---------------------------- | ----------- |
-| WR-01 | `_heartbeat` treats any `renew_lease` exception (transient dropped connection / Neon cold start) as a permanent lease loss with no retry, so a one-off blip makes an otherwise-successful long step exit 2. | No. SC5 concerns *not being falsely stolen by a competitor*; the invariants require DB-clock expiry and no held transaction — all hold. This is an availability/robustness gap on the owner's own connection. | ⚠️ WARNING — flagged for Phase 7 (real agent runtimes). Does not block the phase goal. Recommend the bounded-retry fix in 02-REVIEW.md before credentialled workers land. |
-| WR-02 | The worker call is not bounded by lease validity; a *stalled* owner (SIGSTOP / GC / VM pause) past its full TTL could let a second process run the same role's worker concurrently. Durable state stays single-owner (the `expected_owner_token` fence rejects the stale commit, proven by `test_lease_lost_aborts_step.py`). | Partially — the HITL-07 wording "two processes cannot *execute* the same run simultaneously" is violated for that pathological window, though "no concurrent *durable mutation*" holds. Benign for Phase 2 (`FakeWorker` has no side effects). | ⚠️ WARNING — 02-REVIEW.md itself says "No change required for Phase 2; record the limitation." Recommend adding the "no concurrent durable mutation, not no concurrent execution" note to the lease module docstring, and addressing (subprocess-group kill on loss, or pre-side-effect lease re-verification) before Phase 7. |
-| WR-03 | Bare `LookupError` / `ValueError` from `apply_transition` and its helpers are not in `_ORCHESTRATION_ERRORS`, so they escape as Typer's default exit 1 (the code D-05 reserves for a persisted FAILED) instead of exit 2. Triggers are narrow (a row vanishes mid-operation / internal inconsistency). | No. The SC-relevant exit codes (clean pause = 0, declined race = 0) are handled correctly. | ⚠️ WARNING — small D-05 exit-code contract gap. Recommend adding `LookupError, ValueError` to `_ORCHESTRATION_ERRORS` (one-line fix in 02-REVIEW.md). |
+| ID | Finding | Fix commit | Re-verified in current tree | Undermines a SC / invariant? |
+| -- | ------- | ---------- | -------------------------- | ---------------------------- |
+| WR-01 | A single transient heartbeat-renewal error aborted an in-flight step with no retry. | e9a231a | ✓ `lease.py:231-263` — transient exception now retried within the TTL budget; authoritative "matched no row" still an immediate loss; `hb_session.close()` in `finally` on every path; stop path untouched. | No. Makes the owner's self-abort more tolerant of blips; does not touch the successful-renewal path, cannot extend the lease, cannot cause a false steal, cannot make the heartbeat outlive its owner. SC5 and the "no hostage heartbeat" prohibition still hold on inspection. **The new branch is not exercised by any executed test — see Human Verification.** |
+| WR-02 | Worker call not bounded by lease validity; a stalled owner past TTL could run its worker concurrently with a second process (durable state still single-owner via the fence). | 3617bb3 | ✓ `lease.py:35-49` — docstring now states "no concurrent durable mutation, not no concurrent execution", names the Phase-7 mitigations. | Documentation only. The HITL-07 nuance is now recorded, not silently assumed. Benign for `FakeWorker`. Mitigation correctly deferred to Phase 7. |
+| WR-03 | Bare `LookupError`/`ValueError` from `apply_transition` escaped as Typer exit 1 instead of the D-05 exit-2 "nothing persisted" code. | 19f4ccb | ✓ `cli.py:81-82` — both types added to `_ORCHESTRATION_ERRORS` with a comment; covered by the 193 passing unit tests. | No. Tightens the D-05 exit-code contract on the exact path SC1/SC2 exercise; the SC-relevant codes (clean pause = 0, declined race = 0) were already correct. |
 
-## Observations (non-blocking)
+## Prior Human Verification Items — all resolved by 02-UAT.md (commit a8beb21)
 
-- **`02-VALIDATION.md` frontmatter is stale**: `status: draft`, `nyquist_compliant: false`, `wave_0_complete: false`. The document was seeded by plan-phase and never advanced to `validated` by `/gsd-validate-phase`. The *substance* it specifies (the per-requirement test map) is fully delivered and is enforced by `tests/integration/test_phase2_acceptance.py`'s drift-guard, so this is a process-hygiene gap, not a coverage gap. Recommend running `/gsd-validate-phase` to reconcile the frontmatter, or note the phase was validated ad hoc.
-- **Split commit authorship** on plans 02-04 and 02-07 (rate-limit interruptions, closed out by continuation executors). The pre-existing task commits (`3e46670`, `dc18ef4`, `ca0b3e1`, `3cfc4ec`) were confirmed present in history and sound; not a correctness concern.
-- **`deferred-items.md`** records two out-of-scope discoveries correctly bounded to later phases: multi-node `role_executions` row reuse → Phase 3 (config-driven pipeline); `ruff format` on planning-doc code fences → non-source, resolved via `[tool.ruff] extend-exclude`.
+| # | Prior item | UAT result |
+| - | ---------- | ---------- |
+| 1 | Fresh-eyes README pause/resume walkthrough against a real Neon endpoint | **PASS** — operator ran README steps 1-3 verbatim against real Neon: pause → `BA → WAITING_HUMAN` exit 0; `status` showed `WAITING_HUMAN` / `current_role: BA`; `resume --answer` → `run.resumed` stderr line + `BA → COMPLETED` exit 0; output matched the README examples step for step. |
+| 2 | Production-scale lease timing (900 s TTL / 300 s heartbeat) against a real Neon PgBouncer endpoint | **PASS** — pre-expiry claim declined, post-expiry claim succeeded, `lock_expires_at` advanced during a slow step — matching the short-injected-TTL integration proofs. |
+| 3 | Confirm the 900 s / 300 s production defaults are acceptable (~15-min dead-owner reclaim ceiling, no force-steal) | **PASS** — operator accepts the ceiling and the absence of a force-steal escape hatch in this phase; the defaults stand. |
+| 4 | Accept (or re-run against PostgreSQL 17) the db/integration proof tiers, which executed against PostgreSQL 18.6 | **PASS** — operator accepts the PostgreSQL 18.6 vs `postgres:17-alpine` pin as an approved environmental deviation carried since 01-01. |
 
 ## Human Verification Required
 
-Automated criteria hold on static inspection + the acceptance gate + the
-`unit`/`contract` tier + `mypy`/`ruff` + executor-recorded `db`/`integration`
-runs. The following need human confirmation (routed to `/gsd-verify-work`):
+One item remains — **new since the prior report**, arising from the WR-01 heartbeat
+change (commit e9a231a) landing after the last recorded green DB run:
 
-1. **Fresh-eyes README pause/resume walkthrough against real Neon** — legibility judgment; a stranger follows the README literally and pauses+resumes a run with no guessed steps, and the exit-code table makes clean-pause / declined-race unmistakably successes.
-2. **Production-scale lease timing (900 s TTL / 300 s heartbeat) against a real Neon PgBouncer endpoint** — kill the owner, confirm no early steal before `lock_expires_at`, then a reclaim after; run a slow step and watch `lock_expires_at` advance. The mechanism is proven at 6 s/2 s (same TTL/3 ratio); production-scale timing is an operator smoke check.
-3. **Confirm the 900 s/300 s defaults are acceptable** (up-to-~15-min dead-owner reclaim delay, no force-steal in this phase) — a one-line `Settings` edit if not.
-4. **Accept the PostgreSQL 18.6 (not 17) test environment** — operator-approved deviation carried since 01-01; no PostgreSQL was reachable here so the `db`/`integration` tiers were not re-executed by the verifier.
+### 1. Re-run the lease heartbeat / reclaim proof tiers against a real PostgreSQL, post-WR-01
+
+**Test:** With a real PostgreSQL endpoint configured (`DARK_FACTORY_TEST_DATABASE_URL`
+or Docker), run:
+`uv run pytest -q tests/integration/test_heartbeat_slow_step.py tests/integration/test_lease_expiry_reclaim.py tests/db/test_lease_lost_aborts_step.py`
+and ideally the full `db`/`integration` tiers.
+
+**Expected:** All pass. Specifically confirm: (a) a genuine lease loss
+(`renew_lease` matches no row) still sets `lease_lost` immediately and the owner
+still aborts before its `apply_transition` commit; (b) the WR-01
+`consecutive_errors` retry on a *transient* renewal exception does not push an
+owner's effective ownership past its own last-good `lock_expires_at` such that a
+competitor false-steals mid-step (SC5); (c) `test_lease_expiry_reclaim.py`'s
+killed-owner reclaim timing (SC4) is unaffected by the retry budget.
+
+**Why human:** The WR-01 fix adds new heartbeat control flow (a `consecutive_errors`
+threshold governing transient-vs-authoritative loss and its interaction with
+`lease_ttl_seconds` reclaim timing). No executed test in this session exercises
+the transient-exception branch — the existing DB heartbeat proofs cover only the
+happy renewal path and the authoritative-loss path, both unchanged by the fix —
+and no PostgreSQL was reachable here. 02-REVIEW-FIX.md itself states these tiers
+"must be run against a real PostgreSQL 17 to fully verify WR-01 and WR-03" and
+recommends doing so "before the phase proceeds". Static analysis shows the change
+cannot cause a false steal or a hostage heartbeat, so SC4/SC5 as written hold;
+this check confirms the new branch against a database rather than by inspection
+alone.
+
+## Observations (non-blocking)
+
+- **`02-VALIDATION.md` frontmatter remains stale** (`status: draft`,
+  `nyquist_compliant: false`). The substance (the per-requirement test map) is
+  fully delivered and drift-guarded by `tests/integration/test_phase2_acceptance.py`.
+  Process-hygiene only.
+- **`deferred-items.md`** records two out-of-scope discoveries correctly bounded to
+  later phases (multi-node `role_executions` row reuse → Phase 3; `ruff format` on
+  planning-doc code fences → resolved via `[tool.ruff] extend-exclude`).
+- **IN-01…IN-06 from 02-REVIEW.md** are Info-level and out of fix scope; none
+  falsifies a Phase 2 SC or invariant. IN-02 (`migrations/env.py` pooled-URL
+  fallback) and IN-03 (inert `workflow` snapshot) are worth carrying into Phase 3.
+- **ROADMAP marks Phase 2 `Mode: mvp`** but the phase goal is a plain
+  goal-with-success-criteria statement, not an "As a … I want … so that …" user
+  story. Consistent with the prior verification, this report verifies against the
+  five explicit ROADMAP success criteria as observable truths rather than
+  invoking MVP user-flow-coverage handling.
 
 ## Gaps Summary
 
 No gaps block the phase goal. Every success criterion has a substantive,
-correctly-asserting proof file, mapped and existence-enforced by the acceptance
-gate; every phase invariant holds under static inspection and independent code
-review; all six requirement ids are covered and marked Complete. The three
-02-REVIEW.md Warnings are robustness / contract-consistency items that do not
-falsify a Phase 2 success criterion or invariant and are appropriately
-Phase-7-scoped. The phase is `human_needed` (not `passed`) solely because the
-`db`/`integration` behavioural proofs could not be re-executed in the
-verification environment and four genuinely human-observable confirmations
-remain outstanding.
+correctly-asserting proof file mapped and existence-enforced by the acceptance
+gate; every phase invariant holds under static inspection of the post-fix tree
+and independent code review; all six requirement ids are covered and marked
+Complete. The three 02-REVIEW.md Warnings are all fixed and re-inspected in the
+current source, and the four prior human items are all resolved PASS in
+02-UAT.md.
+
+The phase is `human_needed` (not `passed`) for one reason only: the WR-01
+heartbeat change (commit e9a231a) landed after the last recorded green
+`db`/`integration` run, its new transient-error retry branch is not exercised by
+any test that could run in this environment (no PostgreSQL reachable), and the
+code-fixer explicitly recommended a real-PostgreSQL run of the lease proof tiers
+before the phase proceeds. This is a low-risk confirmation — static analysis
+shows the change cannot regress SC4 or SC5 — but it is a genuine unexercised
+behavioural path on the lease-reclaim timing interaction, which is exactly what a
+human checkpoint is for.
 
 ---
 
 _Verified: 2026-09-10_
 _Verifier: Claude (gsd-verifier)_
+_Re-verification: after commits e9a231a / 3617bb3 / 19f4ccb and 02-UAT.md (a8beb21)_
