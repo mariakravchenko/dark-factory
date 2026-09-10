@@ -32,6 +32,7 @@ from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import advance, run_state, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -123,7 +124,9 @@ def _drive_with_shared_engine(
     engine = _fresh_engine(pg_url)
     try:
         session_factory = _factory_for(engine)
-        run_id = start_run(_SOURCE, session_factory=session_factory)
+        run_id = start_run(
+            _SOURCE, session_factory=session_factory, snapshot=DEFAULT_TEST_SNAPSHOT
+        )
         state = run_state(run_id, session_factory=session_factory)
         assert state is not None
         status = state.status
@@ -147,7 +150,11 @@ def _drive_with_a_fresh_engine_per_step(
 ) -> tuple[Any, RunStatus, int, dict[str, Any], list[str]]:
     engine = _fresh_engine(pg_url)
     try:
-        run_id = start_run(_SOURCE, session_factory=_factory_for(engine))
+        run_id = start_run(
+            _SOURCE,
+            session_factory=_factory_for(engine),
+            snapshot=DEFAULT_TEST_SNAPSHOT,
+        )
         state = run_state(run_id, session_factory=_factory_for(engine))
         assert state is not None
         status = state.status

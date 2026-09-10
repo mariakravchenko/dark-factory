@@ -32,6 +32,7 @@ from dark_factory.events.redaction import redact
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -56,7 +57,11 @@ _EXPECTED_FIELDS = {
 def _completed_run(
     session_factory: SessionFactory, registry_builder: RegistryBuilder
 ) -> uuid.UUID:
-    run_id = start_run("text:where is this run", session_factory=session_factory)
+    run_id = start_run(
+        "text:where is this run",
+        session_factory=session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     registry = registry_builder(
         [
             WorkerResult(
@@ -119,7 +124,9 @@ def test_run_with_no_role_execution_yet_reports_null_role_and_attempt(
     advance_session_factory: SessionFactory,
 ) -> None:
     run_id = start_run(
-        "text:just created, never advanced", session_factory=advance_session_factory
+        "text:just created, never advanced",
+        session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
 
     view = read_status(run_id, session_factory=advance_session_factory)

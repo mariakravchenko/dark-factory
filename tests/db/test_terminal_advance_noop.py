@@ -30,6 +30,7 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import advance, drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = pytest.mark.db
 
@@ -87,7 +88,9 @@ def test_advance_on_terminal_run_writes_nothing_and_returns_the_same_status(
     use_fake_secrets: object,
 ) -> None:
     run_id = start_run(
-        "text:take me to a terminal state", session_factory=advance_session_factory
+        "text:take me to a terminal state",
+        session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     registry = fake_worker_registry([_SCRIPTS[terminal]])
     assert (
@@ -111,7 +114,9 @@ def test_repeated_advance_on_a_completed_run_adds_no_events(
     use_fake_secrets: object,
 ) -> None:
     run_id = start_run(
-        "text:finish then poke it again", session_factory=advance_session_factory
+        "text:finish then poke it again",
+        session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     registry = fake_worker_registry([_SCRIPTS[RunStatus.COMPLETED]])
     assert (
@@ -155,7 +160,11 @@ _NEEDS_INPUT = WorkerResult(
 def _pause_a_run(
     session_factory: SessionFactory, registry_builder: RegistryBuilder
 ) -> Any:
-    run_id = start_run("text:pause on a question", session_factory=session_factory)
+    run_id = start_run(
+        "text:pause on a question",
+        session_factory=session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     pausing_registry = registry_builder([_NEEDS_INPUT])
     assert (
         drive(run_id, session_factory=session_factory, registry=pausing_registry)
@@ -190,7 +199,9 @@ def test_drive_that_reaches_waiting_stops_there_rather_than_looping(
     use_fake_secrets: object,
 ) -> None:
     run_id = start_run(
-        "text:reach waiting and stop", session_factory=advance_session_factory
+        "text:reach waiting and stop",
+        session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     # Script has a COMPLETED after the NEEDS_INPUT: drive must NOT consume it.
     registry = fake_worker_registry(

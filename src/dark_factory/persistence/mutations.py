@@ -158,6 +158,15 @@ def create_run(
     connection-string syntax persists as written); the ``workflow`` snapshot and
     the ``RUN_CREATED`` payload get full pattern redaction like every other JSONB
     write in this module — no JSONB value reaches Neon without passing ``redact()``.
+
+    Since Phase 3 (03-03) ``workflow`` carries the full effective-config snapshot
+    resolved by ``load_effective_config`` at run creation — ordered ``roles`` with
+    their resolved ``worker`` / inlined ``instruction_text`` / ``before`` / ``after``
+    / ``tools`` / ``permissions``, plus ``repository`` / ``quality_gate`` / ``retry``
+    / ``publishing`` — not just ``{"roles": [...]}``. It is still redacted at this
+    one call site, and it is the sole configuration source for every later resume
+    (``pipeline_from_snapshot`` rebuilds the pipeline from it; no config file is
+    re-read).
     """
     known = _known_secrets()
     run_id = uuid4()

@@ -50,6 +50,7 @@ from dark_factory.persistence.mutations import (
     apply_transition,
 )
 from dark_factory.workflows.pipeline import DEFAULT_PIPELINE
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -162,7 +163,11 @@ def _clear_lease(factory: SessionFactory, run_id: UUID) -> None:
 def _run_at_ba(factory: SessionFactory, cleanup: list[Any], registry: Any) -> UUID:
     """A committed run parked at BA with one RUNNING role-execution row and the
     lease released (``advance`` claims and releases per call)."""
-    run_id = start_run("text:lease lost mid step", session_factory=factory)
+    run_id = start_run(
+        "text:lease lost mid step",
+        session_factory=factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup.append(run_id)
     assert advance(run_id, session_factory=factory, registry=registry) is RunStatus.BA
     return run_id

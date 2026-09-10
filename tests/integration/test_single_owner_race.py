@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 
 from dark_factory.orchestrator.runner import start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 from tests.support.subprocess_runner import (
     child_env,
     popen,
@@ -174,7 +175,11 @@ def test_a_tight_race_from_creation_still_yields_one_execution(
     def _factory() -> Session:
         return Session(bind=engine, expire_on_commit=False)
 
-    run_id = start_run("text:tight race with no slow step", session_factory=_factory)
+    run_id = start_run(
+        "text:tight race with no slow step",
+        session_factory=_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     runs_before = _count_runs(engine)
 
     a = popen(["resume", str(run_id)], child_env(pg_url))

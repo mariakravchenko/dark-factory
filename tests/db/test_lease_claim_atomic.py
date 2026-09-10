@@ -44,6 +44,7 @@ from dark_factory.persistence.models import (
     Run,
     RunEvent,
 )
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -113,7 +114,11 @@ def _claim_from_n_threads(
 def test_sixteen_concurrent_claims_on_one_unowned_run_yield_exactly_one_token(
     real_session_factory: SessionFactory, cleanup_runs: list[Any]
 ) -> None:
-    run_id = start_run("text:only one owner", session_factory=real_session_factory)
+    run_id = start_run(
+        "text:only one owner",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup_runs.append(run_id)
 
     tokens = _claim_from_n_threads(real_session_factory, run_id)
@@ -135,7 +140,9 @@ def test_a_forced_expired_run_is_reclaimed_by_exactly_one_new_owner(
     force_lease_expiry: Callable[[uuid.UUID], None],
 ) -> None:
     run_id = start_run(
-        "text:expired then reclaimed once", session_factory=real_session_factory
+        "text:expired then reclaimed once",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     cleanup_runs.append(run_id)
 
@@ -160,7 +167,11 @@ def test_a_terminal_run_is_claimable_by_nobody_even_while_unowned(
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
 ) -> None:
-    run_id = start_run("text:this run completes", session_factory=real_session_factory)
+    run_id = start_run(
+        "text:this run completes",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup_runs.append(run_id)
 
     registry = fake_worker_registry(
@@ -188,7 +199,11 @@ def test_a_terminal_run_is_claimable_by_nobody_even_while_unowned(
 def test_renewal_moves_the_lease_only_for_the_owning_token(
     real_session_factory: SessionFactory, cleanup_runs: list[Any]
 ) -> None:
-    run_id = start_run("text:renew fencing", session_factory=real_session_factory)
+    run_id = start_run(
+        "text:renew fencing",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup_runs.append(run_id)
 
     with real_session_factory() as session:
@@ -230,7 +245,11 @@ def test_renewal_moves_the_lease_only_for_the_owning_token(
 def test_release_clears_the_lease_only_for_the_owning_token_then_a_fresh_claim_wins(
     real_session_factory: SessionFactory, cleanup_runs: list[Any]
 ) -> None:
-    run_id = start_run("text:release fencing", session_factory=real_session_factory)
+    run_id = start_run(
+        "text:release fencing",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup_runs.append(run_id)
 
     with real_session_factory() as session:

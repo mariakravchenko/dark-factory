@@ -43,6 +43,7 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 from tests.support.log_sink import real_log_sink
 
 pytestmark = pytest.mark.integration
@@ -180,7 +181,11 @@ def seeded_run(
     )
 
     with real_log_sink() as buffer:
-        run_id = start_run(_TASK_SOURCE, session_factory=advance_session_factory)
+        run_id = start_run(
+            _TASK_SOURCE,
+            session_factory=advance_session_factory,
+            snapshot=DEFAULT_TEST_SNAPSHOT,
+        )
         final = drive(
             run_id,
             session_factory=advance_session_factory,

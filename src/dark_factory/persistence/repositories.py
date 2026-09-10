@@ -75,6 +75,13 @@ class RunState(BaseModel):
     Frozen and fully detached: built from scalar column values, never by stashing
     ORM instances, so closing the session that produced it cannot turn a later
     attribute read into a lazy-load against a dead connection.
+
+    ``workflow`` is the ``runs.workflow`` JSONB column verbatim. Since Phase 3
+    (03-03) it has a dual role: it is both the pipeline shape *and* the full
+    effective-config snapshot resolved at run creation. The resume path builds
+    the pipeline from this dict (``pipeline_from_snapshot(state.workflow)``) and
+    never re-reads ``.dark-factory.yaml`` -- editing that file cannot change an
+    in-flight run.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -97,7 +104,9 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
 
     Two selects, both bound-parameterised: the ``runs`` row, then the single
     most-recent ``role_executions`` row for this run. ``run_events`` is never
-    queried (STATE-06).
+    queried (STATE-06). ``.dark-factory.yaml`` / ``.dark-factory/`` files are
+    never read here: the returned ``RunState.workflow`` is the persisted
+    effective-config snapshot and is the only configuration input on resume.
 
     "Most recent" is ``ORDER BY created_at DESC, attempt DESC, id DESC``, not
     ``attempt DESC`` alone: ``attempt`` restarts at 1 for every role, so once a

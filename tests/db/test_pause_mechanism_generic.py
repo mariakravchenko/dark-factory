@@ -54,6 +54,15 @@ _TWO_NODE_PIPELINE = Pipeline(
         RoleNode(name=_SECOND_NODE, worker="fake"),
     )
 )
+# The snapshot equivalent persisted at run creation; the drive here still injects
+# ``_TWO_NODE_PIPELINE`` explicitly into ``advance``, so this only shapes
+# ``runs.workflow``.
+_TWO_NODE_SNAPSHOT: dict[str, object] = {
+    "roles": [
+        {"name": "BA", "worker": "fake"},
+        {"name": _SECOND_NODE, "worker": "fake"},
+    ]
+}
 
 _QUESTION = "Which cluster should the health endpoint report on?"
 _SESSION_ID = "fake-generic-pause-001"
@@ -140,7 +149,7 @@ def _pause_at_node(
     run_id = start_run(
         "text:prove the pause mechanism is generic",
         session_factory=factory,
-        pipeline=_TWO_NODE_PIPELINE,
+        snapshot=_TWO_NODE_SNAPSHOT,
     )
     cleanup.append(run_id)
 

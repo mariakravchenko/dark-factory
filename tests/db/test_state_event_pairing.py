@@ -26,6 +26,7 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import advance, start_run
 from dark_factory.persistence.models import Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -75,6 +76,7 @@ def test_every_status_change_is_paired_with_at_least_one_event(
     run_id = start_run(
         "text:pair every state change with an audit row",
         session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
 
     saw_change = False
@@ -110,7 +112,9 @@ def test_a_freshly_created_run_has_exactly_its_run_created_row_and_no_orphans(
     advance_session_factory: SessionFactory,
 ) -> None:
     run_id = start_run(
-        "text:just created, never advanced", session_factory=advance_session_factory
+        "text:just created, never advanced",
+        session_factory=advance_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     session = advance_session_factory()
     try:

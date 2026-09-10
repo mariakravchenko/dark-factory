@@ -45,6 +45,7 @@ from dark_factory.persistence.models import (
     Run,
     RunEvent,
 )
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -186,7 +187,11 @@ def _run_at_ba(
     registry_builder: Callable[..., Any],
     cleanup: list[Any],
 ) -> UUID:
-    run_id = start_run("text:atomic pause proof", session_factory=factory)
+    run_id = start_run(
+        "text:atomic pause proof",
+        session_factory=factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     cleanup.append(run_id)
     status = advance(
         run_id, session_factory=factory, registry=registry_builder([_COMPLETED])

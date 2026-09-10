@@ -20,6 +20,7 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = pytest.mark.db
 
@@ -30,7 +31,11 @@ RegistryBuilder = Callable[[list[WorkerResult]], Any]
 def _drive_failing_run(
     session_factory: SessionFactory, registry_builder: RegistryBuilder
 ) -> Any:
-    run_id = start_run("text:make this fail", session_factory=session_factory)
+    run_id = start_run(
+        "text:make this fail",
+        session_factory=session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
+    )
     registry = registry_builder(
         [
             WorkerResult(

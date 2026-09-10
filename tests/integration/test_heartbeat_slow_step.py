@@ -59,6 +59,7 @@ from sqlalchemy.orm import Session
 from dark_factory.orchestrator.lease import claim_lease, run_lease
 from dark_factory.orchestrator.runner import start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 from tests.support.subprocess_runner import (
     REPO_ROOT,
     child_env,
@@ -294,7 +295,9 @@ def test_a_lease_context_whose_body_raises_releases_the_lease_immediately(
     the *default* 900 s TTL deliberately: a fresh claim can only succeed here if
     ``run_lease.__exit__`` actually released, not because a short TTL lapsed."""
     run_id = start_run(
-        "text:the lease body raises", session_factory=real_session_factory
+        "text:the lease body raises",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     cleanup_runs.append(run_id)
 

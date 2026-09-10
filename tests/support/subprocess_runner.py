@@ -92,27 +92,42 @@ def child_env(
 
 
 def spawn(
-    args: list[str], env: dict[str, str], *, timeout: int = 120
+    args: list[str],
+    env: dict[str, str],
+    *,
+    timeout: int = 120,
+    cwd: str | Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    """The blocking form: run ``python -m dark_factory <args>`` at the repo root,
-    capture output, and wait for it to exit."""
+    """The blocking form: run ``python -m dark_factory <args>``, capture output,
+    and wait for it to exit.
+
+    ``cwd`` defaults to the repo root (unchanged behaviour). Pass a temp
+    directory to point ``dark-factory run`` at a bespoke ``.dark-factory/`` tree
+    -- the config is resolved from the process's cwd (03-03 SC1 / SC4).
+    """
     return subprocess.run(
         [sys.executable, "-m", "dark_factory", *args],
         capture_output=True,
         text=True,
         env=env,
-        cwd=str(REPO_ROOT),
+        cwd=str(cwd) if cwd is not None else str(REPO_ROOT),
         timeout=timeout,
         check=False,
     )
 
 
-def popen(args: list[str], env: dict[str, str]) -> subprocess.Popen[str]:
+def popen(
+    args: list[str],
+    env: dict[str, str],
+    *,
+    cwd: str | Path | None = None,
+) -> subprocess.Popen[str]:
     """The non-blocking form: start the same argument vector with piped output and
     return the :class:`subprocess.Popen` for the caller to manage.
 
     The race and heartbeat proofs need two children genuinely overlapping in
-    time, which a blocking helper cannot express.
+    time, which a blocking helper cannot express. ``cwd`` defaults to the repo
+    root; pass a temp directory to resolve config from a bespoke tree.
     """
     return subprocess.Popen(
         [sys.executable, "-m", "dark_factory", *args],
@@ -120,7 +135,7 @@ def popen(args: list[str], env: dict[str, str]) -> subprocess.Popen[str]:
         stderr=subprocess.PIPE,
         text=True,
         env=env,
-        cwd=str(REPO_ROOT),
+        cwd=str(cwd) if cwd is not None else str(REPO_ROOT),
     )
 
 

@@ -44,6 +44,7 @@ from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.answers import submit_answer
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import HumanInteraction, RoleExecution, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 from tests.support.log_sink import real_log_sink
 
 pytestmark = pytest.mark.integration
@@ -164,6 +165,7 @@ def swept(
         run_id = start_run(
             "text:pause for a human decision",
             session_factory=advance_session_factory,
+            snapshot=DEFAULT_TEST_SNAPSHOT,
         )
         paused = drive(
             run_id,

@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import functools
 import sys
+from pathlib import Path
 from uuid import UUID
 
 import structlog
 import typer
 
+from dark_factory.config.loader import ConfigError, load_effective_config
 from dark_factory.config.settings import get_settings
 from dark_factory.domain.status import RunStatus
 from dark_factory.events.redaction import redact
@@ -157,11 +159,25 @@ def _drive_and_exit(run_id: UUID) -> None:
 
 @app.command()
 def run(source: str) -> None:
-    """Start a run from a ``text:`` / ``spec:`` / ``github:`` source and drive it."""
+    """Start a run from a ``text:`` / ``spec:`` / ``github:`` source and drive it.
+
+    The effective-config snapshot is resolved from ``.dark-factory.yaml`` under
+    the current working directory *before* the run is created; a ``ConfigError``
+    (unknown role / worker / action name, missing / oversized / escaping
+    instruction file, empty or non-mapping YAML) exits 2 with nothing on stdout
+    and no ``runs`` row. This command is the single composition point that reads
+    repo config -- the orchestrator never does (config is never re-read live on
+    resume).
+    """
     _route_logs_to_stderr()
     try:
-        run_id = start_run(source)
-    except (UnresolvableSourceError, SourceNotSupportedError) as exc:
+        snapshot = load_effective_config(Path.cwd())
+    except ConfigError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    try:
+        run_id = start_run(source, snapshot=snapshot)
+    except (UnresolvableSourceError, SourceNotSupportedError, ConfigError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc
     typer.echo(str(run_id))

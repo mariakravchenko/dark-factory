@@ -20,6 +20,14 @@ The one-role happy path is therefore **two** committed ``advance`` calls --
 result -- so there is a real committed intermediate state at ``BA`` for a later
 plan to kill at.
 
+``start_run`` requires a resolved effective-config ``snapshot`` -- the CLI is the
+composition root that reads ``.dark-factory.yaml`` (``load_effective_config``);
+this module imports nothing from ``dark_factory.config.loader``. The snapshot is
+persisted to ``runs.workflow`` at creation and is the *only* configuration source
+thereafter: ``advance`` / ``drive`` / ``_advance_once`` rebuild the pipeline from
+that column via ``pipeline_from_snapshot``, never from a live file read, so a
+config edit during a pause cannot change an in-flight run.
+
 ``DARK_FACTORY_CRASH_AFTER`` is a **test-only** environment variable, honoured by
 :func:`_maybe_crash_after` in exactly one place, that abruptly ends the process
 immediately after a named transition commits. It is inert on every ordinary run
@@ -30,7 +38,7 @@ kill a process at a precisely chosen, already-committed point.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from uuid import UUID
 
@@ -58,10 +66,10 @@ from dark_factory.persistence.mutations import (
 from dark_factory.persistence.repositories import RunState, load_run_state
 from dark_factory.workers.registry import WorkerRegistry, default_registry
 from dark_factory.workflows.pipeline import (
-    DEFAULT_PIPELINE,
     Pipeline,
     RoleNode,
     current_node,
+    pipeline_from_snapshot,
 )
 
 __all__ = [
@@ -108,11 +116,6 @@ class DriveLoopExhausted(RuntimeError):
     transition-graph bug, surfaced loudly instead of spinning."""
 
 
-def _workflow_snapshot(pipeline: Pipeline) -> dict[str, Any]:
-    """The pipeline shape persisted to ``runs.workflow`` at creation time."""
-    return {"roles": [node.name for node in pipeline.nodes]}
-
-
 def _build_context(run_id: UUID, state: RunState, node: RoleNode) -> dict[str, Any]:
     """The role context handed to ``worker.execute``.
 
@@ -157,19 +160,27 @@ def start_run(
     source: str,
     *,
     session_factory: SessionFactory = new_session,
-    pipeline: Pipeline = DEFAULT_PIPELINE,
+    snapshot: Mapping[str, Any],
 ) -> UUID:
     """Classify, load and create -- return the new run id.
 
+    ``snapshot`` is the effective-config snapshot the caller (the CLI, via
+    ``load_effective_config(Path.cwd(), ...)``) has already resolved; it is
+    persisted verbatim to ``runs.workflow`` and is the only configuration source
+    for every later resume. There is no default -- a run with no resolved config
+    is a caller error, never a silently-hardcoded pipeline. ``start_run`` imports
+    nothing from ``dark_factory.config.loader``.
+
     Raises ``UnresolvableSourceError`` / ``SourceNotSupportedError`` *before*
-    anything is persisted; the CLI turns either into exit 2. Once this returns,
-    a ``runs`` row exists and the outcome is 0 or 1.
+    anything is persisted; the CLI turns either into exit 2 (as it does the
+    ``ConfigError`` from the pre-``start_run`` config resolution). Once this
+    returns, a ``runs`` row exists and the outcome is 0 or 1.
     """
     kind, locator = classify(source)
     task = load(kind, locator)
     session = session_factory()
     try:
-        return create_run(session, task=task, workflow=_workflow_snapshot(pipeline))
+        return create_run(session, task=task, workflow=dict(snapshot))
     finally:
         session.close()
 
@@ -196,7 +207,7 @@ def advance(
     *,
     session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
-    pipeline: Pipeline = DEFAULT_PIPELINE,
+    pipeline: Pipeline | None = None,
 ) -> RunStatus:
     """Reconstruct from Neon, execute exactly one committed step under the lease,
     return the new status.
@@ -207,6 +218,11 @@ def advance(
     ``WAITING_HUMAN``. Otherwise the lease is claimed for this single step and
     released when it returns; ``LeaseNotAcquired`` propagates unchanged when
     another process owns the run.
+
+    ``pipeline`` defaults to ``None``: the pipeline is then rebuilt from the
+    run's persisted snapshot (``pipeline_from_snapshot(state.workflow)``) inside
+    ``_advance_once``, so resume never re-reads a config file. Tests inject an
+    explicit ``Pipeline`` through this keyword-only seam.
     """
     read_session = session_factory()
     try:
@@ -234,12 +250,18 @@ def _advance_once(
     *,
     session_factory: SessionFactory,
     registry: WorkerRegistry,
-    pipeline: Pipeline,
+    pipeline: Pipeline | None,
     lease: LeaseHandle,
 ) -> RunStatus:
     """One reconstruct-and-commit step. **Assumes the lease is already held** and
     never claims it -- ``drive`` claims once for the whole loop, ``advance``
     claims once for its single call. Returns the new status.
+
+    When ``pipeline`` is ``None`` (the production path) it is built here from
+    ``state.workflow`` -- the effective-config snapshot persisted at run creation
+    -- via ``pipeline_from_snapshot``. The snapshot is the sole configuration
+    source on resume; no ``.dark-factory.yaml`` / ``.dark-factory/`` file is read.
+    A test may pass an explicit ``Pipeline`` to bypass the snapshot.
     """
     read_session = session_factory()
     try:
@@ -251,6 +273,9 @@ def _advance_once(
         raise RunNotFoundError(run_id)
     if state.status in STOP_STATUSES:
         return state.status
+
+    if pipeline is None:
+        pipeline = pipeline_from_snapshot(state.workflow)
 
     attempt = state.latest_execution.attempt if state.latest_execution else None
     bind_contextvars(run_id=str(run_id), role=state.current_role, attempt=attempt)
@@ -443,7 +468,7 @@ def drive(
     *,
     session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
-    pipeline: Pipeline = DEFAULT_PIPELINE,
+    pipeline: Pipeline | None = None,
 ) -> RunStatus:
     """Loop one step until the run reaches a stop status; return that status.
 

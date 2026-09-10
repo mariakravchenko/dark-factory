@@ -36,6 +36,7 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.orchestrator.runner import advance, drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
+from tests.support.config import DEFAULT_TEST_SNAPSHOT
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -133,7 +134,9 @@ def test_crash_between_subwrites_rolls_back_whole_and_stays_resumable(
 
     # -- committed baseline: a run at BA, one attempt row, a known event count --
     run_id = start_run(
-        "text:prove the transition is atomic", session_factory=real_session_factory
+        "text:prove the transition is atomic",
+        session_factory=real_session_factory,
+        snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     cleanup_runs.append(run_id)
     assert (
