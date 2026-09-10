@@ -31,6 +31,22 @@ its ``__exit__`` runs on **every** exit — normal, exceptional, or a clean paus
 lease. A heartbeat that kept renewing after its owner decided to stop would hold
 the run hostage for the life of the process, so the thread is never started
 outside this context manager and ``__exit__`` has no early return.
+
+**What the lease guarantees — and what it does not.** The guarantee is *no
+concurrent durable mutation*, not *no concurrent execution*. The worker call in
+``_run_current_role`` runs *outside* the lease-validity window and is not
+cancellable: if an owning process stalls (GC pause, ``SIGSTOP``, VM pause, a
+network partition that also starves the heartbeat) past ``lease_ttl_seconds``, a
+second process can legitimately claim the lease and start executing the same
+role's worker while the first is still running. Durable state stays correct —
+the ``expected_owner_token`` fence in ``apply_transition`` rejects the stalled
+process's commit (``LeaseLost``, nothing written) — but two workers can be
+in-flight at once for that window. This is harmless while the shipped worker is
+``FakeWorker`` (no side effects) and must be addressed before credentialled
+agent subprocesses on a shared worktree land (Phase 7): e.g. poll
+``lease.lease_lost`` on a timer during the worker call and kill the subprocess
+process-group on loss, or have the worker adapter re-verify ownership
+immediately before any irreversible side effect.
 """
 
 from __future__ import annotations
