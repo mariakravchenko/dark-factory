@@ -303,9 +303,7 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
     session = real_session_factory()
     try:
         rows = list(
-            session.scalars(
-                select(RoleExecution).where(RoleExecution.run_id == run_id)
-            )
+            session.scalars(select(RoleExecution).where(RoleExecution.run_id == run_id))
         )
         assert len(rows) == 1
         assert rows[0].attempt == attempt_before  # same attempt, never bumped

@@ -124,9 +124,7 @@ def _arm(
         if fired["n"]:
             return
         upper = statement.lstrip().upper()
-        if upper.startswith(prefix) and (
-            must_contain is None or must_contain in upper
-        ):
+        if upper.startswith(prefix) and (must_contain is None or must_contain in upper):
             fired["n"] = 1
             raise _InjectedCrash(prefix)
 

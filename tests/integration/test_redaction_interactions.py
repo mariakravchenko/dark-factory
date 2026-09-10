@@ -171,9 +171,7 @@ def swept(
             registry=pause_registry,  # type: ignore[arg-type]
         )
         assert paused is RunStatus.WAITING_HUMAN
-        submit_answer(
-            run_id, _ANSWER_BODY, session_factory=advance_session_factory
-        )
+        submit_answer(run_id, _ANSWER_BODY, session_factory=advance_session_factory)
         final = drive(
             run_id,
             session_factory=advance_session_factory,
@@ -210,17 +208,13 @@ def swept(
 
         events = list(
             session.scalars(
-                select(RunEvent)
-                .where(RunEvent.run_id == run_id)
-                .order_by(RunEvent.seq)
+                select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.seq)
             )
         )
         event_payloads = "\n".join(json.dumps(e.payload) for e in events)
 
         execs = list(
-            session.scalars(
-                select(RoleExecution).where(RoleExecution.run_id == run_id)
-            )
+            session.scalars(select(RoleExecution).where(RoleExecution.run_id == run_id))
         )
         role_exec_blob = "\n".join(
             json.dumps(x.result) + "\n" + json.dumps(x.error) for x in execs
