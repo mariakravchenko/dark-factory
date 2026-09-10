@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Configuration-Driven Pipeline
 status: executing
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-09-10T19:02:57.650Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-10T19:20:44.335Z"
 last_activity: 2026-09-10
-last_activity_desc: Completed 03-02-PLAN.md (config schema + load_effective_config)
-state_head: 53281d09e6622679db7d7c5417178ce0589e8fbb
+last_activity_desc: Completed 03-03-PLAN.md (config-driven run creation + two architecture guards)
+state_head: 37bfdb81a12903201a01481fb4efb2341aa8516f
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 20
   percent: 8
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 03 (Configuration-Driven Pipeline) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
-Last activity: 2026-09-10 — Completed 03-02-PLAN.md (config schema + load_effective_config)
+Last activity: 2026-09-10 — Completed 03-03-PLAN.md (config-driven run creation + two architecture guards)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -76,6 +76,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 02 P07 | 120min | 2 tasks | 4 files |
 | Phase 03 P01 | 9min | 3 tasks | 10 files |
 | Phase 03 P02 | 5min | 2 tasks | 13 files |
+| Phase 03 P03 | 22min | 3 tasks | 25 files |
 
 ## Accumulated Context
 
@@ -136,6 +137,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-02: snapshot storage = reuse runs.workflow JSONB (no Alembic 0004, no config_snapshot column, no models.py/RunState change); column meaning widens from {roles:[...]} to the full effective-config snapshot
 - [Phase 03]: 03-02: .dark-factory.yaml / role-YAML key names are the RESEARCH set verbatim (published contract); workflow.roles entries are RunStatus values (BA, ARCHITECTURE, ...), not human names — keeps transition()/answers.py untouched
 - [Phase 03]: 03-02: load_effective_config is a pure read raising ConfigError(ValueError) — no Session/runs row/lock; yaml.safe_load only; worker+before/after names validated by membership; instruction path resolved under repo root, .is_file(), 64 KiB cap; config/ import-isolated from settings.py
+- [Phase 03]: 03-03: start_run(source, *, session_factory, snapshot) - snapshot is a required kw with no default and no fabricated fallback; _workflow_snapshot + DEFAULT_PIPELINE removed from orchestrator/runner.py; _advance_once builds pipeline = pipeline_from_snapshot(state.workflow) right after the load_run_state / STOP_STATUSES early-return block when no Pipeline is injected
+- [Phase 03]: 03-03: cli.py is the sole composition point importing dark_factory.config.loader - run() resolves load_effective_config(Path.cwd()) and maps ConfigError -> Exit(2) before printing the run id / creating a row; two guards lock it: test_no_role_name_literal.py (AST, no RunStatus role literal in orchestrator/ + workflows/pipeline.py) and test_orchestrator_no_live_config_read.py (import closure excludes config.loader; sanity proves cli's closure includes it)
+- [Phase 03]: 03-03: DEFAULT_TEST_SNAPSHOT ({roles:[BA]}, legacy bare-string shape) in tests/support/config.py is the shared snapshot the ~15 Phase 1/2 in-process start_run call sites pass; test_pause_mechanism_generic.py swapped its pipeline=_TWO_NODE_PIPELINE arg for a local snapshot=_TWO_NODE_SNAPSHOT
 
 ### Pending Todos
 
@@ -161,6 +165,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T19:02:07.986Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-09-10T19:20:02.935Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None

@@ -171,7 +171,7 @@ Plans:
   3. Editing `.dark-factory.yaml` while a run is paused and then resuming executes the configuration snapshot resolved at run creation, not the edited file.
   4. A before/after hook named in configuration resolves through the `ActionRegistry`, and an unknown action or worker name fails validation at run creation with a non-zero exit and no orphan run.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -184,7 +184,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 03-03-PLAN.md — TRACER: a real `dark-factory run` resolves its pipeline from .dark-factory.yaml and executes it; SC1 reorder/shorten; SC4 bad-config → exit 2, no orphan run; the no-role-literal and no-live-config-read guards
+- [x] 03-03-PLAN.md — TRACER: a real `dark-factory run` resolves its pipeline from .dark-factory.yaml and executes it; SC1 reorder/shorten; SC4 bad-config → exit 2, no orphan run; the no-role-literal and no-live-config-read guards
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -349,7 +349,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
-| 3. Configuration-Driven Pipeline | 2/4 | In Progress|  |
+| 3. Configuration-Driven Pipeline | 3/4 | In Progress|  |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |

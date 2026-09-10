@@ -18,8 +18,8 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Orchestration
 
 - [x] **ORCH-01**: A deterministic orchestrator drives the run lifecycle; the outer delivery flow is never a single LLM loop
-- [ ] **ORCH-02**: The orchestrator executes a configured ordered sequence of roles, not hardcoded role calls
-- [ ] **ORCH-03**: The role pipeline is defined in configuration (`workflow.roles`) and can be shortened or reordered without changing orchestrator code
+- [x] **ORCH-02**: The orchestrator executes a configured ordered sequence of roles, not hardcoded role calls
+- [x] **ORCH-03**: The role pipeline is defined in configuration (`workflow.roles`) and can be shortened or reordered without changing orchestrator code
 - [ ] **ORCH-04**: Roles communicate through durable artifacts, not one shared agent conversation
 - [x] **ORCH-05**: Only the orchestrator changes lifecycle state; a worker result never directly drives a transition
 - [x] **ORCH-06**: Every lifecycle mutation (store result, transition state, create interaction, emit event) is written in a single database transaction through one mutation path
@@ -192,8 +192,8 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | INTAKE-04 | Phase 1 | Complete |
 | INTAKE-05 | Phase 1 | Complete |
 | ORCH-01 | Phase 1 | Complete |
-| ORCH-02 | Phase 3 | Pending |
-| ORCH-03 | Phase 3 | Pending |
+| ORCH-02 | Phase 3 | Complete |
+| ORCH-03 | Phase 3 | Complete |
 | ORCH-04 | Phase 4 | Pending |
 | ORCH-05 | Phase 1 | Complete |
 | ORCH-06 | Phase 1 | Complete |
