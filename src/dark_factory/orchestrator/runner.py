@@ -39,13 +39,16 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
 from sqlalchemy.orm import Session
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
+from dark_factory.actions import default_registry as action_default_registry
+from dark_factory.actions.context import ActionContext
+from dark_factory.actions.registry import ActionRegistry
 from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
@@ -134,6 +137,33 @@ def _build_context(run_id: UUID, state: RunState, node: RoleNode) -> dict[str, A
     }
 
 
+def _role_definition(state: RunState, role: str) -> Mapping[str, Any]:
+    """The persisted snapshot's entry for ``role`` -- a data lookup by name.
+
+    ``state.workflow["roles"]`` is the ordered role list written at run creation.
+    The Phase 3 shape is a list of mappings, each carrying ``before`` / ``after``
+    hook-name lists; the legacy Phase 1 / Phase 2 shape is a list of bare
+    role-name strings with no hooks. A bare-string entry yields empty ``before``
+    / ``after`` lists, so the hook loops in ``_run_current_role`` are simply
+    no-ops for it. This is a lookup keyed on the role *value*, never a branch on
+    which role it is.
+    """
+    for entry in state.workflow["roles"]:
+        if isinstance(entry, str):
+            name = entry
+            definition: Mapping[str, Any] = {
+                "name": entry,
+                "before": [],
+                "after": [],
+            }
+        else:
+            name = entry["name"]
+            definition = entry
+        if name == role:
+            return definition
+    raise LookupError(f"role {role!r} is not in the run snapshot")
+
+
 def _maybe_crash_after(previous: RunStatus, new: RunStatus) -> None:
     """Abruptly terminate the process after a just-committed transition -- a test
     seam with **no production role**.
@@ -208,6 +238,7 @@ def advance(
     session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline | None = None,
+    action_registry: ActionRegistry = action_default_registry,
 ) -> RunStatus:
     """Reconstruct from Neon, execute exactly one committed step under the lease,
     return the new status.
@@ -242,6 +273,7 @@ def advance(
             registry=registry,
             pipeline=pipeline,
             lease=lease,
+            action_registry=action_registry,
         )
 
 
@@ -252,6 +284,7 @@ def _advance_once(
     registry: WorkerRegistry,
     pipeline: Pipeline | None,
     lease: LeaseHandle,
+    action_registry: ActionRegistry = action_default_registry,
 ) -> RunStatus:
     """One reconstruct-and-commit step. **Assumes the lease is already held** and
     never claims it -- ``drive`` claims once for the whole loop, ``advance``
@@ -283,7 +316,13 @@ def _advance_once(
         if state.status is RunStatus.CREATED:
             return _enter_first_role(run_id, state, pipeline, session_factory, lease)
         return _run_current_role(
-            run_id, state, pipeline, registry, session_factory, lease
+            run_id,
+            state,
+            pipeline,
+            registry,
+            session_factory,
+            lease,
+            action_registry=action_registry,
         )
     finally:
         unbind_contextvars("run_id", "role", "attempt")
@@ -336,6 +375,8 @@ def _run_current_role(
     registry: WorkerRegistry,
     session_factory: SessionFactory,
     lease: LeaseHandle,
+    *,
+    action_registry: ActionRegistry = action_default_registry,
 ) -> RunStatus:
     """Run the current role's worker outside any transaction, then commit the outcome.
 
@@ -350,6 +391,14 @@ def _run_current_role(
     A ``NEEDS_INPUT`` outcome pauses the run: the branch keys off the *signal*,
     never a role name, so every present and future pipeline node gets the
     ask-a-human mechanism with no per-role code (HITL-01).
+
+    The role's configured ``before`` action names run through the
+    ``action_registry`` immediately before the worker call and its ``after``
+    names immediately after -- both **outside** the one mutation transaction,
+    bracketing the worker call exactly where it already sits (CFG-04). The names
+    come from the persisted snapshot via :func:`_role_definition`; there is no
+    branch on which role it is, and an ``UnknownActionError`` here would be a bug
+    (the loader validated every name at run creation) so it is left to propagate.
     """
     node = current_node(pipeline, state.current_role)
     latest = state.latest_execution
@@ -360,6 +409,24 @@ def _run_current_role(
 
     worker = registry.get(node.worker)
     context = _build_context(run_id, state, node)
+    role_def = _role_definition(state, node.name)
+
+    def _run_hooks(hook_phase: Literal["before", "after"]) -> None:
+        for action_name in role_def.get(hook_phase, []):
+            action_registry.get(action_name)(
+                ActionContext(
+                    run_id=run_id,
+                    role=node.name,
+                    worker=node.worker,
+                    attempt=context["attempt"],
+                    phase=hook_phase,
+                    task=context["task"],
+                    answer=state.pending_answer,
+                    role_definition=dict(role_def),
+                )
+            )
+
+    _run_hooks("before")
     if latest.status == _ROLE_RESUMING:
         previous = WorkerResult.model_validate(latest.result)
         result = worker.resume(context, previous, state.pending_answer)
@@ -375,6 +442,8 @@ def _run_current_role(
         raise LeaseLost(
             f"lease for run {run_id} was lost while the worker call was running"
         )
+
+    _run_hooks("after")
 
     signal = signal_from_result(result)
     next_status, next_role, next_step = transition(state, signal, pipeline)
@@ -469,6 +538,7 @@ def drive(
     session_factory: SessionFactory = new_session,
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline | None = None,
+    action_registry: ActionRegistry = action_default_registry,
 ) -> RunStatus:
     """Loop one step until the run reaches a stop status; return that status.
 
@@ -503,6 +573,7 @@ def drive(
                 registry=registry,
                 pipeline=pipeline,
                 lease=lease,
+                action_registry=action_registry,
             )
             if new_status != status and on_transition is not None:
                 on_transition(status, new_status)
