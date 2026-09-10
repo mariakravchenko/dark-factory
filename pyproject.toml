@@ -50,6 +50,10 @@ markers = [
 
 [tool.ruff]
 target-version = "py312"
+# GSD planning prose and vendored tooling are not project source. ruff 0.16+
+# reformats fenced Python blocks inside Markdown, which would rewrite historical
+# planning/research documents; keep the format/lint gates scoped to real code.
+extend-exclude = [".planning", ".claude"]
 
 [tool.ruff.lint]
 select = ["I", "UP", "B", "SIM", "RUF"]
