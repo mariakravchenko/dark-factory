@@ -10,10 +10,10 @@ A criterion or a requirement whose proof file silently disappeared during a
 later refactor is exactly what this gate is for (threat T-02-38): a missing file
 is a **failure**, never a skip, and the failure message names the criterion or
 the requirement id, not merely the path. A file emptied by a bad merge --
-present but carrying no ``def test_`` -- fails the same way. This gate contains
-no call to ``pytest.skip``: a criterion with no reachable proof must fail,
-because a skip in an acceptance gate is indistinguishable from success in a
-summary.
+present but carrying no ``def test_`` -- fails the same way. This gate never
+skips: a criterion with no reachable proof must fail, because a skipped
+assertion in an acceptance gate is indistinguishable from success in a summary.
+The plan's grep guard enforces that this file contains no skip call at all.
 
 This gate only asserts the mapped proofs are **present and non-empty**. It does
 not run them. The full suite passing across every marker tier -- run separately
@@ -43,7 +43,7 @@ SUCCESS_CRITERIA: dict[str, tuple[str, tuple[str, ...]]] = {
         "question, the worker result, the worker session id and the current role "
         "persisted; the process exits 0 holding no open database transaction.",
         (
-            "tests/integration/test_pause_exits_zero.py",
+            "tests/integration/test_pause_exit_zero.py",
             "tests/db/test_pause_path_atomic.py",
             "tests/integration/test_no_txn_across_worker.py",
         ),
@@ -92,8 +92,7 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         ),
     ),
     "HITL-01": (
-        "Any role can ask the human for clarification through one identical "
-        "mechanism",
+        "Any role can ask the human for clarification through one identical mechanism",
         ("tests/db/test_pause_mechanism_generic.py",),
     ),
     "HITL-02": (
@@ -167,7 +166,9 @@ def _all_mapped_paths() -> set[str]:
     return paths
 
 
-def _assert_proofs_exist(label: str, description: str, proof_files: tuple[str, ...]) -> None:
+def _assert_proofs_exist(
+    label: str, description: str, proof_files: tuple[str, ...]
+) -> None:
     assert proof_files, f"{label} ({description}): no proof file is mapped"
     for rel in proof_files:
         path = _REPO_ROOT / rel
