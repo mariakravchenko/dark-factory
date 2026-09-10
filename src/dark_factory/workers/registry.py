@@ -9,6 +9,15 @@ class hands back a fresh instance every call, a factory bound to a single object
 hands back that same object every call. The choice is the registrant's, not the
 registry's -- the registry stays a plain name-to-callable map.
 
+``default_registry`` maps four names: ``"fake"`` (the real, working test worker)
+plus ``"claude-code"``, ``"copilot"`` and ``"hermes"``. The latter three resolve
+so config validation at run creation can accept a role that names them, but every
+:class:`CodingWorker` entry point on their placeholder raises
+``NotImplementedError`` until the real adapters land in Phase 7 (claude-code) and
+Phase 8 (copilot / hermes). Config validation must therefore test membership with
+``name in registry`` (see :meth:`WorkerRegistry.__contains__`), never
+``registry.get(name)`` -- ``get`` invokes the factory.
+
 **``default_registry``'s ``"fake"`` factory returns one long-lived
 :class:`FakeWorker`.** ``_run_current_role`` calls ``registry.get(node.worker)``
 inside every ``advance()``; a fresh ``FakeWorker`` per call would reset the
@@ -22,7 +31,9 @@ per-instance factory (see ``tests/conftest.py::fake_worker_registry``).
 """
 
 from collections.abc import Callable
+from typing import NoReturn
 
+from dark_factory.domain.worker import WorkerCapabilities, WorkerResult
 from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 
@@ -49,6 +60,38 @@ class WorkerRegistry:
             raise UnknownWorkerError(name) from None
         return factory()
 
+    def __contains__(self, name: object) -> bool:
+        """Membership without construction. Config validation uses this and never
+        :meth:`get`, because ``get`` invokes the factory -- a placeholder factory
+        would raise ``NotImplementedError`` during validation."""
+        return name in self._factories
+
+
+class _NotYetImplementedWorker(CodingWorker):
+    """A registered-but-inert worker: its name resolves so run-creation config
+    validation passes, but every :class:`CodingWorker` entry point raises
+    ``NotImplementedError`` naming the phase its real adapter lands in."""
+
+    def __init__(self, name: str, phase: str) -> None:
+        self._name = name
+        self._phase = phase
+
+    def _fail(self) -> NoReturn:
+        raise NotImplementedError(
+            f"{self._name} worker adapter lands in Phase {self._phase}"
+        )
+
+    def execute(self, context: object) -> WorkerResult:
+        self._fail()
+
+    def resume(
+        self, context: object, previous: WorkerResult, answer: str | None
+    ) -> WorkerResult:
+        self._fail()
+
+    def capabilities(self) -> WorkerCapabilities:
+        self._fail()
+
 
 default_registry = WorkerRegistry()
 
@@ -67,3 +110,12 @@ def _shared_fake_worker() -> CodingWorker:
 
 
 default_registry.register("fake", _shared_fake_worker)
+
+# The three real agent-runtime names. Registered so a role that names one passes
+# run-creation config validation; the placeholder raises NotImplementedError on
+# every entry point until its adapter lands (Phase 7 / Phase 8).
+default_registry.register(
+    "claude-code", lambda: _NotYetImplementedWorker("claude-code", "7")
+)
+default_registry.register("copilot", lambda: _NotYetImplementedWorker("copilot", "8"))
+default_registry.register("hermes", lambda: _NotYetImplementedWorker("hermes", "8"))
