@@ -213,18 +213,34 @@ def run_lease(
     stop = threading.Event()
 
     def _heartbeat() -> None:
+        # Distinguish "renewal raised" (transient: dropped connection, Neon
+        # scale-to-zero cold start, momentary DNS/TCP failure) from "renewal
+        # executed and matched no row" (authoritative: the lease is genuinely
+        # gone). A single network blip must not discard an otherwise-successful
+        # in-flight step, because the lease row itself is still valid until
+        # ``lock_expires_at`` from the last good renewal. Only give up on a
+        # transient error once repeated failures have eaten most of the TTL.
+        consecutive_errors = 0
         while not stop.wait(interval):
             hb_session = session_factory()
             try:
                 still_ours = renew_lease(hb_session, run_id, token, ttl_seconds=ttl)
             except Exception:
-                # A renew failure (dropped connection, Neon cold start) must not
-                # crash the daemon thread: treat it as a lost lease and stop.
-                _log.warning("lease.renew_error", run_id=str(run_id), exc_info=True)
-                lease_lost.set()
-                return
+                consecutive_errors += 1
+                _log.warning(
+                    "lease.renew_error",
+                    run_id=str(run_id),
+                    attempt=consecutive_errors,
+                    exc_info=True,
+                )
+                if consecutive_errors * interval >= ttl - interval:
+                    _log.warning("lease.lost", run_id=str(run_id))
+                    lease_lost.set()
+                    return
+                continue
             finally:
                 hb_session.close()
+            consecutive_errors = 0
             if not still_ours:
                 _log.warning("lease.lost", run_id=str(run_id))
                 lease_lost.set()
