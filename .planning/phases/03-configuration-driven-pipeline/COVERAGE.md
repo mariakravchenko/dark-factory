@@ -1,0 +1,1 @@
+No external API integration: Phase 3 wires repository configuration (.dark-factory.yaml + .dark-factory/ role files), the ActionRegistry/WorkerRegistry allowlists, and the run-creation config snapshot - worker adapters that call external CLIs are Phases 7-8.
