@@ -71,6 +71,15 @@ _ORCHESTRATION_ERRORS = (
     LeaseLost,
     NotWaitingForHuman,
     NoPendingInteraction,
+    # ``apply_transition`` and its helpers raise bare ``LookupError`` when a
+    # row vanishes mid-operation (``runs`` gone at lock time, a
+    # ``role_executions`` row to update missing, no WAITING ``human_interaction``
+    # in answer mode) and bare ``ValueError`` from the ``RoleExecutionWrite`` /
+    # ``HumanInteractionWrite`` guards. Without these, such a failure escapes as
+    # an unhandled traceback and Typer exits 1 -- the code D-05 reserves for
+    # "persisted FAILED" -- which an operator scripting the contract misreads.
+    LookupError,
+    ValueError,
 )
 
 
