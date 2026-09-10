@@ -122,7 +122,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Configuration
 
-- [ ] **CFG-01**: Repository behavior is configured in `.dark-factory.yaml` (version, `workflow.roles`, `repository.base_branch`, per-role definition files, `quality_gate.commands`, `retry` limits, `publishing.create_pr`)
+- [x] **CFG-01**: Repository behavior is configured in `.dark-factory.yaml` (version, `workflow.roles`, `repository.base_branch`, per-role definition files, `quality_gate.commands`, `retry` limits, `publishing.create_pr`)
 - [ ] **CFG-02**: Role behavior lives in `.dark-factory/` files (role YAML, instruction Markdown, examples) and is editable without changing Python source
 - [ ] **CFG-03**: A role definition is fully configuration-driven — instructions, tools, permissions, before/after hooks, outputs, worker
 - [ ] **CFG-04**: An `ActionRegistry` exposes deterministic before/after actions referenced by configuration (`prepare_role_context`, `ensure_clean_worktree`, `collect_diff`, `store_role_artifacts`, `collect_test_results`, …) and accepts new actions without core changes
@@ -260,7 +260,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | TRIG-02 | Phase 12 | Pending |
 | TRIG-03 | Phase 12 | Pending |
 | TRIG-04 | Phase 11 | Pending |
-| CFG-01 | Phase 3 | Pending |
+| CFG-01 | Phase 3 | Complete |
 | CFG-02 | Phase 3 | Pending |
 | CFG-03 | Phase 3 | Pending |
 | CFG-04 | Phase 3 | Pending |

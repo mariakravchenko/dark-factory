@@ -171,7 +171,7 @@ Plans:
   3. Editing `.dark-factory.yaml` while a run is paused and then resuming executes the configuration snapshot resolved at run creation, not the edited file.
   4. A before/after hook named in configuration resolves through the `ActionRegistry`, and an unknown action or worker name fails validation at run creation with a non-zero exit and no orphan run.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
@@ -180,7 +180,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — Config schema & loader: RepoConfig / RoleDefinition pydantic v2, load_effective_config (yaml.safe_load, membership validation, instruction inlining), the tracked example .dark-factory/ set, pyyaml
+- [x] 03-02-PLAN.md — Config schema & loader: RepoConfig / RoleDefinition pydantic v2, load_effective_config (yaml.safe_load, membership validation, instruction inlining), the tracked example .dark-factory/ set, pyyaml
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -349,7 +349,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 |-------|----------------|--------|-----------|
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
-| 3. Configuration-Driven Pipeline | 1/4 | In Progress|  |
+| 3. Configuration-Driven Pipeline | 2/4 | In Progress|  |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 0/TBD | Not started | - |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |

@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Configuration-Driven Pipeline
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-10T16:14:17.142Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-10T19:02:57.650Z"
 last_activity: 2026-09-10
-last_activity_desc: Phase 03 execution started
-state_head: 91fce63639e601662e0c7c0255f21b8764a918cb
+last_activity_desc: Completed 03-02-PLAN.md (config schema + load_effective_config)
+state_head: 53281d09e6622679db7d7c5417178ce0589e8fbb
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 20
-  completed_plans: 17
+  completed_plans: 18
   percent: 8
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 ## Current Position
 
 Phase: 03 (Configuration-Driven Pipeline) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-09-10 — Phase 03 execution started
+Last activity: 2026-09-10 — Completed 03-02-PLAN.md (config schema + load_effective_config)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -75,6 +75,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 02 P06 | 75min | 2 tasks | 4 files |
 | Phase 02 P07 | 120min | 2 tasks | 4 files |
 | Phase 03 P01 | 9min | 3 tasks | 10 files |
+| Phase 03 P02 | 5min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -131,6 +132,10 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-07: tests/integration/test_phase2_acceptance.py is a SIBLING of the Phase 1 gate, not an extension — two mappings (SC1-SC5 and the six requirement ids), each key set asserted exact, each proof file asserted existing/non-empty/contains def test_, a flat missing-path check, and a drift-guard tying the gate to 02-VALIDATION.md's per-requirement test map; grep-proven zero pytest.skip
 - [Phase 02]: 02-07: pyproject [tool.ruff] extend-exclude = ['.planning', '.claude'] — ruff 0.16 reformats fenced Python in Markdown; the format/lint gates are scoped to real code so historical planning docs are not rewritten (Rule 3 deviation)
 - [Phase 02]: 02-07: Phase 2 CLOSED — full suite 364 passed / 0 skipped (32m34s remote Neon), mypy --strict / ruff check / ruff format --check / alembic check all clean; README walkthrough fresh-eyes human check + production-TTL lease-timing smoke check deferred to /gsd-verify-work
+- [Phase 03]: 03-02: PyYAML approved at checkpoint 1 (blocking-human legitimacy gate); pyyaml>=6,<7 runtime + types-PyYAML>=6,<7 dev (PyYAML 6.x ships no py.typed, mypy --strict needs the stub)
+- [Phase 03]: 03-02: snapshot storage = reuse runs.workflow JSONB (no Alembic 0004, no config_snapshot column, no models.py/RunState change); column meaning widens from {roles:[...]} to the full effective-config snapshot
+- [Phase 03]: 03-02: .dark-factory.yaml / role-YAML key names are the RESEARCH set verbatim (published contract); workflow.roles entries are RunStatus values (BA, ARCHITECTURE, ...), not human names — keeps transition()/answers.py untouched
+- [Phase 03]: 03-02: load_effective_config is a pure read raising ConfigError(ValueError) — no Session/runs row/lock; yaml.safe_load only; worker+before/after names validated by membership; instruction path resolved under repo root, .is_file(), 64 KiB cap; config/ import-isolated from settings.py
 
 ### Pending Todos
 
@@ -156,6 +161,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T16:14:17.102Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-09-10T19:02:07.986Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
