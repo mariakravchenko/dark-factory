@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 02
 current_phase_name: Pause, Resume & Single-Owner Execution
-status: executing
-stopped_at: Completed 02-06-PLAN.md
-last_updated: "2026-09-10T08:04:32.905Z"
+status: verifying
+stopped_at: Completed 02-07-PLAN.md
+last_updated: "2026-09-10T10:48:28.594Z"
 last_activity: 2026-09-10
-last_activity_desc: Completed 02-06 (generic pause mechanism + pause/answer atomicity + interaction-field redaction sweep)
-state_head: cb6ea31574ee3b265cc159d861d426215f533ff2
+last_activity_desc: Completed 02-07 (Phase 2 acceptance gate mapping SC1-SC5 + six requirement ids to named proof files; lease-knob + pause/resume operator docs; full static + test gate green)
+state_head: "0b137f19e1247a92053b9d667aa837df905e9673"
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 16
-  completed_plans: 15
+  completed_plans: 16
   percent: 8
 ---
 
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 
 Phase: 02 (Pause, Resume & Single-Owner Execution) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
-Last activity: 2026-09-10 — Completed 02-06 (HITL-01 generic pause proven with a two-node pipeline; HITL-02 atomicity half — crash between every sub-write of the pause and the answer; STATE-04 redaction sweep of human_interactions.question / .answer)
+Status: Phase complete — ready for verification
+Last activity: 2026-09-10 — Completed 02-07 (Phase 2 acceptance gate: SC1-SC5 and STATE-04 / HITL-01 / HITL-02 / HITL-03 / HITL-07 / HITL-08 each mapped by name to an existing, non-empty proof file — fails, never skips, on a disappeared proof; lease knobs + pause/resume walkthrough documented; full suite 364 passed, mypy/ruff/alembic clean)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 8%
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02 P04 | close-out | 2 tasks | 3 files |
 | Phase 02 P05 | 180min | 2 tasks | 3 files |
 | Phase 02 P06 | 75min | 2 tasks | 4 files |
+| Phase 02 P07 | 120min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,9 @@ Recent decisions affecting current work:
 - [Phase 02]: 02-06: HITL-01 proven by projected-remainder equality — two pause outcomes collected as dicts, only role name + role-execution row identity projected out, remainders asserted equal (the honest form of 'the same code ran')
 - [Phase 02]: 02-06: crash-injection runs_update point qualified ('UPDATE RUNS', 'STATUS') so it matches the lifecycle write, not the lease's own UPDATE runs (claim/renew/release touch only owner_token/lock_expires_at/updated_at)
 - [Phase 02]: 02-06: proof-only, no production change — pause path already dispatches on the signal with no per-role branch and all five writes are already in one apply_transition transaction; multi-node role_executions row-reuse deferred to Phase 3 (deferred-items.md)
+- [Phase 02]: 02-07: tests/integration/test_phase2_acceptance.py is a SIBLING of the Phase 1 gate, not an extension — two mappings (SC1-SC5 and the six requirement ids), each key set asserted exact, each proof file asserted existing/non-empty/contains def test_, a flat missing-path check, and a drift-guard tying the gate to 02-VALIDATION.md's per-requirement test map; grep-proven zero pytest.skip
+- [Phase 02]: 02-07: pyproject [tool.ruff] extend-exclude = ['.planning', '.claude'] — ruff 0.16 reformats fenced Python in Markdown; the format/lint gates are scoped to real code so historical planning docs are not rewritten (Rule 3 deviation)
+- [Phase 02]: 02-07: Phase 2 CLOSED — full suite 364 passed / 0 skipped (32m34s remote Neon), mypy --strict / ruff check / ruff format --check / alembic check all clean; README walkthrough fresh-eyes human check + production-TTL lease-timing smoke check deferred to /gsd-verify-work
 
 ### Pending Todos
 
@@ -151,6 +155,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T08:04:23.843Z
-Stopped at: Completed 02-06-PLAN.md
+Last session: 2026-09-10T10:48:28.564Z
+Stopped at: Completed 02-07-PLAN.md
 Resume file: None

@@ -73,7 +73,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **STATE-01**: The persistence stack is SQLAlchemy + Alembic + PostgreSQL (Neon); the application uses only `DATABASE_URL` and contains no provider-specific database logic
 - [x] **STATE-02**: A `runs` table persists run identity, source, workflow, status, current role, current step, repository, base/working branch, PR number/URL, and timestamps
 - [x] **STATE-03**: A `role_executions` table persists one row per attempt (role, worker, status, attempt number, worker_session_id, result/error JSONB, timestamps)
-- [ ] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
+- [x] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
 - [ ] **STATE-05**: An `artifacts` table persists artifact metadata
 - [x] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
 - [x] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
@@ -81,14 +81,14 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Human-in-the-Loop, Pause & Resume
 
-- [ ] **HITL-01**: Any role can ask the human for clarification through one identical mechanism
-- [ ] **HITL-02**: On a worker `NEEDS_INPUT` result the orchestrator stores the result and worker session, creates a human interaction, persists `WAITING_HUMAN`, and releases the execution so the process can terminate safely
-- [ ] **HITL-03**: Operator can resume a paused run locally — `dark-factory resume <run-id> --answer "..."` — from a brand-new process with no in-memory state from the original run
+- [x] **HITL-01**: Any role can ask the human for clarification through one identical mechanism
+- [x] **HITL-02**: On a worker `NEEDS_INPUT` result the orchestrator stores the result and worker session, creates a human interaction, persists `WAITING_HUMAN`, and releases the execution so the process can terminate safely
+- [x] **HITL-03**: Operator can resume a paused run locally — `dark-factory resume <run-id> --answer "..."` — from a brand-new process with no in-memory state from the original run
 - [ ] **HITL-04**: When a worker adapter supports native sessions, resume uses the opaque `worker_session_id`; the orchestrator does not interpret it
 - [ ] **HITL-05**: When native resume is unavailable, the adapter resumes by reconstructing context; the orchestrator sees the same `worker.resume(...)` call either way
 - [ ] **HITL-06**: A run can be resumed on a different machine or process than the one that started it (local → CI, webhook, delayed human answer)
-- [ ] **HITL-07**: Two processes cannot execute the same run simultaneously; single-owner execution is enforced with PostgreSQL transactions / row locking / conditional updates and no separate distributed-lock service
-- [ ] **HITL-08**: A database transaction is never held open across a worker subprocess call; ownership is held by a lease with database-clock expiry
+- [x] **HITL-07**: Two processes cannot execute the same run simultaneously; single-owner execution is enforced with PostgreSQL transactions / row locking / conditional updates and no separate distributed-lock service
+- [x] **HITL-08**: A database transaction is never held open across a worker subprocess call; ownership is held by a lease with database-clock expiry
 
 ### Feedback Loops & Retry
 
@@ -229,19 +229,19 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | STATE-01 | Phase 1 | Complete |
 | STATE-02 | Phase 1 | Complete |
 | STATE-03 | Phase 1 | Complete |
-| STATE-04 | Phase 2 | Pending |
+| STATE-04 | Phase 2 | Complete |
 | STATE-05 | Phase 4 | Pending |
 | STATE-06 | Phase 1 | Complete |
 | STATE-07 | Phase 1 | Complete |
 | STATE-08 | Phase 1 | Complete |
-| HITL-01 | Phase 2 | Pending |
-| HITL-02 | Phase 2 | Pending |
-| HITL-03 | Phase 2 | Pending |
+| HITL-01 | Phase 2 | Complete |
+| HITL-02 | Phase 2 | Complete |
+| HITL-03 | Phase 2 | Complete |
 | HITL-04 | Phase 7 | Pending |
 | HITL-05 | Phase 7 | Pending |
 | HITL-06 | Phase 11 | Pending |
-| HITL-07 | Phase 2 | Pending |
-| HITL-08 | Phase 2 | Pending |
+| HITL-07 | Phase 2 | Complete |
+| HITL-08 | Phase 2 | Complete |
 | LOOP-01 | Phase 9 | Pending |
 | LOOP-02 | Phase 9 | Pending |
 | LOOP-03 | Phase 9 | Pending |
