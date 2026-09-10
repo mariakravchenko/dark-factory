@@ -1,0 +1,17 @@
+# Business Analyst role definition (CFG-02 / CFG-03). Editing this file changes
+# the resolved role in the next run's snapshot with no Python change.
+name: BA
+worker: fake
+instructions: ../instructions/ba.md
+
+# tools / permissions are stored in the snapshot this phase, not enforced
+# (tool grants -> Phase 6 TOOL-03; write_scope -> Phase 5 ROLE-05).
+tools: [repo.read, repo.search, artifacts.read, artifacts.write]
+permissions:
+  write_scope: []
+
+before: [prepare_role_context]
+after: [store_role_artifacts]
+
+outputs: [requirements.md, acceptance_criteria.json]
+examples: []

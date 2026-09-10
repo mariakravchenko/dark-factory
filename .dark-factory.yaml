@@ -1,0 +1,32 @@
+# Dark Factory repo behaviour (CFG-01). Read once per run, at creation, in
+# start_run; the resolved effective-config snapshot is persisted on the run and
+# is what every resume replays -- editing this file never changes an in-flight
+# run. No secrets here: infrastructure credentials live in .env / Settings.
+version: 1
+
+repository:
+  base_branch: main
+
+workflow:
+  # Ordered pipeline. Each entry MUST be a RunStatus role value
+  # (BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING). The shipped
+  # pipeline is a single fake-worker role so the existing suite keeps driving a
+  # one-role pipeline once 03-03 wires config loading.
+  roles: [BA]
+
+roles_dir: .dark-factory/roles
+
+quality_gate:
+  # Stored in the snapshot this phase; executed in Phase 9.
+  commands:
+    - "uv run pytest -q"
+    - "uv run ruff check ."
+
+retry:
+  # Stored now; the feedback loops enforce these in Phase 9.
+  qa_developer_max_iterations: 3
+  quality_gate_max_iterations: 2
+
+publishing:
+  # Stored now; gates PR creation in Phase 10.
+  create_pr: true

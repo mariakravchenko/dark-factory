@@ -1,0 +1,16 @@
+# QA role definition. Not in the shipped workflow.roles -- it exists so 03-03 can
+# prove that reordering / shortening workflow.roles changes the executed pipeline
+# (SC1) with no orchestrator change.
+name: QA
+worker: fake
+instructions: ../instructions/qa.md
+
+tools: [repo.read, repo.search, artifacts.read, artifacts.write]
+permissions:
+  write_scope: []
+
+before: [prepare_role_context]
+after: [collect_test_results, store_role_artifacts]
+
+outputs: [test_report.json, verdict.json]
+examples: []

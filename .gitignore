@@ -15,3 +15,7 @@ dist/
 
 # Local environment file — load-bearing: keeps a real DATABASE_URL / GITHUB_TOKEN out of git
 .env
+
+# Per-run artifact content (Phase 4). The config set — .dark-factory.yaml,
+# .dark-factory/roles/, .dark-factory/instructions/ — stays tracked source.
+.dark-factory/runs/

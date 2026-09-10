@@ -306,6 +306,83 @@ def worker_result_factory() -> type[WorkerResultFactory]:
 
 
 # --------------------------------------------------------------------------- #
+# Phase 3 kit — the .dark-factory/ config-tree builder (Plan 03-02)
+# --------------------------------------------------------------------------- #
+#
+# `config_root_factory` writes a complete `.dark-factory/` tree under `tmp_path`
+# and returns its root; a test can request a specific `workflow.roles` order
+# (03-03 SC1, 03-04 SC3). Both BA and QA role files are always written, so any
+# permutation of `["BA", "QA"]` resolves. `config_root` is the zero-argument
+# default: a one-role `[BA]` fake pipeline. `repo_config_snapshot` loads the
+# *real* repo-root config so a test can assert the shipped `.dark-factory.yaml`
+# resolves and its first role has non-empty inlined instruction text.
+# None of these are wired into `advance()` / `start_run` here — that is 03-03.
+
+
+def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
+    (root / ".dark-factory/roles").mkdir(parents=True, exist_ok=True)
+    (root / ".dark-factory/instructions").mkdir(parents=True, exist_ok=True)
+    (root / ".dark-factory.yaml").write_text(
+        "version: 1\n"
+        "repository:\n  base_branch: main\n"
+        f"workflow:\n  roles: [{', '.join(roles)}]\n"
+        "roles_dir: .dark-factory/roles\n"
+        "quality_gate:\n  commands: []\n"
+        "retry:\n"
+        "  qa_developer_max_iterations: 3\n"
+        "  quality_gate_max_iterations: 2\n"
+        "publishing:\n  create_pr: true\n",
+        encoding="utf-8",
+    )
+    _after = {
+        "BA": "[store_role_artifacts]",
+        "QA": "[collect_test_results, store_role_artifacts]",
+    }
+    for role in ("BA", "QA"):
+        (root / f".dark-factory/roles/{role}.yaml").write_text(
+            f"name: {role}\n"
+            "worker: fake\n"
+            f"instructions: ../instructions/{role.lower()}.md\n"
+            "tools: []\n"
+            "permissions:\n  write_scope: []\n"
+            "before: [prepare_role_context]\n"
+            f"after: {_after[role]}\n"
+            "outputs: []\n"
+            "examples: []\n",
+            encoding="utf-8",
+        )
+        (root / f".dark-factory/instructions/{role.lower()}.md").write_text(
+            f"# {role}\n\nScripted {role} instruction text for tests.\n",
+            encoding="utf-8",
+        )
+    return root
+
+
+@pytest.fixture
+def config_root_factory(tmp_path: Path) -> Callable[..., Path]:
+    """Return ``build(roles=("BA",)) -> Path`` writing a `.dark-factory/` tree."""
+
+    def _build(roles: Sequence[str] = ("BA",)) -> Path:
+        return _write_config_tree(tmp_path / "repo", roles)
+
+    return _build
+
+
+@pytest.fixture
+def config_root(config_root_factory: Callable[..., Path]) -> Path:
+    """A `tmp_path` `.dark-factory/` tree with the default one-role `[BA]` pipeline."""
+    return config_root_factory()
+
+
+@pytest.fixture
+def repo_config_snapshot() -> dict[str, object]:
+    """The effective-config snapshot for the *real* repo-root `.dark-factory.yaml`."""
+    from dark_factory.config.loader import load_effective_config
+
+    return load_effective_config(_REPO_ROOT)
+
+
+# --------------------------------------------------------------------------- #
 # Plan 06 — the tracer test kit
 # --------------------------------------------------------------------------- #
 #
