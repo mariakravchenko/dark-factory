@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 03
 current_phase_name: Configuration-Driven Pipeline
-status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-09-10T19:20:44.335Z"
+status: verifying
+stopped_at: Completed 03-04-PLAN.md
+last_updated: "2026-09-10T19:37:50.378Z"
 last_activity: 2026-09-10
-last_activity_desc: Completed 03-03-PLAN.md (config-driven run creation + two architecture guards)
-state_head: 37bfdb81a12903201a01481fb4efb2341aa8516f
+last_activity_desc: Completed 03-04-PLAN.md (before/after hooks fire via ActionRegistry; SC2/SC3 proofs; Phase 3 acceptance gate; COVERAGE.md)
+state_head: 7da8d17e908128f246cace97ba50ee5d65410ddb
 progress:
   total_phases: 12
   completed_phases: 1
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 21
+  completed_plans: 21
   percent: 8
 ---
 
@@ -29,8 +29,8 @@ See: .planning/PROJECT.md (updated 2026-09-06)
 
 Phase: 03 (Configuration-Driven Pipeline) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
-Last activity: 2026-09-10 — Completed 03-03-PLAN.md (config-driven run creation + two architecture guards)
+Status: Phase complete — ready for verification
+Last activity: 2026-09-10 — Completed 03-04-PLAN.md (before/after hooks fire via ActionRegistry; SC2/SC3 proofs; Phase 3 acceptance gate; COVERAGE.md)
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -77,6 +77,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 03 P01 | 9min | 3 tasks | 10 files |
 | Phase 03 P02 | 5min | 2 tasks | 13 files |
 | Phase 03 P03 | 22min | 3 tasks | 25 files |
+| Phase 03 P04 | 32min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -140,6 +141,9 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-03: start_run(source, *, session_factory, snapshot) - snapshot is a required kw with no default and no fabricated fallback; _workflow_snapshot + DEFAULT_PIPELINE removed from orchestrator/runner.py; _advance_once builds pipeline = pipeline_from_snapshot(state.workflow) right after the load_run_state / STOP_STATUSES early-return block when no Pipeline is injected
 - [Phase 03]: 03-03: cli.py is the sole composition point importing dark_factory.config.loader - run() resolves load_effective_config(Path.cwd()) and maps ConfigError -> Exit(2) before printing the run id / creating a row; two guards lock it: test_no_role_name_literal.py (AST, no RunStatus role literal in orchestrator/ + workflows/pipeline.py) and test_orchestrator_no_live_config_read.py (import closure excludes config.loader; sanity proves cli's closure includes it)
 - [Phase 03]: 03-03: DEFAULT_TEST_SNAPSHOT ({roles:[BA]}, legacy bare-string shape) in tests/support/config.py is the shared snapshot the ~15 Phase 1/2 in-process start_run call sites pass; test_pause_mechanism_generic.py swapped its pipeline=_TWO_NODE_PIPELINE arg for a local snapshot=_TWO_NODE_SNAPSHOT
+- [Phase 03]: 03-04: _run_current_role fires configured before-hooks after _build_context (ahead of execute-vs-resume) and after-hooks after the lease-loss check, both OUTSIDE with session.begin(); a lost lease raises LeaseLost before the after-hooks; the apply_transition block is unchanged
+- [Phase 03]: 03-04: action_registry is a keyword-only param on advance/drive/_advance_once/_run_current_role (default = dark_factory.actions.default_registry), threaded like registry: WorkerRegistry; _role_definition(state, role) is a data lookup by role value, a legacy bare-string roles entry -> {name, before: [], after: []} so hooks are a no-op for Phase 1/2 runs
+- [Phase 03]: 03-04: the Phase 3 acceptance gate (tests/integration/test_phase3_acceptance.py) is a SIBLING of test_phase2_acceptance.py mapping SC1-SC4 + ORCH-02/ORCH-03/CFG-01..CFG-05/WORK-02 to present/non-empty/def-test_ proofs; _VALIDATION_PROOF_FILES (13) is drift-guarded against 03-VALIDATION.md; grep for a skip/opt-out call = 0
 
 ### Pending Todos
 
@@ -165,6 +169,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-10T19:20:02.935Z
-Stopped at: Completed 03-03-PLAN.md
+Last session: 2026-09-10T19:37:34.965Z
+Stopped at: Completed 03-04-PLAN.md
 Resume file: None
