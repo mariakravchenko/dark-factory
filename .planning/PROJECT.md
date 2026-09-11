@@ -29,7 +29,12 @@ resume it; durability and observability are the same requirement.
 
 ### Validated
 
-(None yet — ship to validate)
+- ✓ Deterministic orchestrator drives a configured ordered role pipeline (not four hardcoded calls) — Phase 3
+- ✓ Configurable workflow: `workflow.roles` list can be shortened/reordered without changing orchestrator code — Phase 3
+- ✓ `WorkerRegistry` maps `claude-code|copilot|hermes` → adapter; no worker-specific `if` branches leak into the orchestrator — Phase 3 (adapters are placeholders raising `NotImplementedError`; functional adapters land Phase 7/8)
+- ✓ Repo config in `.dark-factory.yaml` (version, workflow.roles, repository.base_branch, per-role definition files, quality_gate.commands, retry limits, publishing.create_pr) — Phase 3
+- ✓ Role files under `.dark-factory/` (config.yaml, roles/*.yaml, instructions/*.md, examples/) — role behavior editable without touching Python — Phase 3
+- ✓ `ActionRegistry` of deterministic pre/post actions referenced by config (`prepare_role_context`, `ensure_clean_worktree`, `collect_diff`, `store_role_artifacts`, `collect_test_results`, …); extensible — Phase 3 (the five built-ins are no-ops until the phases that give them real work: `ensure_clean_worktree`/`collect_diff` in Phase 5, `store_role_artifacts` in Phase 4, `collect_test_results` in Phase 9)
 
 ### Active
 
@@ -43,9 +48,7 @@ resume it; durability and observability are the same requirement.
 - [ ] Normalize every source to one internal `NormalizedTask` model
 
 **Role orchestration**
-- [ ] Deterministic orchestrator drives a configured ordered role pipeline (not four hardcoded calls)
-- [ ] Configurable workflow: `workflow.roles` list can be shortened/reordered without changing orchestrator code
-- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker
+- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; tools/permissions enforcement is Phase 5/6)
 - [ ] Explicit role handoffs happen through durable artifacts, not one shared conversation
 - [ ] Business Analyst role: makes the request implementation-ready; outputs `requirements.md`, `acceptance_criteria.json`; read-only on source code
 - [ ] Architect role: consumes task + BA output + repo; outputs `design.md`, `constraints.json`; read-only on source code
@@ -54,7 +57,6 @@ resume it; durability and observability are the same requirement.
 
 **Worker (agent runtime) abstraction**
 - [ ] `CodingWorker` contract: `execute()`, `resume()`, `capabilities()`
-- [ ] `WorkerRegistry` maps `claude-code|copilot|hermes` → adapter; no worker-specific `if` branches leak into the orchestrator
 - [ ] `ClaudeCodeWorker` — functional adapter
 - [ ] `CopilotWorker` — functional adapter
 - [ ] `HermesWorker` — functional adapter
@@ -123,9 +125,7 @@ resume it; durability and observability are the same requirement.
 - [ ] CI can execute the same orchestrator; run continues across the local→CI boundary via Neon
 
 **Configuration**
-- [ ] Repo config in `.dark-factory.yaml` (version, workflow.roles, repository.base_branch, per-role definition files, quality_gate.commands, retry limits, publishing.create_pr)
-- [ ] Role files under `.dark-factory/` (config.yaml, roles/*.yaml, instructions/*.md, examples/) — role behavior editable without touching Python
-- [ ] `ActionRegistry` of deterministic pre/post actions referenced by config (`prepare_role_context`, `ensure_clean_worktree`, `collect_diff`, `store_role_artifacts`, `collect_test_results`, …); extensible
+- [ ] Config resolved at run creation is snapshotted (`runs.workflow`) so a later resume is deterministic even if `.dark-factory.yaml` changed in between (mechanism shipped Phase 3; deterministic resume for real multi-role runs proven Phase 4+)
 
 **Observability & audit**
 - [ ] Expose current run state, active role, worker, worker session id, attempt number, role history, artifacts, questions, human answers, quality-gate results, errors, PR info, and state-transition history
@@ -180,6 +180,9 @@ resume it; durability and observability are the same requirement.
 | `FakeWorker` is a first-class deliverable for orchestration testing | Spec §74; lets lifecycle behavior be tested without external AI systems | — Pending |
 | All three task sources (text, spec file, GitHub issue) in v1 | User selected all; `github:` also unlocks the GitHub human-interaction + resume path | — Pending |
 | Portfolio-quality **and** runnable on a real repo | User selected "Both" | — Pending |
+| Config snapshot reuses the existing `runs.workflow` JSONB column instead of a new `config_snapshot` column | Zero migration; column already redacted-on-write and loaded on every resume; avoids an Alembic `0004` for a value the reused column already handles | Shipped Phase 3 |
+| `.dark-factory.yaml` `workflow.roles` entries are `RunStatus` values (`BA`, `ARCHITECTURE`, …), not human names | Keeps `transition()`/`answers.py` untouched — no name→status mapping to maintain | Shipped Phase 3 |
+| PyYAML approved as the YAML parser (`yaml.safe_load` only) | ~19-year-old package, MIT, source `github.com/yaml/pyyaml`, CLAUDE.md-pinned; automated legitimacy verdict was `SUS` only on a missing-downloads-metric technicality | Shipped Phase 3 |
 | Neon holds state + metadata + audit references only; filesystem holds artifact content | Spec §28–29; keeps Neon from becoming a document store | — Pending |
 | Config-driven role pipeline over hardcoded role calls | Spec §5; enables shorter/reordered pipelines without orchestrator rewrites | — Pending |
 | MCP is an optional tool transport, never an internal dependency | Spec §70 | — Pending |
@@ -202,4 +205,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-06 after initialization*
+*Last updated: 2026-09-11 after Phase 3*
