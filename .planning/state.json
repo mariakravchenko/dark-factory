@@ -1,0 +1,73 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": null,
+  "phases": [
+    {
+      "number": "1",
+      "name": "Walking Skeleton — One Durable Run",
+      "status": "complete"
+    },
+    {
+      "number": "2",
+      "name": "Pause, Resume & Single-Owner Execution",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Configuration-Driven Pipeline",
+      "status": "in_progress"
+    },
+    {
+      "number": "4",
+      "name": "The Four-Role Pipeline & Artifact Handoffs",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Isolated Workspace & Git Lifecycle",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Tools, Permissions & the Credential Boundary",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Claude Code — the First Real Worker",
+      "status": "pending"
+    },
+    {
+      "number": "8",
+      "name": "Copilot & Hermes — Worker Independence Proven",
+      "status": "pending"
+    },
+    {
+      "number": "9",
+      "name": "Independent Quality Gate & Bounded Feedback Loops",
+      "status": "pending"
+    },
+    {
+      "number": "10",
+      "name": "GitHub — Issue Intake, Idempotent Publishing, Comment Resume",
+      "status": "pending"
+    },
+    {
+      "number": "11",
+      "name": "One Orchestrator, Many Triggers — Cross-Machine Resume",
+      "status": "pending"
+    },
+    {
+      "number": "12",
+      "name": "Observability & Audit Surface",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step (verify)",
+    "reason": "Phase 03 of 12 · 0% · ready to verify"
+  },
+  "updated_at": "2026-09-10T19:37:34.447Z"
+}
