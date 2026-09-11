@@ -1,8 +1,8 @@
 ---
 phase: 03-configuration-driven-pipeline
 verified: 2026-09-10T00:00:00Z
-status: human_needed
-score: 4/4 must-haves verified (mechanism); end-to-end DB/integration proofs deferred to real Neon
+status: passed
+score: 4/4 must-haves verified, including real Neon end-to-end UAT
 covered_files:
   - ".dark-factory.yaml"
   - ".dark-factory/roles/BA.yaml"
@@ -74,7 +74,7 @@ advisory:
 
 **Phase Goal:** The pipeline shape and every role's behaviour come from repository configuration rather than code, and the configuration a run resolves at creation is snapshotted so a later resume is deterministic.
 **Verified:** 2026-09-10
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No — initial verification
 
 ## Goal Achievement
@@ -208,6 +208,13 @@ the following against real Neon (`set -a; . ./.env; set +a`):
 6. **CFG-04 runtime** — `uv run pytest -q tests/db/test_role_hooks_invoked.py` — before→worker→after order; identical `ActionContext` remainder across two roles; new action from config; legacy snapshot invokes no hooks.
 7. **CFG-05 round-trip** — `uv run pytest -q tests/db/test_snapshot_roundtrip.py` — `create_run`→`load_run_state` deep-equality incl. ordered `roles` + each `instruction_text`.
 8. **Real-repo walkthrough** (carried from Phase 1/2) — in a real checkout, edit `.dark-factory.yaml` / a role YAML, run `dark-factory run`, observe the pipeline / role behaviour change with `git diff src/` empty; edit during a `WAITING_HUMAN` pause and confirm the resumed run ignores the edit.
+
+### Acknowledged Gaps
+
+All eight human-verification items were completed against real Neon PostgreSQL
+17 on 2026-09-11 and recorded as passing in `03-UAT.md`. The three review
+advisories (WR-01 through WR-03) remain non-blocking hardening work and do not
+invalidate the Phase 3 success criteria.
 
 ### Gaps Summary
 
