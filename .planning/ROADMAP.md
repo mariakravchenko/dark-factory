@@ -209,9 +209,17 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 04-01-PLAN.md — Tracer: one artifact (`acceptance_criteria.json`) crosses one handoff BA → ARCHITECTURE, end to end through the `artifacts` table, filesystem store, schema validation and ContextBuilder (wave 1)
 - [ ] 04-02-PLAN.md — INTAKE-02: `dark-factory run spec:./task.md` starts and drives a real run (wave 1, parallel)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 04-03-PLAN.md — Expand to all four roles and all six artifacts: the remaining machine-artifact models, the DEVELOPMENT/QA wiring, and the SC1/SC2 proofs (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 04-04-PLAN.md — SC4 retry-context isolation, SC5 schema-violation-fails-role, and the Phase 4 acceptance gate (wave 3)
 
 **Invariants**: roles hand off through artifacts, never a shared conversation; where orchestration depends on a result, the JSON contract is authoritative; the ContextBuilder never walks the source tree.
