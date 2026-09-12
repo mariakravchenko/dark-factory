@@ -221,7 +221,10 @@ def test_four_roles_run_in_order_and_produce_the_sc1_artifact_set(
     qa_context = captured[3]
     assert qa_context is not None
     input_filenames = {i.filename for i in qa_context.inputs}  # type: ignore[union-attr]
-    assert input_filenames == {"acceptance_criteria.json", "implementation_summary.json"}
+    assert input_filenames == {
+        "acceptance_criteria.json",
+        "implementation_summary.json",
+    }
     produced_by = {i.filename: i.produced_by for i in qa_context.inputs}  # type: ignore[union-attr]
     assert produced_by["acceptance_criteria.json"] == "BA"
     assert produced_by["implementation_summary.json"] == "DEVELOPMENT"

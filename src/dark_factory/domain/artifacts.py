@@ -219,9 +219,7 @@ class Verdict(BaseModel):
     def computed_status(self) -> VerdictStatus:
         """PASS iff every criterion is PASS and no issue is ``blocking`` --
         an order-independent reduction over both lists."""
-        all_criteria_pass = all(
-            c.result is VerdictStatus.PASS for c in self.criteria
-        )
+        all_criteria_pass = all(c.result is VerdictStatus.PASS for c in self.criteria)
         no_blocking_issues = all(
             issue.severity is not IssueSeverity.blocking for issue in self.issues
         )
