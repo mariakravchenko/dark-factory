@@ -20,10 +20,19 @@ through artifact files only.
 A role's ``role_def`` (as returned by ``orchestrator/runner._role_definition``)
 may be the legacy Phase 1 / Phase 2 bare-string shape -- ``{"name": ..., "before":
 [], "after": []}``, with no ``worker`` / ``instruction_text`` / ``tools`` /
-``permissions`` / ``inputs`` / ``examples`` keys -- so every lookup here is
-defensive (``.get(..., default)``), matching the same default
+``permissions`` / ``inputs`` / ``outputs`` / ``examples`` keys -- so every
+lookup here is defensive (``.get(..., default)``), matching the same default
 (``worker="fake"``) that :func:`~dark_factory.workflows.pipeline.pipeline_from_snapshot`
 already applies to a bare-string entry.
+
+``RoleContext.outputs`` carries the role's declared ``outputs`` filenames
+verbatim (no content, no schema) -- the same list
+:func:`~dark_factory.artifacts.validation.collect_role_artifacts` validates
+a worker's reported artifacts against after the call returns. A worker
+adapter may read it to know what it is expected to produce;
+:class:`~dark_factory.workers.fake.FakeWorker`'s true zero-config default
+uses it to synthesize schema-valid files for a pipeline whose roles declare
+machine-artifact outputs.
 """
 
 from __future__ import annotations
@@ -100,6 +109,7 @@ class RoleContext(BaseModel):
     constraints: dict[str, Any] = Field(default_factory=dict)
     tools: list[str] = Field(default_factory=list)
     permissions: dict[str, Any] = Field(default_factory=dict)
+    outputs: list[str] = Field(default_factory=list)
     artifacts_dir: str
 
 
@@ -277,5 +287,6 @@ def build_role_context(
         constraints=constraints,
         tools=list(role_def.get("tools", [])),
         permissions=dict(role_def.get("permissions", {})),
+        outputs=list(role_def.get("outputs", [])),
         artifacts_dir=str(Path("artifacts") / role_name),
     )

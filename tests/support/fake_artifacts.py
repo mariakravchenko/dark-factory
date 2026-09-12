@@ -3,10 +3,16 @@ the :class:`~dark_factory.domain.worker.ArtifactRef` list to embed in that
 role's scripted :class:`~dark_factory.domain.worker.WorkerResult`.
 
 Kept in ``tests/support/``, not shipped ``src/`` (04-RESEARCH assumption A3):
-the shipped :class:`~dark_factory.workers.fake.FakeWorker` stays exactly as
-simple as it is -- it never writes files itself. A db test writes the files a
-scripted result *claims* to have produced, then hands the resulting refs to
-the ``FakeWorker`` script.
+an *explicit* :class:`~dark_factory.workers.fake.FakeWorker` script never
+writes files itself -- a db test writes the files a scripted result *claims*
+to have produced, then hands the resulting refs to the ``FakeWorker`` script,
+exactly as this module always has. (CR-01, 04-REVIEW: the *true no-script
+default* -- no explicit ``script`` argument and no ``DARK_FACTORY_FAKE_SCRIPT``
+-- is the one exception: it synthesizes and writes minimal schema-valid files
+itself, in ``src/dark_factory/workers/fake.py``, so this repo's own shipped
+``.dark-factory.yaml`` is driveable with no explicit script at all. That
+in-``src/`` synthesis path is independent of, and does not reuse, the helpers
+below.)
 """
 
 from __future__ import annotations

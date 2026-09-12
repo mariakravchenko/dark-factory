@@ -53,8 +53,12 @@ def write_artifact_text(
     """Write ``text`` to ``<root>/artifacts/<role>/<filename>``.
 
     Returns ``(run-root-relative path, checksum)``. Used by test scaffolding
-    (:mod:`tests.support.fake_artifacts`) to write scripted artifact content;
-    production code never fabricates artifact files.
+    (:mod:`tests.support.fake_artifacts`) to write scripted artifact content,
+    and by :class:`~dark_factory.workers.fake.FakeWorker`'s true no-script
+    default (CR-01, 04-REVIEW) to synthesize minimal schema-valid files for a
+    role's declared outputs when no explicit script is provided. A real
+    agent-runtime adapter writes its own artifact files directly and never
+    calls this helper.
     """
     relative_path = f"artifacts/{role}/{filename}"
     path = resolve_under_run_root(root, relative_path)
