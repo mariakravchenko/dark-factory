@@ -20,16 +20,28 @@ from pydantic import BaseModel, ValidationError
 from dark_factory.artifacts import ArtifactContractError, ArtifactSchemaError
 from dark_factory.artifacts.paths import checksum
 from dark_factory.artifacts.store import read_artifact_text
-from dark_factory.domain.artifacts import AcceptanceCriteriaDocument
+from dark_factory.domain.artifacts import (
+    AcceptanceCriteriaDocument,
+    ConstraintsDocument,
+    ImplementationSummary,
+    TestReport,
+    Verdict,
+)
 from dark_factory.domain.worker import ArtifactRef
 from dark_factory.persistence.mutations import ArtifactReferenceWrite
 
 __all__ = ["MACHINE_ARTIFACT_MODELS", "collect_role_artifacts"]
 
-# filename -> pydantic model. Only ``acceptance_criteria.json`` is registered
-# this phase (04-01); the remaining four artifact types are plan 04-02's scope.
+# filename -> pydantic model, one entry per D-10 machine artifact. Dispatch is
+# always by filename, never by role name; ``requirements.md`` / ``design.md``
+# are absent here and so are carried as unvalidated human documentation
+# (ART-02).
 MACHINE_ARTIFACT_MODELS: dict[str, type[BaseModel]] = {
     "acceptance_criteria.json": AcceptanceCriteriaDocument,
+    "constraints.json": ConstraintsDocument,
+    "implementation_summary.json": ImplementationSummary,
+    "test_report.json": TestReport,
+    "verdict.json": Verdict,
 }
 
 
