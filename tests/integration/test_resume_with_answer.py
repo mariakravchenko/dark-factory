@@ -22,6 +22,7 @@ accept-once.
 
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -66,10 +67,11 @@ def _count_runs(engine: Engine) -> int:
         return total
 
 
-def _pause_a_run(pg_url: str) -> UUID:
+def _pause_a_run(pg_url: str, cwd: Path) -> UUID:
     proc = spawn(
         ["run", "text:pause then resume with an answer"],
         child_env(pg_url, fake_script=_PAUSE_SCRIPT),
+        cwd=cwd,
     )
     assert proc.returncode == 0, f"stdout={proc.stdout!r}\nstderr={proc.stderr!r}"
     assert "BA → WAITING_HUMAN" in proc.stdout, proc.stdout
@@ -77,9 +79,12 @@ def _pause_a_run(pg_url: str) -> UUID:
 
 
 def test_a_fresh_process_resumes_the_same_run_and_attempt_with_an_answer(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
-    run_id = _pause_a_run(pg_url)
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the scripted resume result does not supply.
+    run_id = _pause_a_run(pg_url, config_root)
 
     with Session(engine) as session:
         re_before = session.scalar(
@@ -92,7 +97,9 @@ def test_a_fresh_process_resumes_the_same_run_and_attempt_with_an_answer(
 
     resume_env = child_env(pg_url, fake_script=_RESUME_SCRIPT)
     assert "DARK_FACTORY_CRASH_AFTER" not in resume_env
-    resume_proc = spawn(["resume", str(run_id), "--answer", _ANSWER], resume_env)
+    resume_proc = spawn(
+        ["resume", str(run_id), "--answer", _ANSWER], resume_env, cwd=config_root
+    )
     assert resume_proc.returncode == 0, (
         f"stdout={resume_proc.stdout!r}\nstderr={resume_proc.stderr!r}"
     )
@@ -134,32 +141,41 @@ def test_a_fresh_process_resumes_the_same_run_and_attempt_with_an_answer(
     assert _count_runs(engine) == runs_before
 
 
-def test_resume_answer_against_a_non_waiting_run_exits_two(pg_url: str) -> None:
-    proc = spawn(["run", "text:this run just completes"], child_env(pg_url))
+def test_resume_answer_against_a_non_waiting_run_exits_two(
+    pg_url: str, config_root: Path
+) -> None:
+    proc = spawn(
+        ["run", "text:this run just completes"], child_env(pg_url), cwd=config_root
+    )
     assert proc.returncode == 0, f"stdout={proc.stdout!r}\nstderr={proc.stderr!r}"
     run_id = run_id_from_stdout(proc.stdout)
 
     bad = spawn(
         ["resume", str(run_id), "--answer", "too late"],
         child_env(pg_url),
+        cwd=config_root,
     )
     assert bad.returncode == 2, f"stdout={bad.stdout!r}\nstderr={bad.stderr!r}"
     assert "not waiting" in bad.stderr
     assert "Traceback" not in bad.stderr
 
 
-def test_a_second_answer_for_the_same_pause_is_rejected(pg_url: str) -> None:
-    run_id = _pause_a_run(pg_url)
+def test_a_second_answer_for_the_same_pause_is_rejected(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _pause_a_run(pg_url, config_root)
 
     first = spawn(
         ["resume", str(run_id), "--answer", _ANSWER],
         child_env(pg_url, fake_script=_RESUME_SCRIPT),
+        cwd=config_root,
     )
     assert first.returncode == 0, f"stdout={first.stdout!r}\nstderr={first.stderr!r}"
 
     second = spawn(
         ["resume", str(run_id), "--answer", "answering again"],
         child_env(pg_url, fake_script=_RESUME_SCRIPT),
+        cwd=config_root,
     )
     assert second.returncode == 2, f"stdout={second.stdout!r}\nstderr={second.stderr!r}"
     assert "not waiting" in second.stderr

@@ -54,6 +54,7 @@ from dark_factory.domain.task import NormalizedTask
 from dark_factory.events.catalog import EventType
 from dark_factory.events.redaction import redact, scrub_known_values
 from dark_factory.persistence.models import (
+    ArtifactReference,
     HumanInteraction,
     RoleExecution,
     Run,
@@ -61,6 +62,7 @@ from dark_factory.persistence.models import (
 )
 
 __all__ = [
+    "ArtifactReferenceWrite",
     "ConcurrentTransition",
     "EventWrite",
     "HumanInteractionWrite",
@@ -138,6 +140,21 @@ class HumanInteractionWrite(BaseModel):
     role_execution_id: UUID | None = None
     question: str | None = None
     answer: str | None = None
+
+
+class ArtifactReferenceWrite(BaseModel):
+    """Insert spec for one ``artifacts`` row (ART-01/02/03). ``metadata`` is
+    **raw** -- redaction happens inside ``apply_transition`` at the single call
+    site, exactly as ``result`` / ``error`` / ``question`` / ``answer`` do,
+    should it ever carry free text. Phase 4 always writes ``{}``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    role_execution_id: UUID
+    type: str
+    path: str
+    checksum: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 def _known_secrets() -> Mapping[str, str]:
@@ -218,6 +235,7 @@ def apply_transition(
     counter_increments: Mapping[str, int] | None = None,
     expected_owner_token: UUID | None = None,
     human_interaction: HumanInteractionWrite | None = None,
+    artifact_references: Sequence[ArtifactReferenceWrite] = (),
 ) -> RunStatus:
     """Apply one lifecycle transition atomically and return the new status.
 
@@ -233,13 +251,14 @@ def apply_transition(
        transaction** (D-19, RESEARCH Pitfall 2), never from an in-memory counter
     5. write the ``human_interactions`` row (``ask`` inserts the WAITING question;
        ``answer`` fills in the run's single WAITING row), when supplied
-    6. assign ``status`` / ``current_role`` / ``current_step`` / ``updated_at``;
+    6. insert one ``artifacts`` row per ``artifact_references`` entry (ART-01/03)
+    7. assign ``status`` / ``current_role`` / ``current_step`` / ``updated_at``;
        additionally, when ``next_status`` is a **stop** status, clear both lease
        columns — the release must be atomic with the state change that stopped
        the run, so a crash between the two is impossible (which is why the
        *clear* lives here and not in ``orchestrator/lease.py``)
-    7. apply each ``counter_increments`` entry to its column
-    8. append one ``RunEvent`` per ``EventWrite``
+    8. apply each ``counter_increments`` entry to its column
+    9. append one ``RunEvent`` per ``EventWrite``
 
     ``result`` / ``error`` / ``question`` / ``answer`` / every event ``payload``
     pass through ``redact()`` immediately before assignment — the single
@@ -282,6 +301,9 @@ def apply_transition(
 
         if human_interaction is not None:
             _write_human_interaction(session, run_id, human_interaction, known)
+
+        for artifact_ref in artifact_references:
+            _write_artifact_reference(session, run_id, artifact_ref, known)
 
         run.status = next_status
         run.current_role = next_current_role
@@ -402,3 +424,26 @@ def _write_human_interaction(
     row.answer = redact(spec.answer, known_secrets=known)
     row.status = InteractionStatus.ANSWERED
     row.answered_at = func.now()
+
+
+def _write_artifact_reference(
+    session: Session,
+    run_id: UUID,
+    spec: ArtifactReferenceWrite,
+    known: Mapping[str, str],
+) -> None:
+    """Insert one ``artifacts`` row (ART-01/03). ``metadata`` is redacted here,
+    at the single call site, exactly as every other JSONB write in this module.
+    Never merges with an existing row -- ``uq_artifact_role_execution_path``
+    turns a duplicate ``(role_execution_id, path)`` into a constraint violation
+    rather than a silent overwrite."""
+    session.add(
+        ArtifactReference(
+            run_id=run_id,
+            role_execution_id=spec.role_execution_id,
+            type=spec.type,
+            path=spec.path,
+            checksum=spec.checksum,
+            artifact_metadata=redact(spec.metadata, known_secrets=known),
+        )
+    )

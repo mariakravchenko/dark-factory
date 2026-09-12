@@ -15,11 +15,12 @@ Two rules are load-bearing here:
    and ``alembic check`` compare against the ORM models and the two cannot drift
    apart silently.
 
-Only the four tables Dark Factory owns — ``runs``, ``role_executions``,
-``run_events`` and ``human_interactions`` — are in scope. The test database is a
-shared throwaway instance that may hold unrelated tables; ``include_name`` keeps
-autogenerate (and ``alembic check``) from proposing to drop them, and keeps
-``human_interactions`` from being proposed for drop.
+Only the five tables Dark Factory owns — ``runs``, ``role_executions``,
+``run_events``, ``human_interactions`` and ``artifacts`` — are in scope. The
+test database is a shared throwaway instance that may hold unrelated tables;
+``include_name`` keeps autogenerate (and ``alembic check``) from proposing to
+drop them, and keeps ``human_interactions`` / ``artifacts`` from being proposed
+for drop.
 """
 
 from __future__ import annotations
@@ -42,7 +43,13 @@ target_metadata = Base.metadata
 
 # The tables this project owns. Everything else in the target database is out of
 # scope for autogenerate / `alembic check`.
-_OWNED_TABLES = {"runs", "role_executions", "run_events", "human_interactions"}
+_OWNED_TABLES = {
+    "runs",
+    "role_executions",
+    "run_events",
+    "human_interactions",
+    "artifacts",
+}
 
 _PSYCOPG_SCHEME = "postgresql+psycopg://"
 _LEGACY_SCHEMES = ("postgresql+psycopg2://", "postgresql://", "postgres://")

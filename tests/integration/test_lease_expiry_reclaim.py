@@ -41,6 +41,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -104,11 +105,17 @@ def _latest_execution(session: Session, run_id: UUID) -> RoleExecution:
 
 
 def test_a_killed_owner_is_not_stolen_before_expiry_then_reclaimed_after_forcing(
-    pg_url: str, engine: Engine, force_lease_expiry: Callable[[UUID], None]
+    pg_url: str,
+    engine: Engine,
+    force_lease_expiry: Callable[[UUID], None],
+    config_root: Path,
 ) -> None:
     runs_at_start = _count_runs(engine)
 
     # -- first process: dies the instant CREATED -> BA commits, holding a long lease --
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the scripted/default worker here does not supply.
     p1 = spawn(
         ["run", "text:killed while holding an unexpired lease"],
         child_env(
@@ -116,6 +123,7 @@ def test_a_killed_owner_is_not_stolen_before_expiry_then_reclaimed_after_forcing
             crash_after=_CRASH_AT_FIRST_TRANSITION,
             lease_ttl_seconds=_LONG_TTL,
         ),
+        cwd=config_root,
         timeout=_CHILD_TIMEOUT,
     )
     assert p1.returncode != 0, f"stdout={p1.stdout!r}\nstderr={p1.stderr!r}"
@@ -144,6 +152,7 @@ def test_a_killed_owner_is_not_stolen_before_expiry_then_reclaimed_after_forcing
     p2 = spawn(
         ["resume", str(run_id)],
         child_env(pg_url, lease_ttl_seconds=_LONG_TTL),
+        cwd=config_root,
         timeout=_CHILD_TIMEOUT,
     )
     assert p2.returncode == 0, f"stdout={p2.stdout!r}\nstderr={p2.stderr!r}"
@@ -165,6 +174,7 @@ def test_a_killed_owner_is_not_stolen_before_expiry_then_reclaimed_after_forcing
     p3 = spawn(
         ["resume", str(run_id)],
         child_env(pg_url, lease_ttl_seconds=_LONG_TTL),
+        cwd=config_root,
         timeout=_CHILD_TIMEOUT,
     )
     assert p3.returncode == 0, f"stdout={p3.stdout!r}\nstderr={p3.stderr!r}"
@@ -194,7 +204,7 @@ def test_a_killed_owner_is_not_stolen_before_expiry_then_reclaimed_after_forcing
 
 
 def test_the_reclaim_also_works_after_a_genuinely_elapsed_short_ttl_no_forcing(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
     """The forced-expiry test above is the fast primary path; this is the honesty
     check. A short TTL through the child environment, a real wait a little longer
@@ -212,6 +222,7 @@ def test_the_reclaim_also_works_after_a_genuinely_elapsed_short_ttl_no_forcing(
             lease_ttl_seconds=_SHORT_TTL,
             lease_heartbeat_seconds=1,
         ),
+        cwd=config_root,
         timeout=_CHILD_TIMEOUT,
     )
     assert p1.returncode != 0, f"stdout={p1.stdout!r}\nstderr={p1.stderr!r}"
@@ -226,7 +237,12 @@ def test_the_reclaim_also_works_after_a_genuinely_elapsed_short_ttl_no_forcing(
     # a real elapsed wait, comfortably past the 2 s TTL
     time.sleep(_SHORT_TTL + 2)
 
-    p2 = spawn(["resume", str(run_id)], child_env(pg_url), timeout=_CHILD_TIMEOUT)
+    p2 = spawn(
+        ["resume", str(run_id)],
+        child_env(pg_url),
+        cwd=config_root,
+        timeout=_CHILD_TIMEOUT,
+    )
     assert p2.returncode == 0, f"stdout={p2.stdout!r}\nstderr={p2.stderr!r}"
     assert "BA → COMPLETED" in p2.stdout
 

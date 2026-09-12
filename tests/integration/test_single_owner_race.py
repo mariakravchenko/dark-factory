@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -116,11 +117,15 @@ def _role_completed_events(session: Session, run_id: UUID) -> list[str]:
 
 
 def test_two_processes_race_one_advances_the_other_exits_zero_without_writing(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the scripted result below does not supply.
     p1 = popen(
         ["run", "text:only one of us may execute this step"],
         child_env(pg_url, fake_script=_COMPLETED_ONCE, fake_sleep_ms=_SLOW_STEP_MS),
+        cwd=config_root,
     )
     try:
         assert p1.stdout is not None
@@ -133,7 +138,10 @@ def test_two_processes_race_one_advances_the_other_exits_zero_without_writing(
         runs_before_loser = _count_runs(engine)
         # the second process runs while the first is still mid-step
         loser = spawn(
-            ["resume", str(run_id)], child_env(pg_url), timeout=_CHILD_TIMEOUT
+            ["resume", str(run_id)],
+            child_env(pg_url),
+            cwd=config_root,
+            timeout=_CHILD_TIMEOUT,
         )
         runs_after_loser = _count_runs(engine)
 

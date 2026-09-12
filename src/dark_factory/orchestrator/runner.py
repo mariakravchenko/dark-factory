@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
 
@@ -49,6 +50,10 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 from dark_factory.actions import default_registry as action_default_registry
 from dark_factory.actions.context import ActionContext
 from dark_factory.actions.registry import ActionRegistry
+from dark_factory.artifacts import ArtifactError
+from dark_factory.artifacts.paths import ensure_run_tree, run_root
+from dark_factory.artifacts.validation import collect_role_artifacts
+from dark_factory.context.builder import build_role_context
 from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
@@ -59,6 +64,7 @@ from dark_factory.orchestrator.lease import LeaseHandle, run_lease
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
 from dark_factory.persistence.engine import new_session
 from dark_factory.persistence.mutations import (
+    ArtifactReferenceWrite,
     EventWrite,
     HumanInteractionWrite,
     LeaseLost,
@@ -70,7 +76,6 @@ from dark_factory.persistence.repositories import RunState, load_run_state
 from dark_factory.workers.registry import WorkerRegistry, default_registry
 from dark_factory.workflows.pipeline import (
     Pipeline,
-    RoleNode,
     current_node,
     pipeline_from_snapshot,
 )
@@ -117,24 +122,6 @@ class RunNotFoundError(LookupError):
 class DriveLoopExhausted(RuntimeError):
     """Raised when the drive loop exceeds :data:`_MAX_DRIVE_ITERATIONS` -- a
     transition-graph bug, surfaced loudly instead of spinning."""
-
-
-def _build_context(run_id: UUID, state: RunState, node: RoleNode) -> dict[str, Any]:
-    """The role context handed to ``worker.execute``.
-
-    Built fresh from ``RunState`` on every call -- never carried between
-    ``advance`` invocations. Phase 1's ``FakeWorker`` does not read it; the shape
-    is here so a real adapter has something to consume.
-    """
-    attempt = state.latest_execution.attempt if state.latest_execution else 1
-    return {
-        "run_id": str(run_id),
-        "role": node.name,
-        "worker": node.worker,
-        "attempt": attempt,
-        "task": state.normalized_task.model_dump(mode="json"),
-        "answer": state.pending_answer,
-    }
 
 
 def _role_definition(state: RunState, role: str) -> Mapping[str, Any]:
@@ -239,6 +226,7 @@ def advance(
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline | None = None,
     action_registry: ActionRegistry = action_default_registry,
+    repo_root: Path | None = None,
 ) -> RunStatus:
     """Reconstruct from Neon, execute exactly one committed step under the lease,
     return the new status.
@@ -254,6 +242,11 @@ def advance(
     run's persisted snapshot (``pipeline_from_snapshot(state.workflow)``) inside
     ``_advance_once``, so resume never re-reads a config file. Tests inject an
     explicit ``Pipeline`` through this keyword-only seam.
+
+    ``repo_root`` defaults to ``None``: resolved to ``Path.cwd()`` at call time
+    inside ``_advance_once`` (never as a default argument value evaluated at
+    import), so it always reflects the process's working directory when a step
+    actually runs.
     """
     read_session = session_factory()
     try:
@@ -274,6 +267,7 @@ def advance(
             pipeline=pipeline,
             lease=lease,
             action_registry=action_registry,
+            repo_root=repo_root,
         )
 
 
@@ -285,6 +279,7 @@ def _advance_once(
     pipeline: Pipeline | None,
     lease: LeaseHandle,
     action_registry: ActionRegistry = action_default_registry,
+    repo_root: Path | None = None,
 ) -> RunStatus:
     """One reconstruct-and-commit step. **Assumes the lease is already held** and
     never claims it -- ``drive`` claims once for the whole loop, ``advance``
@@ -295,6 +290,11 @@ def _advance_once(
     -- via ``pipeline_from_snapshot``. The snapshot is the sole configuration
     source on resume; no ``.dark-factory.yaml`` / ``.dark-factory/`` file is read.
     A test may pass an explicit ``Pipeline`` to bypass the snapshot.
+
+    ``repo_root`` is resolved to ``Path.cwd()`` here when not supplied -- the
+    one place this whole call chain evaluates the working directory -- and
+    threaded down to :func:`_run_current_role`, which is where a role's
+    context and its run-tree directory are actually resolved against it.
     """
     read_session = session_factory()
     try:
@@ -310,6 +310,8 @@ def _advance_once(
     if pipeline is None:
         pipeline = pipeline_from_snapshot(state.workflow)
 
+    resolved_repo_root = repo_root if repo_root is not None else Path.cwd()
+
     attempt = state.latest_execution.attempt if state.latest_execution else None
     bind_contextvars(run_id=str(run_id), role=state.current_role, attempt=attempt)
     try:
@@ -323,6 +325,7 @@ def _advance_once(
             session_factory,
             lease,
             action_registry=action_registry,
+            repo_root=resolved_repo_root,
         )
     finally:
         unbind_contextvars("run_id", "role", "attempt")
@@ -377,6 +380,7 @@ def _run_current_role(
     lease: LeaseHandle,
     *,
     action_registry: ActionRegistry = action_default_registry,
+    repo_root: Path | None = None,
 ) -> RunStatus:
     """Run the current role's worker outside any transaction, then commit the outcome.
 
@@ -399,7 +403,15 @@ def _run_current_role(
     come from the persisted snapshot via :func:`_role_definition`; there is no
     branch on which role it is, and an ``UnknownActionError`` here would be a bug
     (the loader validated every name at run creation) so it is left to propagate.
+
+    After the worker call, and only when its signal is ``ROLE_COMPLETED``, every
+    JSON artifact the role's ``outputs`` marks as a machine type is schema
+    validated via :func:`~dark_factory.artifacts.validation.collect_role_artifacts`
+    (D-09, ART-02): a violation forces the signal to ``ROLE_FAILED`` instead of
+    trusting the worker's own ``COMPLETED`` status, and no ``artifacts`` row is
+    written for that attempt.
     """
+    resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
     latest = state.latest_execution
     if latest is None:
@@ -408,8 +420,18 @@ def _run_current_role(
         )
 
     worker = registry.get(node.worker)
-    context = _build_context(run_id, state, node)
     role_def = _role_definition(state, node.name)
+
+    run_dir = run_root(resolved_root, run_id)
+    ensure_run_tree(run_dir)
+
+    context_session = session_factory()
+    try:
+        context = build_role_context(
+            context_session, resolved_root, run_id, state, role_def
+        )
+    finally:
+        context_session.close()
 
     def _run_hooks(hook_phase: Literal["before", "after"]) -> None:
         for action_name in role_def.get(hook_phase, []):
@@ -418,9 +440,9 @@ def _run_current_role(
                     run_id=run_id,
                     role=node.name,
                     worker=node.worker,
-                    attempt=context["attempt"],
+                    attempt=context.attempt,
                     phase=hook_phase,
-                    task=context["task"],
+                    task=context.task,
                     answer=state.pending_answer,
                     role_definition=dict(role_def),
                 )
@@ -446,9 +468,28 @@ def _run_current_role(
     _run_hooks("after")
 
     signal = signal_from_result(result)
+    outcome = result.model_dump(mode="json")
+
+    # D-09: schema-validate every declared machine artifact BEFORE the signal is
+    # trusted. Only reached when the worker itself reported COMPLETED; any other
+    # signal already has its own terminal handling below and never writes
+    # artifacts.
+    artifact_writes: list[ArtifactReferenceWrite] = []
+    if signal is Signal.ROLE_COMPLETED:
+        try:
+            artifact_writes = collect_role_artifacts(
+                run_dir,
+                node.name,
+                latest.id,
+                list(role_def.get("outputs", [])),
+                list(result.artifacts),
+            )
+        except ArtifactError as exc:
+            signal = Signal.ROLE_FAILED
+            outcome = {**outcome, "error": str(exc)}
+
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
-    outcome = result.model_dump(mode="json")
     human_interaction: HumanInteractionWrite | None = None
     if signal is Signal.ROLE_COMPLETED:
         re_status = _ROLE_COMPLETED
@@ -476,7 +517,10 @@ def _run_current_role(
         events = [
             EventWrite(
                 type=EventType.ROLE_FAILED,
-                payload={"role": node.name, "error": result.error or result.summary},
+                payload={
+                    "role": node.name,
+                    "error": outcome.get("error") or result.summary,
+                },
             ),
             EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
         ]
@@ -524,6 +568,7 @@ def _run_current_role(
             events=events,
             expected_owner_token=lease.token,
             human_interaction=human_interaction,
+            artifact_references=artifact_writes,
         )
         _maybe_crash_after(state.status, new_status)
         return new_status
@@ -539,6 +584,7 @@ def drive(
     registry: WorkerRegistry = default_registry,
     pipeline: Pipeline | None = None,
     action_registry: ActionRegistry = action_default_registry,
+    repo_root: Path | None = None,
 ) -> RunStatus:
     """Loop one step until the run reaches a stop status; return that status.
 
@@ -550,6 +596,10 @@ def drive(
     re-claim can never race the process's own token; the private per-step
     function assumes it is held. A run already in a stop status returns
     immediately without claiming anything.
+
+    ``repo_root`` is threaded straight through to every ``_advance_once`` call
+    in the loop, unresolved -- each step resolves it (to ``Path.cwd()`` when
+    ``None``) independently, exactly as a single ``advance`` call would.
     """
     read_session = session_factory()
     try:
@@ -574,6 +624,7 @@ def drive(
                 pipeline=pipeline,
                 lease=lease,
                 action_registry=action_registry,
+                repo_root=repo_root,
             )
             if new_status != status and on_transition is not None:
                 on_transition(status, new_status)

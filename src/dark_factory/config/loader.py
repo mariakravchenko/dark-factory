@@ -79,6 +79,7 @@ class RoleDefinition(BaseModel):
     permissions: RolePermissions = RolePermissions()
     before: list[str] = Field(default_factory=list)
     after: list[str] = Field(default_factory=list)
+    inputs: list[str] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
     examples: list[str] = Field(default_factory=list)
 
@@ -152,6 +153,7 @@ def load_effective_config(
                 "permissions": rd.permissions.model_dump(mode="json"),
                 "before": list(rd.before),
                 "after": list(rd.after),
+                "inputs": list(rd.inputs),
                 "outputs": list(rd.outputs),
                 "examples": list(rd.examples),
             }

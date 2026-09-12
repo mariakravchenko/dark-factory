@@ -13,5 +13,6 @@ permissions:
 before: [prepare_role_context]
 after: [store_role_artifacts]
 
+inputs: []
 outputs: [requirements.md, acceptance_criteria.json]
 examples: []

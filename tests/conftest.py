@@ -311,12 +311,22 @@ def worker_result_factory() -> type[WorkerResultFactory]:
 #
 # `config_root_factory` writes a complete `.dark-factory/` tree under `tmp_path`
 # and returns its root; a test can request a specific `workflow.roles` order
-# (03-03 SC1, 03-04 SC3). Both BA and QA role files are always written, so any
-# permutation of `["BA", "QA"]` resolves. `config_root` is the zero-argument
-# default: a one-role `[BA]` fake pipeline. `repo_config_snapshot` loads the
-# *real* repo-root config so a test can assert the shipped `.dark-factory.yaml`
-# resolves and its first role has non-empty inlined instruction text.
+# (03-03 SC1, 03-04 SC3). BA, QA and (since Phase 4) ARCHITECTURE role files are
+# always written, so any permutation of `["BA", "QA", "ARCHITECTURE"]` resolves.
+# `config_root` is the zero-argument default: a one-role `[BA]` fake pipeline.
+# `repo_config_snapshot` loads the *real* repo-root config so a test can assert
+# the shipped `.dark-factory.yaml` resolves and its first role has non-empty
+# inlined instruction text.
 # None of these are wired into `advance()` / `start_run` here — that is 03-03.
+#
+# Every written role carries the (Phase 4) `inputs:` field, defaulted to `[]`
+# here so an unrelated test's scripted `WorkerResult` (which reports no
+# `artifacts`) is never forced through `collect_role_artifacts` against a
+# declared output it never wrote. A test that needs a real BA -> ARCHITECTURE
+# artifact handoff (e.g. `tests/db/test_artifact_handoff.py`) overwrites the two
+# role files it needs after calling this factory -- the same
+# build-then-overwrite idiom `tests/integration/test_role_yaml_drives_behaviour.py`
+# already uses for a single role.
 
 
 def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
@@ -337,8 +347,9 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
     _after = {
         "BA": "[store_role_artifacts]",
         "QA": "[collect_test_results, store_role_artifacts]",
+        "ARCHITECTURE": "[store_role_artifacts]",
     }
-    for role in ("BA", "QA"):
+    for role in ("BA", "QA", "ARCHITECTURE"):
         (root / f".dark-factory/roles/{role}.yaml").write_text(
             f"name: {role}\n"
             "worker: fake\n"
@@ -347,6 +358,7 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
             "permissions:\n  write_scope: []\n"
             "before: [prepare_role_context]\n"
             f"after: {_after[role]}\n"
+            "inputs: []\n"
             "outputs: []\n"
             "examples: []\n",
             encoding="utf-8",

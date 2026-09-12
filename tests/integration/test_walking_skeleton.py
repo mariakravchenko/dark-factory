@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -28,7 +29,7 @@ pytestmark = pytest.mark.integration
 _MULTIBYTE_BODY = "日本語 \U0001f389 café"
 
 
-def _run_cli(source: str, pg_url: str) -> subprocess.CompletedProcess[str]:
+def _run_cli(source: str, pg_url: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
         "DATABASE_URL": pg_url,
@@ -40,15 +41,21 @@ def _run_cli(source: str, pg_url: str) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         env=env,
+        cwd=cwd,
         timeout=90,
         check=False,
     )
 
 
 def test_run_text_task_reaches_completed_end_to_end(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
-    proc = _run_cli("text:add a health endpoint", pg_url)
+    # A throwaway one-role [BA] config tree, not this repo's own shipped
+    # .dark-factory.yaml (Phase 4 ships a real two-role pipeline whose BA
+    # declares machine-artifact outputs the true-default FakeWorker cannot
+    # satisfy). This test's SC1 assertions are about the Phase-1 one-role
+    # walking skeleton and stay valid unchanged against the throwaway tree.
+    proc = _run_cli("text:add a health endpoint", pg_url, config_root)
 
     assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}"
 
@@ -91,9 +98,9 @@ def test_run_text_task_reaches_completed_end_to_end(
 
 
 def test_multibyte_task_body_round_trips_through_normalized_task(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
-    proc = _run_cli("text:" + _MULTIBYTE_BODY, pg_url)
+    proc = _run_cli("text:" + _MULTIBYTE_BODY, pg_url, config_root)
 
     assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}"
     run_id = UUID(proc.stdout.splitlines()[0].strip())

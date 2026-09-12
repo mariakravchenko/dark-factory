@@ -30,6 +30,7 @@ from __future__ import annotations
 import subprocess
 import time
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -130,8 +131,11 @@ def _drain(
 
 
 def test_zero_backends_of_this_application_are_idle_in_transaction_during_the_call(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the scripted result below does not supply.
     owner = popen(
         ["run", "text:no transaction may span the worker call"],
         child_env(
@@ -141,6 +145,7 @@ def test_zero_backends_of_this_application_are_idle_in_transaction_during_the_ca
             lease_ttl_seconds=_TTL_SECONDS,
             lease_heartbeat_seconds=_HEARTBEAT_SECONDS,
         ),
+        cwd=config_root,
     )
     try:
         assert owner.stdout is not None

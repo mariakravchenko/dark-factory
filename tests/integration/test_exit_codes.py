@@ -12,6 +12,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -20,7 +21,11 @@ pytestmark = pytest.mark.integration
 
 
 def _cli(
-    args: list[str], pg_url: str, *, extra_env: dict[str, str] | None = None
+    args: list[str],
+    pg_url: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
@@ -35,13 +40,18 @@ def _cli(
         capture_output=True,
         text=True,
         env=env,
+        cwd=cwd,
         timeout=90,
         check=False,
     )
 
 
-def test_exit_0_on_the_happy_path(pg_url: str) -> None:
-    proc = _cli(["run", "text:ship a health endpoint"], pg_url)
+def test_exit_0_on_the_happy_path(pg_url: str, config_root: Path) -> None:
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the true-default (unscripted) FakeWorker
+    # cannot satisfy.
+    proc = _cli(["run", "text:ship a health endpoint"], pg_url, cwd=config_root)
     assert proc.returncode == 0, proc.stdout
     UUID(proc.stdout.splitlines()[0].strip())  # run id still on line 1
 

@@ -15,9 +15,10 @@ from tests.conftest import _alembic_config
 pytestmark = pytest.mark.db
 
 EXPECTED_TABLES = {"runs", "role_executions", "run_events"}
-# ``human_interactions`` is created by revision 0003 (Phase 2) and is no longer
-# forbidden. ``artifacts`` is still Phase 4 and must not appear yet.
-FORBIDDEN_TABLES = {"artifacts"}
+# ``human_interactions`` (revision 0003, Phase 2) and ``artifacts`` (revision
+# 0004, Phase 4) are both created by now and are no longer forbidden. No table
+# beyond the five owned ones (see migrations/env.py::_OWNED_TABLES) is expected.
+FORBIDDEN_TABLES: set[str] = set()
 
 
 @pytest.fixture
@@ -40,9 +41,7 @@ def test_upgrade_head_creates_the_expected_owned_tables_and_no_future_ones(
 ) -> None:
     names = _table_names(direct_engine)
     assert names >= EXPECTED_TABLES
-    assert not (FORBIDDEN_TABLES & names), (
-        "the schema must not create the Phase 4 artifacts table yet"
-    )
+    assert not (FORBIDDEN_TABLES & names)
 
 
 def test_migration_round_trips_through_downgrade_and_back(

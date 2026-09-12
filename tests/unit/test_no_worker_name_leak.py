@@ -22,6 +22,19 @@ def _strip_comment(line: str) -> str:
     return line if marker == -1 else line[:marker]
 
 
+def _strip_claude_md_filename(line: str) -> str:
+    """Remove ``claude.md`` occurrences (case already lowered by the caller)
+    before the runtime-name scan.
+
+    ``CLAUDE.md`` is one of the three fixed D-02 baseline document filenames
+    (``dark_factory.context.builder.BASELINE_DOC_FILENAMES``) -- a repo
+    convention, not a reference to the Claude Code worker runtime. Stripping
+    the filename pattern first keeps the guard biting on the runtime name
+    itself (``claude`` anywhere else) without a blanket per-directory
+    exemption that would hide a genuine leak."""
+    return line.replace("claude.md", "")
+
+
 def _scanned_files() -> list[pathlib.Path]:
     files: list[pathlib.Path] = []
     for path in sorted(_SRC_ROOT.rglob("*.py")):
@@ -42,7 +55,7 @@ def test_no_real_worker_runtime_name_leaks_into_the_core() -> None:
         for lineno, raw in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
-            haystack = _strip_comment(raw).lower()
+            haystack = _strip_claude_md_filename(_strip_comment(raw).lower())
             for name in _FORBIDDEN_RUNTIME_NAMES:
                 if name in haystack:
                     offenders.append(

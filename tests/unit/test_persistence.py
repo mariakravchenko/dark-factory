@@ -90,11 +90,13 @@ def test_models_and_base_are_importable() -> None:
     assert RunEvent is not None
 
 
-def test_metadata_has_exactly_the_four_owned_tables() -> None:
+def test_metadata_has_exactly_the_five_owned_tables() -> None:
     from dark_factory.persistence.models import Base
 
-    # ``human_interactions`` joins the set in revision 0003 (Phase 2).
+    # ``human_interactions`` joins the set in revision 0003 (Phase 2);
+    # ``artifacts`` joins it in revision 0004 (Phase 4).
     assert sorted(Base.metadata.tables) == [
+        "artifacts",
         "human_interactions",
         "role_executions",
         "run_events",

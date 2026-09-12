@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Callable
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -54,11 +55,16 @@ def test_killed_after_first_commit_then_resumed_by_a_separate_process(
     pg_url: str,
     engine: Engine,
     force_lease_expiry: Callable[[UUID], None],
+    config_root: Path,
 ) -> None:
     # -- first process: dies the instant CREATED -> BA commits --
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the unscripted FakeWorker cannot satisfy.
     p1 = spawn(
         ["run", "text:carry nothing between processes"],
         child_env(pg_url, crash_after=_CRASH_AT_FIRST_TRANSITION),
+        cwd=config_root,
     )
     assert p1.returncode != 0, (
         f"expected a non-zero crash exit, got {p1.returncode}\n"
@@ -101,7 +107,7 @@ def test_killed_after_first_commit_then_resumed_by_a_separate_process(
     # -- second, entirely separate process: the hook is not in its environment --
     resume_env = child_env(pg_url)
     assert "DARK_FACTORY_CRASH_AFTER" not in resume_env
-    p2 = spawn(["resume", str(run_id)], resume_env)
+    p2 = spawn(["resume", str(run_id)], resume_env, cwd=config_root)
     assert p2.returncode == 0, f"stdout={p2.stdout!r}\nstderr={p2.stderr!r}"
     assert "BA → COMPLETED" in p2.stdout
 
@@ -132,9 +138,11 @@ def test_killed_after_first_commit_then_resumed_by_a_separate_process(
     assert _count_runs(engine) == runs_before_resume
 
 
-def test_run_without_the_hook_reaches_completed_unchanged(pg_url: str) -> None:
+def test_run_without_the_hook_reaches_completed_unchanged(
+    pg_url: str, config_root: Path
+) -> None:
     """With the variable unset, ``run`` behaves exactly as it did before the hook."""
-    proc = spawn(["run", "text:no hook armed here"], child_env(pg_url))
+    proc = spawn(["run", "text:no hook armed here"], child_env(pg_url), cwd=config_root)
     assert proc.returncode == 0, f"stdout={proc.stdout!r}\nstderr={proc.stderr!r}"
     run_id_from_stdout(proc.stdout)
     assert "CREATED → BA" in proc.stdout

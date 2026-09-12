@@ -48,6 +48,7 @@ import subprocess
 import time
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -179,8 +180,11 @@ def _drain(
 
 
 def test_a_slow_step_keeps_its_lease_and_the_expiry_advances_repeatedly(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, config_root: Path
 ) -> None:
+    # A throwaway one-role [BA] config tree: this repo's own shipped
+    # .dark-factory.yaml ships a real two-role pipeline whose BA declares
+    # machine-artifact outputs the scripted result below does not supply.
     owner = popen(
         ["run", "text:a step three times longer than its lease ttl"],
         child_env(
@@ -190,6 +194,7 @@ def test_a_slow_step_keeps_its_lease_and_the_expiry_advances_repeatedly(
             lease_ttl_seconds=_TTL_SECONDS,
             lease_heartbeat_seconds=_HEARTBEAT_SECONDS,
         ),
+        cwd=config_root,
     )
     competitors: list[subprocess.Popen[str]] = []
     try:
@@ -280,7 +285,12 @@ def test_a_slow_step_keeps_its_lease_and_the_expiry_advances_repeatedly(
     assert token is None
     assert expiry is None
 
-    after = spawn(["resume", str(run_id)], child_env(pg_url), timeout=_CHILD_TIMEOUT)
+    after = spawn(
+        ["resume", str(run_id)],
+        child_env(pg_url),
+        cwd=config_root,
+        timeout=_CHILD_TIMEOUT,
+    )
     assert after.returncode == 0, f"stdout={after.stdout!r}\nstderr={after.stderr!r}"
     assert "Traceback" not in after.stderr
 

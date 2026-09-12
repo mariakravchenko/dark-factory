@@ -33,16 +33,14 @@ and ``runs.qa_developer_iterations`` / ``runs.quality_gate_iterations`` are NOT
 NULL integers; they are incremented only in the one mutation path, never by
 counting rows or folding events.
 
-**Artifact durability, recorded for schema shape only (D-21).** Phase 1 creates
-no ``artifacts`` table. The future ``artifacts`` table (Phase 4) will store
-``ArtifactReference`` **metadata only** — ``id, run_id, role_execution_id, type,
-path, checksum, metadata, created_at`` — and never artifact content. Artifact
-content lives on the filesystem under a per-run directory
-(``.dark-factory/runs/<run-id>/``) and, in Phase 5, travels between machines by
-being committed to a ``.dark-factory/`` path on the run's working branch that is
-excluded from the published diff. This is written down because it shapes the
-schema, not because it is built now: no model here defines a column intended to
-hold artifact content.
+**Artifact durability (D-21).** ``artifacts`` (Phase 4, migration ``0004``)
+stores :class:`ArtifactReference` **metadata only** — ``id, run_id,
+role_execution_id, type, path, checksum, metadata, created_at`` — and never
+artifact content. Artifact content lives on the filesystem under a per-run
+directory (``.dark-factory/runs/<run-id>/``) and, in Phase 5, travels between
+machines by being committed to a ``.dark-factory/`` path on the run's working
+branch that is excluded from the published diff. No column on
+:class:`ArtifactReference` holds artifact content.
 """
 
 from __future__ import annotations
@@ -58,7 +56,14 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 
-__all__ = ["Base", "HumanInteraction", "RoleExecution", "Run", "RunEvent"]
+__all__ = [
+    "ArtifactReference",
+    "Base",
+    "HumanInteraction",
+    "RoleExecution",
+    "Run",
+    "RunEvent",
+]
 
 # VARCHAR + CHECK carrying every STATE-07 value from revision 0001 (B1). Shared
 # between the three places that must agree: this column, the CHECK constraint, and
@@ -263,4 +268,48 @@ class HumanInteraction(Base):
     )
     answered_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), nullable=True
+    )
+
+
+class ArtifactReference(Base):
+    """One row per artifact file a role attempt produced (ART-01/02/03). Neon
+    holds **metadata only** -- ``id, run_id, role_execution_id, type, path,
+    checksum, metadata, created_at`` -- never the file's body text; the
+    filesystem under ``.dark-factory/runs/<run-id>/`` holds the real content.
+
+    ``uq_artifact_role_execution_path`` is the same defence-in-depth philosophy
+    as ``uq_role_exec_attempt`` / ``uq_one_waiting_interaction_per_run``: two
+    artifacts reported for the same attempt at the same path collide rather
+    than silently merge.
+
+    The Python attribute is ``artifact_metadata`` -- ``metadata`` is reserved on
+    a SQLAlchemy declarative class (``Base.metadata``) -- but the database
+    column name stays ``metadata`` exactly as this module's docstring (lines
+    36-45) already promised.
+    """
+
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "role_execution_id", "path", name="uq_artifact_role_execution_path"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), primary_key=True, default=uuid.uuid4
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), sa.ForeignKey("runs.id"), nullable=False, index=True
+    )
+    role_execution_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid(), sa.ForeignKey("role_executions.id"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    path: Mapped[str] = mapped_column(sa.String, nullable=False)
+    checksum: Mapped[str | None] = mapped_column(sa.String, nullable=True)
+    artifact_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )

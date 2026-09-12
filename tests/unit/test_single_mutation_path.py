@@ -36,7 +36,12 @@ pytestmark = pytest.mark.unit
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "dark_factory"
 _ALLOWED = {_SRC_ROOT / "persistence" / "mutations.py"}
-_LIFECYCLE_CTORS = {"RunEvent", "RoleExecution", "HumanInteraction"}
+_LIFECYCLE_CTORS = {
+    "RunEvent",
+    "RoleExecution",
+    "HumanInteraction",
+    "ArtifactReference",
+}
 
 
 def _modules() -> Iterator[Path]:

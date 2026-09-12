@@ -9,7 +9,13 @@ script in this order:
 2. a JSON array in ``DARK_FACTORY_FAKE_SCRIPT``, each element validated through
    ``WorkerResult.model_validate`` -- how the subprocess-level tests in Plans 05
    and 06 drive the failure arm across a process boundary;
-3. the D-10 default -- a single COMPLETED result with a ``fake-<uuid>`` session id.
+3. the D-10 default -- a COMPLETED result with a fresh ``fake-<uuid>`` session
+   id **on every call**, never exhausting. Phase 4 ships a multi-role pipeline
+   (``.dark-factory.yaml``'s ``workflow.roles``), and an operator running
+   ``dark-factory run ...`` with no ``DARK_FACTORY_FAKE_SCRIPT`` must be able to
+   drive every role to completion with no explicit script -- an *explicit*
+   script (argument or env), including an explicit empty one, still exhausts
+   exactly as documented below; only the true no-script default is unbounded.
 
 Test-only knob (alongside ``DARK_FACTORY_FAKE_SCRIPT``):
 ``DARK_FACTORY_FAKE_SLEEP_MS`` makes ``execute()`` deliberately slow, so a step
@@ -84,9 +90,15 @@ class FakeWorker(CodingWorker):
     ) -> None:
         if script is not None:
             self._script: list[WorkerResult] = list(script)
+            self._is_default = False
         else:
             from_env = _script_from_env()
-            self._script = from_env if from_env is not None else _default_script()
+            if from_env is not None:
+                self._script = from_env
+                self._is_default = False
+            else:
+                self._script = _default_script()
+                self._is_default = True
         self._index = 0
         self._sleep_ms = sleep_ms
 
@@ -95,6 +107,13 @@ class FakeWorker(CodingWorker):
         if delay_ms is not None and delay_ms > 0:
             time.sleep(delay_ms / 1000)
         if self._index >= len(self._script):
+            if self._is_default:
+                # The true no-script default never exhausts (see module
+                # docstring) -- a fresh COMPLETED result every call, so a
+                # shipped multi-role pipeline completes with no explicit
+                # script. An explicit script/env, including an explicit
+                # empty one, still exhausts below.
+                return _default_script()[0]
             raise ScriptExhaustedError(
                 f"FakeWorker script exhausted after {self._index} result(s)"
             )

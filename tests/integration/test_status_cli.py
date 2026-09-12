@@ -31,7 +31,11 @@ _UNKNOWN_ID = "00000000-0000-0000-0000-000000000000"
 
 
 def _cli(
-    args: list[str], pg_url: str, *, extra_env: dict[str, str] | None = None
+    args: list[str],
+    pg_url: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
@@ -47,13 +51,14 @@ def _cli(
         capture_output=True,
         text=True,
         env=env,
+        cwd=cwd,
         timeout=120,
         check=False,
     )
 
 
-def _start_run(pg_url: str, source: str = "text:where is this run") -> str:
-    proc = _cli(["run", source], pg_url)
+def _start_run(pg_url: str, cwd: Path, source: str = "text:where is this run") -> str:
+    proc = _cli(["run", source], pg_url, cwd=cwd)
     assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}"
     return proc.stdout.splitlines()[0].strip()
 
@@ -67,8 +72,8 @@ def _text_field_keys(stdout: str) -> set[str]:
 # --------------------------------------------------------------------------- #
 
 
-def test_status_text_mode_reports_position(pg_url: str) -> None:
-    run_id = _start_run(pg_url)
+def test_status_text_mode_reports_position(pg_url: str, config_root: Path) -> None:
+    run_id = _start_run(pg_url, config_root)
 
     proc = _cli(["status", run_id], pg_url)
 
@@ -80,8 +85,10 @@ def test_status_text_mode_reports_position(pg_url: str) -> None:
     assert "latest_attempt: 1" in proc.stdout
 
 
-def test_status_json_mode_emits_exactly_one_clean_json_object(pg_url: str) -> None:
-    run_id = _start_run(pg_url)
+def test_status_json_mode_emits_exactly_one_clean_json_object(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
 
     proc = _cli(["status", run_id, "--json"], pg_url)
 
@@ -93,8 +100,8 @@ def test_status_json_mode_emits_exactly_one_clean_json_object(pg_url: str) -> No
     assert isinstance(payload, dict)
 
 
-def test_json_key_set_equals_the_text_field_set(pg_url: str) -> None:
-    run_id = _start_run(pg_url)
+def test_json_key_set_equals_the_text_field_set(pg_url: str, config_root: Path) -> None:
+    run_id = _start_run(pg_url, config_root)
 
     text = _cli(["status", run_id], pg_url)
     js = _cli(["status", run_id, "--json"], pg_url)
@@ -103,8 +110,10 @@ def test_json_key_set_equals_the_text_field_set(pg_url: str) -> None:
     assert set(json.loads(js.stdout).keys()) == _text_field_keys(text.stdout)
 
 
-def test_status_after_a_run_reports_completed_ba_attempt_1(pg_url: str) -> None:
-    run_id = _start_run(pg_url)
+def test_status_after_a_run_reports_completed_ba_attempt_1(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
 
     proc = _cli(["status", run_id, "--json"], pg_url)
 

@@ -41,7 +41,13 @@ from dark_factory.persistence.models import Base, HumanInteraction, RoleExecutio
 
 pytestmark = pytest.mark.db
 
-_OWNED_TABLES = ["human_interactions", "role_executions", "run_events", "runs"]
+_OWNED_TABLES = [
+    "artifacts",
+    "human_interactions",
+    "role_executions",
+    "run_events",
+    "runs",
+]
 _INTERACTION_COLUMNS = {
     "id",
     "run_id",
@@ -137,7 +143,7 @@ def _claim(
 # --------------------------------------------------------------------------- #
 
 
-def test_metadata_owns_exactly_the_four_tables() -> None:
+def test_metadata_owns_exactly_the_five_tables() -> None:
     assert sorted(Base.metadata.tables) == _OWNED_TABLES
 
 
