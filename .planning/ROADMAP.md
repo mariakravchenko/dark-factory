@@ -206,7 +206,14 @@ Plans:
   4. A retried attempt's rebuilt context contains no artifact from the superseded attempt.
   5. A machine artifact that violates its JSON schema fails the role with a persisted error instead of advancing the run, and the transition after QA is decided by `verdict.json`, never by summary prose.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 04-01-PLAN.md — Tracer: one artifact (`acceptance_criteria.json`) crosses one handoff BA → ARCHITECTURE, end to end through the `artifacts` table, filesystem store, schema validation and ContextBuilder (wave 1)
+- [ ] 04-02-PLAN.md — INTAKE-02: `dark-factory run spec:./task.md` starts and drives a real run (wave 1, parallel)
+- [ ] 04-03-PLAN.md — Expand to all four roles and all six artifacts: the remaining machine-artifact models, the DEVELOPMENT/QA wiring, and the SC1/SC2 proofs (wave 2)
+- [ ] 04-04-PLAN.md — SC4 retry-context isolation, SC5 schema-violation-fails-role, and the Phase 4 acceptance gate (wave 3)
+
 **Invariants**: roles hand off through artifacts, never a shared conversation; where orchestration depends on a result, the JSON contract is authoritative; the ContextBuilder never walks the source tree.
 
 ### Phase 5: Isolated Workspace & Git Lifecycle
