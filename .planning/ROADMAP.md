@@ -206,13 +206,13 @@ Plans:
   4. A retried attempt's rebuilt context contains no artifact from the superseded attempt.
   5. A machine artifact that violates its JSON schema fails the role with a persisted error instead of advancing the run, and the transition after QA is decided by `verdict.json`, never by summary prose.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 04-01-PLAN.md — Tracer: one artifact (`acceptance_criteria.json`) crosses one handoff BA → ARCHITECTURE, end to end through the `artifacts` table, filesystem store, schema validation and ContextBuilder (wave 1)
-- [ ] 04-02-PLAN.md — INTAKE-02: `dark-factory run spec:./task.md` starts and drives a real run (wave 1, parallel)
+- [x] 04-02-PLAN.md — INTAKE-02: `dark-factory run spec:./task.md` starts and drives a real run (wave 1, parallel)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -365,7 +365,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
-| 4. The Four-Role Pipeline & Artifact Handoffs | 1/4 | In Progress|  |
+| 4. The Four-Role Pipeline & Artifact Handoffs | 2/4 | In Progress|  |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
