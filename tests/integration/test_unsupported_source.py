@@ -1,10 +1,11 @@
 """Unsupported and unresolvable sources exit 2 with nothing persisted (D-23).
 
-``spec:`` and ``github:`` classify successfully but their loaders raise
-``SourceNotSupportedError``; an unresolvable prefix and an empty ``text:`` body
-raise ``UnresolvableSourceError``. In every case the process exits 2 and the
-``runs`` row count is unchanged -- exit 2 is reserved for failures *before*
-anything is persisted.
+``github:`` classifies successfully but its loader raises
+``SourceNotSupportedError`` (the last remaining deferred source kind, until
+Phase 10); an unresolvable prefix and an empty ``text:`` body raise
+``UnresolvableSourceError``. In every case the process exits 2 and the ``runs``
+row count is unchanged -- exit 2 is reserved for failures *before* anything is
+persisted.
 """
 
 from __future__ import annotations
@@ -48,7 +49,6 @@ def _run_count(engine: Engine) -> int:
 @pytest.mark.parametrize(
     ("source", "phase_marker"),
     [
-        ("spec:./task.md", "Phase 4"),
         ("github:152", "Phase 10"),
     ],
 )
