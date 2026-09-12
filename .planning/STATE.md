@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: The Four-Role Pipeline & Artifact Handoffs
 status: executing
-stopped_at: Phase 4 context gathered
-last_updated: "2026-09-12T09:11:00.595Z"
-last_activity: 2026-09-11
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 3881000be139f2602969ad9637f5bfb1ab3b787b
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-09-12T12:26:32.669Z"
+last_activity: 2026-09-12
+last_activity_desc: Phase 04 execution started
+state_head: c7b44c5a581825b0eaebea44ca8ec3137177a3e6
 progress:
   total_phases: 12
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 24
-  completed_plans: 20
-  percent: 8
+  completed_plans: 21
+  percent: 0
 ---
 
 # Project State
@@ -23,16 +23,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-11)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 4 — The Four-Role Pipeline & Artifact Handoffs
+**Current focus:** Phase 04 — The Four-Role Pipeline & Artifact Handoffs
 
 ## Current Position
 
-Phase: 04 (The Four-Role Pipeline & Artifact Handoffs) — READY TO EXECUTE
-Plan: Not started
+Phase: 04 (The Four-Role Pipeline & Artifact Handoffs) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-09-11 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-09-12 — Phase 04 execution started
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -79,6 +79,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 03 P02 | 5min | 2 tasks | 13 files |
 | Phase 03 P03 | 22min | 3 tasks | 25 files |
 | Phase 03 P04 | 32min | 3 tasks | 7 files |
+| Phase 04 P01 | 85min | 3 tasks | 38 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,8 @@ Recent decisions affecting current work:
 - [Phase 03]: 03-04: _run_current_role fires configured before-hooks after _build_context (ahead of execute-vs-resume) and after-hooks after the lease-loss check, both OUTSIDE with session.begin(); a lost lease raises LeaseLost before the after-hooks; the apply_transition block is unchanged
 - [Phase 03]: 03-04: action_registry is a keyword-only param on advance/drive/_advance_once/_run_current_role (default = dark_factory.actions.default_registry), threaded like registry: WorkerRegistry; _role_definition(state, role) is a data lookup by role value, a legacy bare-string roles entry -> {name, before: [], after: []} so hooks are a no-op for Phase 1/2 runs
 - [Phase 03]: 03-04: the Phase 3 acceptance gate (tests/integration/test_phase3_acceptance.py) is a SIBLING of test_phase2_acceptance.py mapping SC1-SC4 + ORCH-02/ORCH-03/CFG-01..CFG-05/WORK-02 to present/non-empty/def-test_ proofs; _VALIDATION_PROOF_FILES (13) is drift-guarded against 03-VALIDATION.md; grep for a skip/opt-out call = 0
+- [Phase 04]: 04-01: FakeWorker's true (unscripted) default no longer exhausts after one call — repeats a fresh COMPLETED result so the shipped two-role pipeline completes with no explicit script; explicit scripts (incl. empty) still exhaust.
+- [Phase 04]: 04-01: build_role_context passes RoleContext as the object itself to worker.execute/resume (not a dict); role_def lookups use .get(...) throughout so the legacy bare-string snapshot shape still resolves.
 
 ### Pending Todos
 
@@ -170,6 +173,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T05:33:09.919Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-the-four-role-pipeline-artifact-handoffs/04-CONTEXT.md
+Last session: 2026-09-12T12:26:32.627Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None
