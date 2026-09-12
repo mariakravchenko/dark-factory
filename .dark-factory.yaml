@@ -9,11 +9,13 @@ repository:
 
 workflow:
   # Ordered pipeline. Each entry MUST be a RunStatus role value
-  # (BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING). Phase 4 (04-01)
-  # ships the first two-role pipeline: BA hands acceptance_criteria.json to
-  # ARCHITECTURE through the artifacts table + inputs/outputs contract
-  # (ORCH-04, ROLE-02). Development/QA join in 04-02.
-  roles: [BA, ARCHITECTURE]
+  # (BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING). Phase 4 ships
+  # the full four-role pipeline: BA -> ARCHITECTURE -> DEVELOPMENT -> QA, each
+  # handing the next its declared artifact(s) through the artifacts table +
+  # inputs/outputs contract (ORCH-04, ROLE-01..ROLE-04). 04-01 shipped the
+  # first two-role slice (BA -> ARCHITECTURE); 04-03 adds DEVELOPMENT and QA,
+  # closing the phase's headline capability.
+  roles: [BA, ARCHITECTURE, DEVELOPMENT, QA]
 
 roles_dir: .dark-factory/roles
 

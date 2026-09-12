@@ -11,12 +11,14 @@ the ``FakeWorker`` script.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from uuid import uuid4
 
 from dark_factory.artifacts.store import write_artifact_text
-from dark_factory.domain.worker import ArtifactRef
+from dark_factory.domain.worker import ArtifactRef, WorkerResult, WorkerResultStatus
 
-__all__ = ["write_role_artifacts"]
+__all__ = ["four_role_script", "write_role_artifacts"]
 
 
 def write_role_artifacts(
@@ -30,3 +32,116 @@ def write_role_artifacts(
         path, digest = write_artifact_text(root, role, filename, content)
         refs.append(ArtifactRef(type=filename, path=path, checksum=digest))
     return refs
+
+
+def four_role_script(run_root: Path) -> list[WorkerResult]:
+    """The single ordered ``[BA, ARCHITECTURE, DEVELOPMENT, QA]`` script a
+    four-role db test hands to one :class:`~dark_factory.workers.fake.FakeWorker`
+    (the registry-scoped-singleton note in ``workers/registry.py``'s docstring:
+    one script cursor advances across the whole run, so four independently
+    scripted workers cannot be dispatched between).
+
+    Content is minimal but schema-valid per D-07: ``acceptance_criteria.json``
+    carries an ``AC-1``-shaped id, and ``verdict.json`` references that same id
+    with a declared status consistent with its criteria (D-04/D-05). Realistic
+    task-aware prose is Phase 7's concern, not this one.
+    """
+    ba_refs = write_role_artifacts(
+        run_root,
+        "BA",
+        {
+            "requirements.md": (
+                "# Requirements\n\n1. The system does the thing correctly.\n"
+            ),
+            "acceptance_criteria.json": json.dumps(
+                {
+                    "criteria": [
+                        {"id": "AC-1", "description": "the thing works"},
+                    ]
+                }
+            ),
+        },
+    )
+    architecture_refs = write_role_artifacts(
+        run_root,
+        "ARCHITECTURE",
+        {
+            "design.md": (
+                "# Design\n\nImplement the thing in the existing service layer; "
+                "no new component is needed.\n"
+            ),
+            "constraints.json": json.dumps(
+                {
+                    "constraints": [
+                        {"id": "C-1", "description": "no new database migration"},
+                    ]
+                }
+            ),
+        },
+    )
+    development_refs = write_role_artifacts(
+        run_root,
+        "DEVELOPMENT",
+        {
+            "implementation_summary.json": json.dumps(
+                {
+                    "summary": "implemented the thing",
+                    "changed_files": [],
+                    "tests_added": [],
+                }
+            ),
+        },
+    )
+    qa_refs = write_role_artifacts(
+        run_root,
+        "QA",
+        {
+            "test_report.json": json.dumps(
+                {
+                    "cases": [
+                        {
+                            "name": "AC-1: the thing works",
+                            "result": "PASS",
+                            "detail": "reproduced manually",
+                        }
+                    ]
+                }
+            ),
+            "verdict.json": json.dumps(
+                {
+                    "criteria": [
+                        {"criterion_id": "AC-1", "result": "PASS", "notes": ""}
+                    ],
+                    "issues": [],
+                    "status": "PASS",
+                }
+            ),
+        },
+    )
+
+    return [
+        WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary="BA analysis complete",
+            worker_session_id=f"fake-ba-{uuid4()}",
+            artifacts=ba_refs,
+        ),
+        WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary="architecture design complete",
+            worker_session_id=f"fake-architecture-{uuid4()}",
+            artifacts=architecture_refs,
+        ),
+        WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary="implementation complete",
+            worker_session_id=f"fake-development-{uuid4()}",
+            artifacts=development_refs,
+        ),
+        WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary="QA verified every acceptance criterion",
+            worker_session_id=f"fake-qa-{uuid4()}",
+            artifacts=qa_refs,
+        ),
+    ]

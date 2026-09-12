@@ -1,6 +1,8 @@
-# QA role definition. Not in the shipped workflow.roles -- it exists so 03-03 can
-# prove that reordering / shortening workflow.roles changes the executed pipeline
-# (SC1) with no orchestrator change.
+# QA role definition (ROLE-04). This phase (04-03) ships it as the fourth and
+# final shipped pipeline role: inputs declares acceptance_criteria.json (BA's
+# output, two roles earlier) and implementation_summary.json (DEVELOPMENT's
+# output, the role immediately prior) -- proving selection is by declared
+# filename, not pipeline adjacency.
 name: QA
 worker: fake
 instructions: ../instructions/qa.md
@@ -12,5 +14,6 @@ permissions:
 before: [prepare_role_context]
 after: [collect_test_results, store_role_artifacts]
 
+inputs: [acceptance_criteria.json, implementation_summary.json]
 outputs: [test_report.json, verdict.json]
 examples: []

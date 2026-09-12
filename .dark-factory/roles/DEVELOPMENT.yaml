@@ -1,0 +1,31 @@
+# Developer role definition (CFG-02 / CFG-03, ROLE-03). Editing this file
+# changes the resolved role in the next run's snapshot with no Python change.
+name: DEVELOPMENT
+worker: fake
+instructions: ../instructions/development.md
+
+# tools / permissions are stored in the snapshot this phase, not enforced
+# (tool grants -> Phase 6 TOOL-03; write_scope -> Phase 5 ROLE-05). Grants the
+# existing roles' read/artifact tools plus the write-capable ones ROLE-03
+# names (repo.write, repo.write_tests, shell.execute) -- Phase 4 has no git
+# worktree and no real worker, so nothing here is exercised yet; see
+# A-04-03 in 04-03-PLAN.md for the explicit write-scope carve-out.
+tools:
+  [
+    repo.read,
+    repo.search,
+    repo.write,
+    repo.write_tests,
+    shell.execute,
+    artifacts.read,
+    artifacts.write,
+  ]
+permissions:
+  write_scope: []
+
+before: [prepare_role_context]
+after: [store_role_artifacts]
+
+inputs: [design.md, constraints.json]
+outputs: [implementation_summary.json]
+examples: []
