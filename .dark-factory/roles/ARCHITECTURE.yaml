@@ -10,8 +10,13 @@ tools: [repo.read, repo.search, artifacts.read, artifacts.write]
 permissions:
   write_scope: []
 
-before: [prepare_role_context]
-after: [store_role_artifacts]
+# WR-01 (04-REVIEW): context assembly and artifact persistence are
+# unconditional orchestrator behaviour (orchestrator/runner.py), not
+# something a role opts into -- prepare_role_context / store_role_artifacts
+# used to be listed here but named no-op stubs that never gated either one.
+# See src/dark_factory/actions/builtins.py's module docstring.
+before: []
+after: []
 
 inputs: [acceptance_criteria.json]
 outputs: [design.md, constraints.json]
