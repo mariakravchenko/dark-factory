@@ -28,3 +28,10 @@ Out-of-scope discoveries logged during execution, not fixed (SCOPE BOUNDARY).
   `test_the_two_nodes_pause_through_structurally_identical_code` projects the
   role-execution row identity (and `.role`) out of the comparison. Not fixed;
   no production change made.
+
+  **Resolved in Phase 4 (04-03).** `orchestrator/runner._enter_role` now
+  generalises `_enter_first_role`'s insert-then-run split to every role after
+  the first: entering role K+1 is its own committed step that inserts a fresh
+  `RUNNING` row for role K+1 (before any worker call), so a multi-role
+  pipeline gets one `role_executions` row per role, matching STATE-03. Also
+  closed as WINDOWS.md ledger item #6.

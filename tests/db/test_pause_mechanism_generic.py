@@ -142,9 +142,12 @@ def _pause_at_node(
     """Drive a fresh two-node run until ``node_name`` returns ``NEEDS_INPUT``.
 
     For the first node the fake returns ``NEEDS_INPUT`` on the role's first step;
-    for the second the fake completes the first node and then returns
-    ``NEEDS_INPUT``. Both reach the pause through the identical signal-dispatch
-    branch -- no per-role code decides which one pauses.
+    for the second the fake completes the first node, *enters* the second node
+    (its own committed step -- see ``orchestrator/runner._enter_role``, which
+    inserts the second node's own ``role_executions`` row before any worker is
+    called), and only then returns ``NEEDS_INPUT``. Both reach the pause through
+    the identical signal-dispatch branch -- no per-role code decides which one
+    pauses.
     """
     run_id = start_run(
         "text:prove the pause mechanism is generic",
@@ -157,6 +160,13 @@ def _pause_at_node(
     if node_name == _SECOND_NODE:
         assert (
             _advance(run_id, factory, registry_builder, _completed("BA done"))
+            is RunStatus.ARCHITECTURE
+        )
+        # Entering ARCHITECTURE is its own committed step: it inserts the row
+        # but calls no worker, so the status is unchanged and this scripted
+        # result is never consumed.
+        assert (
+            _advance(run_id, factory, registry_builder, _completed("unused"))
             is RunStatus.ARCHITECTURE
         )
     status = _advance(run_id, factory, registry_builder, _needs_input())
@@ -295,12 +305,22 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
     assert resumed.value == node_name  # returned to the node that asked
 
     # finish the pipeline one committed step at a time. When BA paused, the
-    # answer returns the run to BA and the second node still has to run.
+    # answer returns the run to BA and the second node still has to run --
+    # which is now two more committed steps of its own: entering ARCHITECTURE
+    # (its own role_executions row, no worker call) and then actually running
+    # it (see ``orchestrator/runner._enter_role``).
     final = _advance(
         run_id, real_session_factory, fake_worker_registry, _completed("resumed")
     )
     if node_name != _SECOND_NODE:
         assert final is RunStatus.ARCHITECTURE
+        final = _advance(
+            run_id,
+            real_session_factory,
+            fake_worker_registry,
+            _completed("unused"),
+        )
+        assert final is RunStatus.ARCHITECTURE  # entered, not yet run
         final = _advance(
             run_id,
             real_session_factory,
@@ -311,11 +331,18 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
 
     session = real_session_factory()
     try:
-        rows = list(
-            session.scalars(select(RoleExecution).where(RoleExecution.run_id == run_id))
-        )
-        assert len(rows) == 1
-        assert rows[0].attempt == attempt_before  # same attempt, never bumped
+        rows_by_role = {
+            r.role: r
+            for r in session.scalars(
+                select(RoleExecution).where(RoleExecution.run_id == run_id)
+            )
+        }
+        # Each node now owns its own row (STATE-03, WINDOWS.md #6) -- the
+        # paused node's own attempt is never bumped by the resume, and BA's
+        # completion doesn't recycle its row into ARCHITECTURE's.
+        assert set(rows_by_role) == {"BA", _SECOND_NODE}
+        assert rows_by_role[node_name].attempt == attempt_before
+        assert all(row.attempt == 1 for row in rows_by_role.values())
 
         final_events = list(
             session.scalars(
@@ -325,6 +352,7 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
             )
         )
         assert "RUN_RESUMED" in final_events
+        assert final_events.count("ROLE_STARTED") == 2  # one per node
         assert final_events.count("ROLE_COMPLETED") == 2  # passed through both nodes
         assert final_events[-1] == "RUN_COMPLETED"
     finally:

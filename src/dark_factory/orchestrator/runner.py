@@ -18,7 +18,16 @@ path the same code: the drive loop below exercises resume on every iteration.
 The one-role happy path is therefore **two** committed ``advance`` calls --
 ``CREATED -> BA`` commits the role start, ``BA -> COMPLETED`` commits the worker
 result -- so there is a real committed intermediate state at ``BA`` for a later
-plan to kill at.
+plan to kill at. An N-role pipeline generalises this to one *extra* committed
+"enter" step per non-first role (Phase 4, 04-03): completing role K sets
+``runs.status`` / ``current_role`` straight to role K+1 in the same transaction
+that completes K, but role K+1's own ``role_executions`` row -- its STATE-03
+"one row per attempt" -- is inserted by a dedicated step (:func:`_enter_role`,
+the same insert-then-run split :func:`_enter_first_role` already uses for
+``CREATED`` -> the first role) the next time ``advance`` runs, *before* that
+role's worker is ever called. Without this, ``_run_current_role`` would find no
+``role_executions`` row yet belonging to the new role and would incorrectly
+reuse the previous role's row (WINDOWS.md #6, open since Phase 2, closed here).
 
 ``start_run`` requires a resolved effective-config ``snapshot`` -- the CLI is the
 composition root that reads ``.dark-factory.yaml`` (``load_effective_config``);
@@ -317,6 +326,15 @@ def _advance_once(
     try:
         if state.status is RunStatus.CREATED:
             return _enter_first_role(run_id, state, pipeline, session_factory, lease)
+        if (
+            state.latest_execution is None
+            or state.latest_execution.role != state.current_role
+        ):
+            # ``runs.current_role`` already names this role (the previous role's
+            # own completion set it), but no role_executions row exists for it
+            # yet -- entering role K+1 always takes its own committed step,
+            # mirroring CREATED -> first role (see the module docstring).
+            return _enter_role(run_id, state, pipeline, session_factory, lease)
         return _run_current_role(
             run_id,
             state,
@@ -366,6 +384,62 @@ def _enter_first_role(
             expected_owner_token=lease.token,
         )
         _maybe_crash_after(RunStatus.CREATED, new_status)
+        return new_status
+    finally:
+        session.close()
+
+
+def _enter_role(
+    run_id: UUID,
+    state: RunState,
+    pipeline: Pipeline,
+    session_factory: SessionFactory,
+    lease: LeaseHandle,
+) -> RunStatus:
+    """Insert the ``role_executions`` row for ``state.current_role`` when it has
+    none yet, emit its own ``ROLE_STARTED``, and return (STATE-03, WINDOWS.md #6).
+
+    Reached only for a role *after* the first: ``runs.status`` /
+    ``current_role`` already name this role -- the previous role's own
+    completing ``apply_transition`` call set them -- so this step changes
+    neither (``next_status == expected_status``); its only job is the INSERT
+    that :func:`_enter_first_role` already does for ``CREATED`` -> the first
+    role, generalised to every later role. ``apply_transition`` still requires
+    an event for the call to be meaningful, which ``ROLE_STARTED`` supplies
+    even though the status itself does not change here.
+
+    Splitting "insert this role's row" from "run this role's worker" into two
+    committed steps keeps every role's attempt computed in SQL inside its own
+    transaction (D-19) and keeps the resume-first invariant intact: a crash
+    between this step and the next finds, on the next ``advance``, a
+    ``RUNNING`` row whose ``role`` already equals ``current_role`` and resumes
+    straight into :func:`_run_current_role`.
+    """
+    node = current_node(pipeline, state.current_role)
+    session = session_factory()
+    try:
+        new_status = apply_transition(
+            session,
+            run_id=run_id,
+            expected_status=state.status,
+            next_status=state.status,
+            next_current_role=state.current_role,
+            next_current_step=state.current_step,
+            role_execution=RoleExecutionWrite(
+                mode="insert",
+                role=node.name,
+                worker=node.worker,
+                status=_ROLE_RUNNING,
+            ),
+            events=[
+                EventWrite(
+                    type=EventType.ROLE_STARTED,
+                    payload={"role": node.name, "worker": node.worker},
+                )
+            ],
+            expected_owner_token=lease.token,
+        )
+        _maybe_crash_after(state.status, new_status)
         return new_status
     finally:
         session.close()
