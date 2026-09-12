@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: The Four-Role Pipeline & Artifact Handoffs
-status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-09-12T16:58:04.662Z"
+status: verifying
+stopped_at: Completed 04-04-PLAN.md
+last_updated: "2026-09-12T18:08:25.753Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 04 execution started
-state_head: f4f086d1ea17447d5adb594cee1825cab6114dd8
+state_head: bcfaa57716344a9af65459a8549502a798ad6416
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 24
-  completed_plans: 23
+  completed_plans: 24
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-11)
 
 Phase: 04 (The Four-Role Pipeline & Artifact Handoffs) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-12 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -82,6 +82,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P01 | 85min | 3 tasks | 38 files |
 | Phase 04 P02 | 15min | 2 tasks | 4 files |
 | Phase 04 P03 | 150min | 3 tasks | 17 files |
+| Phase 04 P04 | 90min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -155,6 +156,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-03: Verdict.computed_status folds criteria+issues order-independently; two after-validators (duplicate criterion_id, declared-status-vs-computed) make verdict.json authoritative (D-04); AcceptanceCriteriaDocument shares the same min-length/no-duplicate-id rules
 - [Phase 04]: 04-03: [Rule 1] Fixed a real orchestrator bug found building SC1 -- multi-role pipelines reused the first role's role_executions row for every later role (only _enter_first_role ever inserted a row). Added _enter_role generalising the insert-then-run split to every role; closes WINDOWS.md ledger item #6, open since Phase 2
 - [Phase 04]: 04-03: SC1's literal ROADMAP wording names seven artifact filenames (BA also emits requirements.md, ARCHITECTURE also emits design.md, alongside the five JSON D-10 models), not the task prose's 'six' -- proved the literal seven rather than narrowing the shipped BA/ARCHITECTURE outputs contract
+- [Phase 04]: [Phase 04]: 04-04: SC4's two-attempt state is constructed by driving apply_transition directly (RoleExecutionWrite insert-then-update per attempt) since no Phase 4 code path produces a genuine retry (QA-FAIL bounce is Phase 9); the query under test remains the real production query
+- [Phase 04]: [Phase 04]: 04-04: SC5's QA scenarios use a one-role [QA]-only config tree rather than the full four-role pipeline -- D-06 needs only one QA attempt reaching a terminal state, isolating the proof from BA/ARCHITECTURE/DEVELOPMENT's own outputs contract
+- [Phase 04]: [Phase 04]: 04-04: acceptance gate proof-file mappings were reconciled against the actual 04-0N-SUMMARY.md files rather than 04-VALIDATION.md's Wave-0 forecast (e.g. CTX-04 maps to this plan's own new proof, not 04-01's context-builder tests)
 
 ### Pending Todos
 
@@ -180,6 +184,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T16:58:04.616Z
-Stopped at: Completed 04-03-PLAN.md
+Last session: 2026-09-12T18:08:25.705Z
+Stopped at: Completed 04-04-PLAN.md
 Resume file: None

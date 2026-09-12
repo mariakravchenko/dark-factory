@@ -10,7 +10,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Task Intake
 
 - [x] **INTAKE-01**: Operator can start a run from plain text — `dark-factory run text:"..."`
-- [ ] **INTAKE-02**: Operator can start a run from a spec file — `dark-factory run spec:./path.md`
+- [x] **INTAKE-02**: Operator can start a run from a spec file — `dark-factory run spec:./path.md`
 - [ ] **INTAKE-03**: Operator can start a run from a GitHub issue — `dark-factory run github:152` — pulling issue title, body, comments, labels, and repository metadata
 - [x] **INTAKE-04**: The input resolver classifies the task source deterministically (text vs path vs GitHub reference) with no LLM call, and does not inspect the repo, call GitHub, or create a run
 - [x] **INTAKE-05**: Every source is loaded through a source-specific loader and normalized to one internal `NormalizedTask` model, after which the orchestrator is agnostic to origin
@@ -20,18 +20,18 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **ORCH-01**: A deterministic orchestrator drives the run lifecycle; the outer delivery flow is never a single LLM loop
 - [x] **ORCH-02**: The orchestrator executes a configured ordered sequence of roles, not hardcoded role calls
 - [x] **ORCH-03**: The role pipeline is defined in configuration (`workflow.roles`) and can be shortened or reordered without changing orchestrator code
-- [ ] **ORCH-04**: Roles communicate through durable artifacts, not one shared agent conversation
+- [x] **ORCH-04**: Roles communicate through durable artifacts, not one shared agent conversation
 - [x] **ORCH-05**: Only the orchestrator changes lifecycle state; a worker result never directly drives a transition
 - [x] **ORCH-06**: Every lifecycle mutation (store result, transition state, create interaction, emit event) is written in a single database transaction through one mutation path
 
 ### Engineering Roles
 
-- [ ] **ROLE-01**: The Business Analyst role makes the request implementation-ready and emits `requirements.md` and `acceptance_criteria.json`; it is read-only with respect to repository source code
-- [ ] **ROLE-02**: The Architect role consumes the task, BA output, and repository and emits `design.md` and `constraints.json`; it is read-only with respect to repository source code
-- [ ] **ROLE-03**: The Developer role implements the change, adds/updates tests, runs tests/lint/build, iterates on failures, and emits `implementation_summary.json`; it may modify production code and tests
-- [ ] **ROLE-04**: The QA role independently verifies each acceptance criterion and emits `test_report.json` and a machine-readable `verdict.json`; it may modify only tests, fixtures, and test utilities
+- [x] **ROLE-01**: The Business Analyst role makes the request implementation-ready and emits `requirements.md` and `acceptance_criteria.json`; it is read-only with respect to repository source code
+- [x] **ROLE-02**: The Architect role consumes the task, BA output, and repository and emits `design.md` and `constraints.json`; it is read-only with respect to repository source code
+- [x] **ROLE-03**: The Developer role implements the change, adds/updates tests, runs tests/lint/build, iterates on failures, and emits `implementation_summary.json`; it may modify production code and tests
+- [x] **ROLE-04**: The QA role independently verifies each acceptance criterion and emits `test_report.json` and a machine-readable `verdict.json`; it may modify only tests, fixtures, and test utilities
 - [ ] **ROLE-05**: A role's permitted file-write scope is enforced after execution (e.g. QA's diff must not touch production code) using path rules from configuration
-- [ ] **ROLE-06**: The QA verdict (pass/fail per criterion, issues with severity) is the machine input to the orchestrator's next decision; free-form prose alone never drives a transition
+- [x] **ROLE-06**: The QA verdict (pass/fail per criterion, issues with severity) is the machine input to the orchestrator's next decision; free-form prose alone never drives a transition
 
 ### Worker Abstraction
 
@@ -56,16 +56,16 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Context Preparation
 
-- [ ] **CTX-01**: A `ContextBuilder` produces role-specific `RoleContext` (task, role instructions, relevant prior artifacts, README/AGENTS.md/CLAUDE.md, architecture docs, human answers, constraints, permitted capabilities)
-- [ ] **CTX-02**: Context preparation does not copy the whole repository into the prompt; the agent inspects the repository itself
-- [ ] **CTX-03**: Optional few-shot examples referenced from role configuration are included as context only, never as application logic
-- [ ] **CTX-04**: On a retry, the rebuilt context does not leak stale artifacts from a superseded attempt
+- [x] **CTX-01**: A `ContextBuilder` produces role-specific `RoleContext` (task, role instructions, relevant prior artifacts, README/AGENTS.md/CLAUDE.md, architecture docs, human answers, constraints, permitted capabilities)
+- [x] **CTX-02**: Context preparation does not copy the whole repository into the prompt; the agent inspects the repository itself
+- [x] **CTX-03**: Optional few-shot examples referenced from role configuration are included as context only, never as application logic
+- [x] **CTX-04**: On a retry, the rebuilt context does not leak stale artifacts from a superseded attempt
 
 ### Artifacts
 
-- [ ] **ART-01**: Run artifacts are stored on the filesystem under `.dark-factory/runs/<run-id>/` (`input/`, `artifacts/<role>/`, `verification/`, `logs/`)
-- [ ] **ART-02**: Machine-consumed decisions are emitted as structured JSON; human documentation may be Markdown; where orchestration depends on a result, the JSON contract is authoritative
-- [ ] **ART-03**: Each artifact is recorded in Neon as an `ArtifactReference` (id, run_id, role_execution_id, type, path, metadata, created_at); Neon stores references, the filesystem stores content
+- [x] **ART-01**: Run artifacts are stored on the filesystem under `.dark-factory/runs/<run-id>/` (`input/`, `artifacts/<role>/`, `verification/`, `logs/`)
+- [x] **ART-02**: Machine-consumed decisions are emitted as structured JSON; human documentation may be Markdown; where orchestration depends on a result, the JSON contract is authoritative
+- [x] **ART-03**: Each artifact is recorded in Neon as an `ArtifactReference` (id, run_id, role_execution_id, type, path, metadata, created_at); Neon stores references, the filesystem stores content
 - [ ] **ART-04**: Artifact content is available to a resuming process on a different machine (durability strategy for cross-machine resume)
 
 ### Durable State
@@ -74,7 +74,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **STATE-02**: A `runs` table persists run identity, source, workflow, status, current role, current step, repository, base/working branch, PR number/URL, and timestamps
 - [x] **STATE-03**: A `role_executions` table persists one row per attempt (role, worker, status, attempt number, worker_session_id, result/error JSONB, timestamps)
 - [x] **STATE-04**: A `human_interactions` table persists questions, answers, and status (WAITING | ANSWERED | CANCELLED)
-- [ ] **STATE-05**: An `artifacts` table persists artifact metadata
+- [x] **STATE-05**: An `artifacts` table persists artifact metadata
 - [x] **STATE-06**: A `run_events` append-only audit trail persists every important lifecycle event; the run's current position is read from state columns and is never recomputed by folding the event log
 - [x] **STATE-07**: Run status is one of CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; the active role is stored separately
 - [x] **STATE-08**: The complete execution of a run is reconstructable from persisted data alone
@@ -187,22 +187,22 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | INTAKE-01 | Phase 1 | Complete |
-| INTAKE-02 | Phase 4 | Pending |
+| INTAKE-02 | Phase 4 | Complete |
 | INTAKE-03 | Phase 10 | Pending |
 | INTAKE-04 | Phase 1 | Complete |
 | INTAKE-05 | Phase 1 | Complete |
 | ORCH-01 | Phase 1 | Complete |
 | ORCH-02 | Phase 3 | Complete |
 | ORCH-03 | Phase 3 | Complete |
-| ORCH-04 | Phase 4 | Pending |
+| ORCH-04 | Phase 4 | Complete |
 | ORCH-05 | Phase 1 | Complete |
 | ORCH-06 | Phase 1 | Complete |
-| ROLE-01 | Phase 4 | Pending |
-| ROLE-02 | Phase 4 | Pending |
-| ROLE-03 | Phase 4 | Pending |
-| ROLE-04 | Phase 4 | Pending |
+| ROLE-01 | Phase 4 | Complete |
+| ROLE-02 | Phase 4 | Complete |
+| ROLE-03 | Phase 4 | Complete |
+| ROLE-04 | Phase 4 | Complete |
 | ROLE-05 | Phase 5 | Pending |
-| ROLE-06 | Phase 4 | Pending |
+| ROLE-06 | Phase 4 | Complete |
 | WORK-01 | Phase 1 | Complete |
 | WORK-02 | Phase 3 | Complete |
 | WORK-03 | Phase 1 | Complete |
@@ -218,19 +218,19 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | TOOL-03 | Phase 6 | Pending |
 | TOOL-04 | Phase 6 | Pending |
 | TOOL-05 | Phase 6 | Pending |
-| CTX-01 | Phase 4 | Pending |
-| CTX-02 | Phase 4 | Pending |
-| CTX-03 | Phase 4 | Pending |
-| CTX-04 | Phase 4 | Pending |
-| ART-01 | Phase 4 | Pending |
-| ART-02 | Phase 4 | Pending |
-| ART-03 | Phase 4 | Pending |
+| CTX-01 | Phase 4 | Complete |
+| CTX-02 | Phase 4 | Complete |
+| CTX-03 | Phase 4 | Complete |
+| CTX-04 | Phase 4 | Complete |
+| ART-01 | Phase 4 | Complete |
+| ART-02 | Phase 4 | Complete |
+| ART-03 | Phase 4 | Complete |
 | ART-04 | Phase 5 | Pending |
 | STATE-01 | Phase 1 | Complete |
 | STATE-02 | Phase 1 | Complete |
 | STATE-03 | Phase 1 | Complete |
 | STATE-04 | Phase 2 | Complete |
-| STATE-05 | Phase 4 | Pending |
+| STATE-05 | Phase 4 | Complete |
 | STATE-06 | Phase 1 | Complete |
 | STATE-07 | Phase 1 | Complete |
 | STATE-08 | Phase 1 | Complete |
