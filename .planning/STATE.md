@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: The Four-Role Pipeline & Artifact Handoffs
 status: executing
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-09-12T12:42:26.006Z"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-09-12T16:58:04.662Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 04 execution started
-state_head: ff41b71810a9af14f74b187a6c99a42a8211f9fb
+state_head: f4f086d1ea17447d5adb594cee1825cab6114dd8
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 24
-  completed_plans: 22
+  completed_plans: 23
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-11)
 ## Current Position
 
 Phase: 04 (The Four-Role Pipeline & Artifact Handoffs) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-12 — Phase 04 execution started
 
@@ -81,6 +81,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 03 P04 | 32min | 3 tasks | 7 files |
 | Phase 04 P01 | 85min | 3 tasks | 38 files |
 | Phase 04 P02 | 15min | 2 tasks | 4 files |
+| Phase 04 P03 | 150min | 3 tasks | 17 files |
 
 ## Accumulated Context
 
@@ -151,6 +152,9 @@ Recent decisions affecting current work:
 - [Phase 04]: 04-01: build_role_context passes RoleContext as the object itself to worker.execute/resume (not a dict); role_def lookups use .get(...) throughout so the legacy bare-string snapshot shape still resolves.
 - [Phase 04]: [Phase 04]: 04-02: _load_spec real loader implemented -- source_kind=spec, source_ref=resolved absolute path, title=first line with heading marker stripped, body=stripped file text; UnresolvableSourceError (not SourceNotSupportedError) on missing/empty file, naming the resolved path.
 - [Phase 04]: [Phase 04]: 04-02: SourceNotSupportedError removed from loaders.__all__ (still imported by name everywhere) so the grep-count acceptance criterion (class def + single github: raise) holds without weakening the export.
+- [Phase 04]: 04-03: Verdict.computed_status folds criteria+issues order-independently; two after-validators (duplicate criterion_id, declared-status-vs-computed) make verdict.json authoritative (D-04); AcceptanceCriteriaDocument shares the same min-length/no-duplicate-id rules
+- [Phase 04]: 04-03: [Rule 1] Fixed a real orchestrator bug found building SC1 -- multi-role pipelines reused the first role's role_executions row for every later role (only _enter_first_role ever inserted a row). Added _enter_role generalising the insert-then-run split to every role; closes WINDOWS.md ledger item #6, open since Phase 2
+- [Phase 04]: 04-03: SC1's literal ROADMAP wording names seven artifact filenames (BA also emits requirements.md, ARCHITECTURE also emits design.md, alongside the five JSON D-10 models), not the task prose's 'six' -- proved the literal seven rather than narrowing the shipped BA/ARCHITECTURE outputs contract
 
 ### Pending Todos
 
@@ -176,6 +180,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T12:42:25.960Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-09-12T16:58:04.616Z
+Stopped at: Completed 04-03-PLAN.md
 Resume file: None

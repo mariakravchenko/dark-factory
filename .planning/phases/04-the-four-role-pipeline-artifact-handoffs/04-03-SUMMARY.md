@@ -230,3 +230,7 @@ _Note: Task 3's commit also carries the production fix (`orchestrator/runner.py`
 ---
 *Phase: 04-the-four-role-pipeline-artifact-handoffs*
 *Completed: 2026-09-12*
+
+## Self-Check: PASSED
+
+All 18 key created/modified files verified present on disk (`[ -f ]`). All 5 commit hashes (`050605c`, `5c7e3b2`, `1ede371`, `ef5d446`, `f4f086d`) verified present in `git log --oneline --all`.
