@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 04
 current_phase_name: The Four-Role Pipeline & Artifact Handoffs
-status: verifying
-stopped_at: Completed 04-04-PLAN.md
-last_updated: "2026-09-12T18:08:25.753Z"
-last_activity: 2026-09-12
+status: executing
+stopped_at: Completed 04-05-PLAN.md
+last_updated: "2026-09-13T15:42:23.537Z"
+last_activity: 2026-09-13
 last_activity_desc: Phase 04 execution started
-state_head: bcfaa57716344a9af65459a8549502a798ad6416
+state_head: 9a6dfc08079d04bc4956c93ba9a3dcf5977b9e25
 progress:
   total_phases: 12
   completed_phases: 0
-  total_plans: 24
-  completed_plans: 24
+  total_plans: 25
+  completed_plans: 25
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-11)
 ## Current Position
 
 Phase: 04 (The Four-Role Pipeline & Artifact Handoffs) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-09-12 — Phase 04 execution started
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-09-13 — Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -83,6 +83,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P02 | 15min | 2 tasks | 4 files |
 | Phase 04 P03 | 150min | 3 tasks | 17 files |
 | Phase 04 P04 | 90min | 3 tasks | 4 files |
+| Phase 04 P05 | 17min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -159,6 +160,9 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 04]: 04-04: SC4's two-attempt state is constructed by driving apply_transition directly (RoleExecutionWrite insert-then-update per attempt) since no Phase 4 code path produces a genuine retry (QA-FAIL bounce is Phase 9); the query under test remains the real production query
 - [Phase 04]: [Phase 04]: 04-04: SC5's QA scenarios use a one-role [QA]-only config tree rather than the full four-role pipeline -- D-06 needs only one QA attempt reaching a terminal state, isolating the proof from BA/ARCHITECTURE/DEVELOPMENT's own outputs contract
 - [Phase 04]: [Phase 04]: 04-04: acceptance gate proof-file mappings were reconciled against the actual 04-0N-SUMMARY.md files rather than 04-VALIDATION.md's Wave-0 forecast (e.g. CTX-04 maps to this plan's own new proof, not 04-01's context-builder tests)
+- [Phase 04]: [Phase 04]: 04-05: Extraction dispatches on content shape only (structural AcceptanceCriteriaDocument validation, then a carrier-line regex) — never on context.role — keeping D-08's role-agnostic FakeWorker invariant intact while still routing content correctly
+- [Phase 04]: [Phase 04]: 04-05: Markdown outputs carry ids via a single accepted carrier-line style ('Criterion <id> met') so the DEVELOPMENT role, whose declared inputs are design.md/constraints.json and not acceptance_criteria.json, still receives ids through the markdown hop
+- [Phase 04]: [Phase 04]: 04-05: Every extracted id is filtered to a single whitespace-free token under 64 chars before use, bounding what upstream artifact content can inject downstream (T-04-19/T-04-21)
 
 ### Pending Todos
 
@@ -184,6 +188,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-12T18:08:25.705Z
-Stopped at: Completed 04-04-PLAN.md
+Last session: 2026-09-13T15:42:23.484Z
+Stopped at: Completed 04-05-PLAN.md
 Resume file: None

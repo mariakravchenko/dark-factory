@@ -206,7 +206,7 @@ Plans:
   4. A retried attempt's rebuilt context contains no artifact from the superseded attempt.
   5. A machine artifact that violates its JSON schema fails the role with a persisted error instead of advancing the run, and the transition after QA is decided by `verdict.json`, never by summary prose.
 
-**Plans**: 5 plans (4/4 original plans executed; 04-05 gap closure pending)
+**Plans**: 5/5 plans executed (4/4 original plans executed; 04-05 gap closure pending)
 
 Plans:
 **Wave 1**
@@ -224,7 +224,7 @@ Plans:
 
 **Gap closure** *(from UAT G-04-1)*
 
-- [ ] 04-05-PLAN.md — Thread `context.inputs` into FakeWorker's zero-config artifact synthesis so every artifact carries the upstream criterion ids, making the `acceptance_criteria.json` → `design.md` → `verdict.json` handoff legible and D-05's id alignment real rather than coincidental (wave 1)
+- [x] 04-05-PLAN.md — Thread `context.inputs` into FakeWorker's zero-config artifact synthesis so every artifact carries the upstream criterion ids, making the `acceptance_criteria.json` → `design.md` → `verdict.json` handoff legible and D-05's id alignment real rather than coincidental (wave 1)
 
 **Invariants**: roles hand off through artifacts, never a shared conversation; where orchestration depends on a result, the JSON contract is authoritative; the ContextBuilder never walks the source tree.
 
@@ -369,7 +369,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
-| 4. The Four-Role Pipeline & Artifact Handoffs | 4/4 | In Progress|  |
+| 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | In Progress|  |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
