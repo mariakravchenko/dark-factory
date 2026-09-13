@@ -54,7 +54,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Walking Skeleton — One Durable Run** - A text task becomes a run that persists its whole lifecycle in Neon and is resumable from a fresh process (completed 2026-09-09)
 - [x] **Phase 2: Pause, Resume & Single-Owner Execution** - A run stops for a human answer, releases its process, and is resumed later by exactly one process (completed 2026-09-10)
 - [x] **Phase 3: Configuration-Driven Pipeline** - Pipeline shape and role behaviour come from YAML, snapshotted per run for deterministic resume (completed 2026-09-11)
-- [ ] **Phase 4: The Four-Role Pipeline & Artifact Handoffs** - BA → Architect → Developer → QA hand off through durable artifacts with machine-readable verdicts
+- [x] **Phase 4: The Four-Role Pipeline & Artifact Handoffs** - BA → Architect → Developer → QA hand off through durable artifacts with machine-readable verdicts (completed 2026-09-13)
 - [ ] **Phase 5: Isolated Workspace & Git Lifecycle** - Every run owns a working branch and clean worktree, and its artifacts travel to another machine
 - [ ] **Phase 6: Tools, Permissions & the Credential Boundary** - Roles get only granted capabilities; workers never see an infrastructure credential
 - [ ] **Phase 7: Claude Code — the First Real Worker** - A real agent runtime performs a role and resumes, with the orchestrator runtime-agnostic
@@ -369,7 +369,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 1. Walking Skeleton — One Durable Run | 9/9 | Complete    | 2026-09-09 |
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
-| 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | In Progress|  |
+| 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
 | 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
