@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-11)
+See: .planning/PROJECT.md (updated 2026-09-13)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 04 — The Four-Role Pipeline & Artifact Handoffs
+**Current focus:** Phase 5 — Isolated Workspace & Git Lifecycle
 
 ## Current Position
 
@@ -189,6 +189,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-13T15:42:23.484Z
+Last session: 2026-09-13T17:11:33.000Z
 Stopped at: Phase 04 complete, ready to plan Phase 5
 Resume file: None
