@@ -51,6 +51,7 @@ SUCCESS_CRITERIA: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/integration/test_spec_source_starts_a_run.py",
             "tests/db/test_four_role_pipeline.py",
+            "tests/integration/test_real_pipeline_zero_config.py",
         ),
     ),
     "SC2": (
@@ -100,6 +101,7 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/db/test_artifact_handoff.py",
             "tests/db/test_four_role_pipeline.py",
+            "tests/unit/test_fake_worker_synthesis.py",
         ),
     ),
     "ROLE-01": (
@@ -128,7 +130,10 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         "The QA role independently verifies each acceptance criterion and "
         "emits test_report.json and a machine-readable verdict.json; it may "
         "modify only tests, fixtures, and test utilities",
-        ("tests/db/test_four_role_pipeline.py",),
+        (
+            "tests/db/test_four_role_pipeline.py",
+            "tests/unit/test_fake_worker_synthesis.py",
+        ),
     ),
     "ROLE-06": (
         "The QA verdict (pass/fail per criterion, issues with severity) is "
@@ -177,6 +182,7 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/db/test_artifact_handoff.py",
             "tests/db/test_artifact_schema_violation_fails_role.py",
+            "tests/integration/test_real_pipeline_zero_config.py",
         ),
     ),
     "ART-03": (
@@ -226,6 +232,8 @@ _VALIDATION_PROOF_FILES: frozenset[str] = frozenset(
         "tests/unit/test_artifact_models.py",
         "tests/unit/test_no_tree_walk.py",
         "tests/unit/test_artifact_paths.py",
+        "tests/integration/test_real_pipeline_zero_config.py",
+        "tests/unit/test_fake_worker_synthesis.py",
     }
 )
 
