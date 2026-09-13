@@ -7,7 +7,7 @@ status: validated
 nyquist_compliant: true
 wave_0_complete: true
 created: "2026-09-12"
-updated: "2026-09-12"
+updated: "2026-09-13"
 ---
 
 # Phase 4 — Validation Strategy
@@ -75,7 +75,7 @@ updated: "2026-09-12"
 
 | Behavior | Requirement | Why Manual | Test Instructions | Status |
 |----------|-------------|------------|-------------------|--------|
-| A person who has never seen this codebase follows the handoff from `acceptance_criteria.json` through `design.md` to `verdict.json` in a real run's `.dark-factory/runs/<run-id>/artifacts/` tree and sees which criterion ids line up | SC1, ART-01 | The id-alignment half is now machine-asserted (gap G-04-1, closed by plan 04-05: `tests/integration/test_real_pipeline_zero_config.py` proves BA's criterion ids appear in `design.md`, in `implementation_summary.json`'s summary, in `test_report.json`'s case names, and as `verdict.json`'s ordered `criterion_id` list). What remains manual is purely the fresh-eyes readability judgment -- whether the on-disk layout *reads well* to a human seeing it for the first time is still not something a test decides. | Run `uv run dark-factory run spec:./task.md` against this repository with a short real spec file, then open `.dark-factory/runs/<run-id>/artifacts/` by hand and read the seven files. | ⬜ Readability re-check deferred to `/gsd-verify-work`; id-alignment now ✅ COVERED (G-04-1, plan 04-05) |
+| A person who has never seen this codebase follows the handoff from `acceptance_criteria.json` through `design.md` to `verdict.json` in a real run's `.dark-factory/runs/<run-id>/artifacts/` tree and sees which criterion ids line up | SC1, ART-01 | The id-alignment half is machine-asserted (gap G-04-1, closed by plan 04-05: `tests/integration/test_real_pipeline_zero_config.py` proves BA's criterion ids appear in `design.md`, in `implementation_summary.json`'s summary, in `test_report.json`'s case names, and as `verdict.json`'s ordered `criterion_id` list). The readability judgment itself is not something a test decides. | Run `uv run dark-factory run spec:./task.md` against this repository with a short real spec file, then open `.dark-factory/runs/<run-id>/artifacts/` by hand and read the seven files. | ✅ Readability re-check passed via `/gsd-verify-work 04` UAT (2026-09-13); id-alignment ✅ COVERED (G-04-1, plan 04-05) |
 
 No other Phase 4 requirement is manual-only; every SC/requirement pairing above has a passing automated command.
 
@@ -99,5 +99,15 @@ No other Phase 4 requirement is manual-only; every SC/requirement pairing above 
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Validation Audit 2026-09-13
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Re-audit after gap G-04-1 closure (plan 04-05) and the deferred readability UAT item passing. All fifteen requirement IDs and five success criteria remain fully covered; no new gaps introduced by the gap-closure plan.
 
 Audit command: `set -a; . ./.env; set +a; uv run pytest -q` over the full suite (`unit` + `db` + `integration` + `contract`, all four phases): **541 passed, 0 failed, 0 skipped in 2796.02s (46m36s)**. Static gates also passed: `uv run alembic check` ("No new upgrade operations detected"), `uv run mypy src/dark_factory` (strict, 52 source files, no issues), `uv run ruff check .` (all checks passed), `uv run ruff format --check .` (459 files already formatted). `tests/integration/test_phase4_acceptance.py`'s own 24 tests are included in the 541.
