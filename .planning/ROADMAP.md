@@ -206,7 +206,7 @@ Plans:
   4. A retried attempt's rebuilt context contains no artifact from the superseded attempt.
   5. A machine artifact that violates its JSON schema fails the role with a persisted error instead of advancing the run, and the transition after QA is decided by `verdict.json`, never by summary prose.
 
-**Plans**: 4/4 plans executed
+**Plans**: 5 plans (4/4 original plans executed; 04-05 gap closure pending)
 
 Plans:
 **Wave 1**
@@ -221,6 +221,10 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 04-04-PLAN.md — SC4 retry-context isolation, SC5 schema-violation-fails-role, and the Phase 4 acceptance gate (wave 3)
+
+**Gap closure** *(from UAT G-04-1)*
+
+- [ ] 04-05-PLAN.md — Thread `context.inputs` into FakeWorker's zero-config artifact synthesis so every artifact carries the upstream criterion ids, making the `acceptance_criteria.json` → `design.md` → `verdict.json` handoff legible and D-05's id alignment real rather than coincidental (wave 1)
 
 **Invariants**: roles hand off through artifacts, never a shared conversation; where orchestration depends on a result, the JSON contract is authoritative; the ContextBuilder never walks the source tree.
 
