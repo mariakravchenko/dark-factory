@@ -15,7 +15,7 @@ run_id)``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from uuid import uuid4
 
 import pytest
@@ -279,9 +279,7 @@ def test_renaming_origin_id_moves_every_downstream_id(
             outputs=["acceptance_criteria.json", "requirements.md"],
         )
     )
-    ac_content = _read(
-        tmp_path, run_id, _ref(ba_result, "acceptance_criteria.json")
-    )
+    ac_content = _read(tmp_path, run_id, _ref(ba_result, "acceptance_criteria.json"))
 
     # ARCHITECTURE -- structural extraction from BA's output.
     architecture_result = worker.execute(
@@ -298,9 +296,7 @@ def test_renaming_origin_id_moves_every_downstream_id(
             outputs=["design.md", "constraints.json"],
         )
     )
-    design_content = _read(
-        tmp_path, run_id, _ref(architecture_result, "design.md")
-    )
+    design_content = _read(tmp_path, run_id, _ref(architecture_result, "design.md"))
     constraints_content = _read(
         tmp_path, run_id, _ref(architecture_result, "constraints.json")
     )
@@ -460,7 +456,7 @@ def test_context_with_no_inputs_attribute_still_returns_completed() -> None:
     class _NoInputsContext:
         role = "BA"
         run_id = str(uuid4())
-        outputs: list[str] = []
+        outputs: ClassVar[list[str]] = []
 
     result = FakeWorker().execute(_NoInputsContext())
     assert result.status is WorkerResultStatus.COMPLETED
@@ -494,8 +490,6 @@ def test_extraction_result_is_independent_of_role_value(
             outputs=["constraints.json"],
         )
         result = FakeWorker().execute(context)
-        constraints_content = _read(
-            tmp_path, run_id, _ref(result, "constraints.json")
-        )
+        constraints_content = _read(tmp_path, run_id, _ref(result, "constraints.json"))
         constraints_doc = ConstraintsDocument.model_validate_json(constraints_content)
         assert "AC-42" in constraints_doc.constraints[0].description
