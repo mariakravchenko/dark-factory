@@ -35,6 +35,20 @@ resume it; durability and observability are the same requirement.
 - ✓ Repo config in `.dark-factory.yaml` (version, workflow.roles, repository.base_branch, per-role definition files, quality_gate.commands, retry limits, publishing.create_pr) — Phase 3
 - ✓ Role files under `.dark-factory/` (config.yaml, roles/*.yaml, instructions/*.md, examples/) — role behavior editable without touching Python — Phase 3
 - ✓ `ActionRegistry` of deterministic pre/post actions referenced by config (`prepare_role_context`, `ensure_clean_worktree`, `collect_diff`, `store_role_artifacts`, `collect_test_results`, …); extensible — Phase 3 (the five built-ins are no-ops until the phases that give them real work: `ensure_clean_worktree`/`collect_diff` in Phase 5, `store_role_artifacts` in Phase 4, `collect_test_results` in Phase 9)
+- ✓ Explicit role handoffs happen through durable artifacts, not one shared conversation — Phase 4
+- ✓ Business Analyst role: makes the request implementation-ready; outputs `requirements.md`, `acceptance_criteria.json`; read-only on source code — Phase 4
+- ✓ Architect role: consumes task + BA output + repo; outputs `design.md`, `constraints.json`; read-only on source code — Phase 4
+- ✓ Developer role: implements change, adds/updates tests, runs tests/lint/build, iterates; outputs `implementation_summary.json`; may modify production code and tests — Phase 4
+- ✓ QA role: independently verifies each acceptance criterion; may modify tests/fixtures/test utilities only; outputs `test_report.json`, `verdict.json` (machine-readable) — Phase 4
+- ✓ `ContextBuilder` produces role-specific `RoleContext` (task, role instructions, relevant prior artifacts, README/AGENTS.md/CLAUDE.md, architecture docs, human answers, constraints, permitted capabilities) — Phase 4
+- ✓ Context does not copy the whole repository into prompts — the agent inspects the repo itself — Phase 4
+- ✓ Optional few-shot examples referenced from role config are treated as context, not application logic — Phase 4
+- ✓ On a retry, the rebuilt context does not leak stale artifacts from a superseded attempt — Phase 4
+- ✓ Artifacts stored on the filesystem under `.dark-factory/runs/<run-id>/` (input, artifacts/<role>, verification, logs) — Phase 4
+- ✓ Machine-consumed decisions emitted as structured JSON; human docs may be Markdown; JSON contract wins where orchestration depends on it — Phase 4
+- ✓ `ArtifactReference` metadata (id, run_id, role_execution_id, type, path, metadata, created_at) stored in Neon; filesystem holds the real content — Phase 4
+- ✓ `artifacts` table (metadata only) — Phase 4
+- ✓ Run a task from a spec file: `dark-factory run spec:./path.md` — Phase 4
 
 ### Active
 
@@ -42,18 +56,12 @@ resume it; durability and observability are the same requirement.
 
 **Task intake**
 - [ ] Run a task from plain text: `dark-factory run text:"..."`
-- [ ] Run a task from a spec file: `dark-factory run spec:./path.md`
 - [ ] Run a task from a GitHub issue: `dark-factory run github:152` (title, body, comments, labels, metadata)
 - [ ] Deterministic source identification (no LLM needed to classify text vs path vs issue)
 - [ ] Normalize every source to one internal `NormalizedTask` model
 
 **Role orchestration**
 - [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; tools/permissions enforcement is Phase 5/6)
-- [ ] Explicit role handoffs happen through durable artifacts, not one shared conversation
-- [ ] Business Analyst role: makes the request implementation-ready; outputs `requirements.md`, `acceptance_criteria.json`; read-only on source code
-- [ ] Architect role: consumes task + BA output + repo; outputs `design.md`, `constraints.json`; read-only on source code
-- [ ] Developer role: implements change, adds/updates tests, runs tests/lint/build, iterates; outputs `implementation_summary.json`; may modify production code and tests
-- [ ] QA role: independently verifies each acceptance criterion; may modify tests/fixtures/test utilities only; outputs `test_report.json`, `verdict.json` (machine-readable)
 
 **Worker (agent runtime) abstraction**
 - [ ] `CodingWorker` contract: `execute()`, `resume()`, `capabilities()`
@@ -71,22 +79,11 @@ resume it; durability and observability are the same requirement.
 - [ ] Tool permission config is a security boundary: workers never receive `DATABASE_URL`, `GITHUB_TOKEN`, or other infrastructure credentials; only the minimum env required for the role
 - [ ] MCP supported as one optional transport adapter for exposing tools to compatible workers; orchestrator never depends on MCP internally
 
-**Context preparation**
-- [ ] `ContextBuilder` produces role-specific `RoleContext` (task, role instructions, relevant prior artifacts, README/AGENTS.md/CLAUDE.md, architecture docs, human answers, constraints, permitted capabilities)
-- [ ] Context does not copy the whole repository into prompts — the agent inspects the repo itself
-- [ ] Optional few-shot examples referenced from role config are treated as context, not application logic
-
-**Artifacts & handoffs**
-- [ ] Artifacts stored on the filesystem under `.dark-factory/runs/<run-id>/` (input, artifacts/<role>, verification, logs)
-- [ ] Machine-consumed decisions emitted as structured JSON; human docs may be Markdown; JSON contract wins where orchestration depends on it
-- [ ] `ArtifactReference` metadata (id, run_id, role_execution_id, type, path, metadata, created_at) stored in Neon; filesystem holds the real content
-
 **Durable execution state (Neon PostgreSQL)**
 - [ ] Persistence stack: SQLAlchemy + Alembic + PostgreSQL (Neon); `DATABASE_URL` only; no provider-specific logic in orchestration code
 - [ ] `runs` table (id, task/source, workflow, status, current_role, current_step, repository, base/working branch, pr_number, pr_url, timestamps)
 - [ ] `role_executions` table — one run holds multiple attempts (attempt N, worker, status, worker_session_id, result/error JSONB, timestamps)
 - [ ] `human_interactions` table (question, answer, status WAITING|ANSWERED|CANCELLED, timestamps)
-- [ ] `artifacts` table (metadata only)
 - [ ] `run_events` audit trail — every important lifecycle event persisted; the complete execution is reconstructable from persisted data
 - [ ] Run states: CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; active role stored separately
 - [ ] Only Dark Factory mutates orchestration state; a worker returning `NEEDS_INPUT` never directly controls transitions
@@ -183,9 +180,10 @@ resume it; durability and observability are the same requirement.
 | Config snapshot reuses the existing `runs.workflow` JSONB column instead of a new `config_snapshot` column | Zero migration; column already redacted-on-write and loaded on every resume; avoids an Alembic `0004` for a value the reused column already handles | Shipped Phase 3 |
 | `.dark-factory.yaml` `workflow.roles` entries are `RunStatus` values (`BA`, `ARCHITECTURE`, …), not human names | Keeps `transition()`/`answers.py` untouched — no name→status mapping to maintain | Shipped Phase 3 |
 | PyYAML approved as the YAML parser (`yaml.safe_load` only) | ~19-year-old package, MIT, source `github.com/yaml/pyyaml`, CLAUDE.md-pinned; automated legitimacy verdict was `SUS` only on a missing-downloads-metric technicality | Shipped Phase 3 |
-| Neon holds state + metadata + audit references only; filesystem holds artifact content | Spec §28–29; keeps Neon from becoming a document store | — Pending |
+| Neon holds state + metadata + audit references only; filesystem holds artifact content | Spec §28–29; keeps Neon from becoming a document store | Shipped Phase 4 |
 | Config-driven role pipeline over hardcoded role calls | Spec §5; enables shorter/reordered pipelines without orchestrator rewrites | — Pending |
 | MCP is an optional tool transport, never an internal dependency | Spec §70 | — Pending |
+| Zero-config artifact synthesis derives every downstream criterion id from the role's resolved `context.inputs` (structural validation, then a Markdown carrier-line regex) rather than any hardcoded literal — dispatch stays on content shape only, never `context.role` | UAT gap G-04-1: `FakeWorker`'s placeholder synthesis had two independent hardcoded ids that only coincidentally matched, so renaming one didn't move the other; regression tests now compare against the origin artifact's own emitted ids, never a fixed expectation, so a reintroduced hardcode fails the test the way the original defect would have | Shipped Phase 4 (plan 04-05) |
 
 ## Evolution
 
@@ -205,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-11 after Phase 3*
+*Last updated: 2026-09-13 after Phase 4*
