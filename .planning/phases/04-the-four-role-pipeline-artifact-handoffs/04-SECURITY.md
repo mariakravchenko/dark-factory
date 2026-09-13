@@ -6,7 +6,7 @@ status: verified
 threats_open: 0
 asvs_level: 1
 created: "2026-09-12"
-updated: "2026-09-12"
+updated: "2026-09-13"
 ---
 
 # Phase 4 — Security
@@ -51,7 +51,11 @@ updated: "2026-09-12"
 | T-04-16 | Tampering | `context/builder.py` attempt selection | high | mitigate | D-03 query selects only the highest-numbered `COMPLETED` attempt; content-based assertion so a coincidentally-correct row selection still fails. Proven: `tests/db/test_context_builder_retry_isolation.py`. | closed |
 | T-04-17 | Repudiation | `run_events` enum stability | medium | mitigate | Ten-member `EventType` enum count + subset assertion trips on any silent addition made to satisfy an unrelated test. Proven: `tests/db/test_artifact_schema_violation_fails_role.py`. | closed |
 | T-04-18 | Repudiation | `tests/integration/test_phase4_acceptance.py` | medium | mitigate | Acceptance gate is asserted free of every opt-out call, treats a missing proof as a failure naming the criterion, and is drift-guarded against `04-VALIDATION.md`. | closed |
-| T-04-SC | Tampering (supply chain) | `pyproject.toml` / `uv.lock` | low | accept | No plan in this phase installs a new package or modifies `pyproject.toml`; `04-RESEARCH.md` § "Package Legitimacy Audit" records "not applicable" for all four plans, and `uv lock --check` is asserted clean. No `[ASSUMED]`/`[SUS]` package exists, so no legitimacy checkpoint is triggered. Applies to 04-01 through 04-04. | closed |
+| T-04-19 | Tampering | criterion-id extraction in `workers/fake.py` (gap closure G-04-1, plan 04-05) | medium | mitigate | Only extracted ids cross the upstream-artifact -> downstream-artifact boundary, never an input's body. Every candidate id must be a single whitespace-free token of at most 64 characters (`_MAX_CRITERION_ID_LENGTH`, `_is_safe_criterion_id`) so upstream content cannot inject newlines, Markdown structure, or JSON fragments into a downstream document. Proven: `tests/unit/test_fake_worker_synthesis.py` (bounded/defensive cases). | closed |
+| T-04-20 | Information disclosure | synthesized artifact content in `workers/fake.py` (plan 04-05) | low | mitigate | The same no-body-echo rule (T-04-19) bounds credential leakage: a credential-shaped value sitting in an upstream artifact cannot be copied into a downstream artifact, since only short id tokens are ever forwarded. Artifact files stay repo-local (ART-03); the existing `redact()` path over events/results/logs is untouched. | closed |
+| T-04-21 | Denial of service | synthesized artifact content size in `workers/fake.py` (plan 04-05) | low | mitigate | `_MAX_CRITERION_IDS = 20` caps how many criterion ids one synthesis call uses, applied after de-duplication, bounding every generated document regardless of how many carrier lines or criteria an input declares. Proven: `tests/unit/test_fake_worker_synthesis.py` (bounded/defensive cases). | closed |
+| T-04-22 | Elevation of privilege | role-agnostic dispatch in `workers/fake.py` (plan 04-05) | low | accept | Extraction (`_extract_criterion_ids`) dispatches on input content shape only and never on `context.role` (D-08), so no role can obtain another role's synthesis behavior. Accepted with no further control: the worker performs no privileged action, and write-scope enforcement remains deferred (T-04-14 / Phase 5-6, ROLE-05). | closed |
+| T-04-SC | Tampering (supply chain) | `pyproject.toml` / `uv.lock` | low | accept | No plan in this phase installs a new package or modifies `pyproject.toml`; `04-RESEARCH.md` § "Package Legitimacy Audit" records "not applicable" for the original four plans, and plan 04-05 (gap closure) likewise touches one source file, test files, and planning docs only — confirmed via `git diff --stat` showing `pyproject.toml`/`uv.lock` untouched. `uv lock --check` is asserted clean. No `[ASSUMED]`/`[SUS]` package exists, so no legitimacy checkpoint is triggered. Applies to 04-01 through 04-05. | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above `workflow.security_block_on` (high) count toward `threats_open`*
@@ -66,7 +70,8 @@ updated: "2026-09-12"
 | AR-04-01 | T-04-07 | Operator-supplied `spec:` path grants no capability beyond process ownership. | plan author (04-02-PLAN.md) | 2026-09-12 |
 | AR-04-02 | T-04-09 | Spec files are operator-supplied, not attacker-supplied; a size cap would be arbitrary at this phase. | plan author (04-02-PLAN.md) | 2026-09-12 |
 | AR-04-03 | T-04-14 | Tool grants/write scope enforcement is explicitly deferred to Phase 5/6; no real worker runs yet in Phase 4. | plan author (04-03-PLAN.md) | 2026-09-12 |
-| AR-04-04 | T-04-SC | No package installs in any Phase 4 plan; legitimacy audit recorded not-applicable. | plan author (all 04-0x-PLAN.md) | 2026-09-12 |
+| AR-04-04 | T-04-SC | No package installs in any Phase 4 plan (04-01 through 04-05); legitimacy audit recorded not-applicable. | plan author (all 04-0x-PLAN.md) | 2026-09-13 |
+| AR-04-05 | T-04-22 | Extraction dispatch is role-agnostic by construction (D-08); write-scope enforcement remains deferred to Phase 5/6 (ROLE-05), same as T-04-14. | plan author (04-05-PLAN.md) | 2026-09-13 |
 
 *Accepted risks do not resurface in future audit runs.*
 
@@ -77,6 +82,7 @@ updated: "2026-09-12"
 | Audit Date | Threats Total | Closed | Open | Run By |
 |------------|---------------|--------|------|--------|
 | 2026-09-12 | 19 (18 numbered + T-04-SC) | 19 | 0 | gsd-secure-phase orchestrator pass (register authored at plan time, ASVS L1 — grep-depth verification against existing plan/summary evidence; short-circuit rule applied, no auditor subagent spawned) |
+| 2026-09-13 | 23 (22 numbered + T-04-SC) | 23 | 0 | gsd-secure-phase orchestrator pass, re-run after gap closure plan 04-05 (G-04-1). Merged 04-05's own `<threat_model>` block (T-04-19..T-04-22) into the register; grep-level verified each mitigation directly against `src/dark_factory/workers/fake.py` (`_MAX_CRITERION_ID_LENGTH`/`_is_safe_criterion_id`, `_MAX_CRITERION_IDS`, role-agnostic `_extract_criterion_ids`) and confirmed `pyproject.toml`/`uv.lock` untouched via `git diff --stat`. Register authored at plan time, ASVS L1 — short-circuit rule applied, no auditor subagent spawned. |
 
 ---
 
