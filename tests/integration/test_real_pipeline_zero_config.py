@@ -82,7 +82,7 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
                 session.scalars(
                     select(RoleExecution)
                     .where(RoleExecution.run_id == run_id)
-                    .order_by(RoleExecution.attempt)
+                    .order_by(RoleExecution.created_at)
                 )
             )
             completed_roles = [
