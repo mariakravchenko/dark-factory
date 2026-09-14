@@ -53,6 +53,7 @@ from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.events.catalog import EventType
 from dark_factory.events.redaction import redact, scrub_known_values
+from dark_factory.git.worktree import working_branch_name
 from dark_factory.persistence.models import (
     ArtifactReference,
     HumanInteraction,
@@ -184,9 +185,22 @@ def create_run(
     one call site, and it is the sole configuration source for every later resume
     (``pipeline_from_snapshot`` rebuilds the pipeline from it; no config file is
     re-read).
+
+    GIT-01: ``base_branch`` / ``working_branch`` are written here, in the same
+    transaction as the ``CREATED`` row, **before any git command is executed**
+    anywhere in the process — the ROADMAP invariant "git effects are guarded
+    by persisted identifiers before acting". A crash between this commit and
+    the first role entry still leaves the run's git identity fully knowable
+    from Neon alone. ``base_branch`` is read defensively from the snapshot's
+    ``repository.base_branch`` (``None`` for the legacy bare-``{"roles": [...]}``
+    shape); ``working_branch`` is always the deterministic
+    ``working_branch_name(run_id)`` (D-01). Both are structural identifiers,
+    not free text, so — unlike every other value in this block — they do not
+    pass through ``redact()``.
     """
     known = _known_secrets()
     run_id = uuid4()
+    base_branch = (workflow.get("repository") or {}).get("base_branch")
 
     with session.begin():
         session.add(
@@ -201,6 +215,8 @@ def create_run(
                 status=RunStatus.CREATED,
                 current_role=None,
                 current_step=None,
+                base_branch=base_branch,
+                working_branch=working_branch_name(run_id),
             )
         )
         session.add(

@@ -8,10 +8,20 @@ contents, so they pass this one shared constant: the legacy bare-string
 ``{"roles": ["BA"]}`` shape, which ``pipeline_from_snapshot`` maps to a single
 ``RoleNode(name="BA", worker="fake")`` -- identical to the old
 ``DEFAULT_PIPELINE`` those tests used to get by default.
+
+Since Phase 5 (GIT-01), ``create_run`` reads ``repository.base_branch`` out
+of the snapshot to persist ``runs.base_branch``, and ``ensure_worktree``
+rejects a ``NULL`` value -- so this constant also carries
+``repository.base_branch: "main"``, matching the "main" branch every
+git-backed test fixture (``make_git_repo`` / ``git_repo_root`` /
+``config_root_factory``) initialises.
 """
 
 from __future__ import annotations
 
 __all__ = ["DEFAULT_TEST_SNAPSHOT"]
 
-DEFAULT_TEST_SNAPSHOT: dict[str, object] = {"roles": ["BA"]}
+DEFAULT_TEST_SNAPSHOT: dict[str, object] = {
+    "roles": ["BA"],
+    "repository": {"base_branch": "main"},
+}
