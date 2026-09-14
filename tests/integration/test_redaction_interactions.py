@@ -140,6 +140,7 @@ def swept(
     advance_session_factory: Callable[[], Session],
     fake_worker_registry: Callable[..., object],
     interaction_secrets: Settings,
+    git_repo_root: Path,
 ) -> _Swept:
     pause_registry = fake_worker_registry(
         [
@@ -171,6 +172,7 @@ def swept(
             run_id,
             session_factory=advance_session_factory,
             registry=pause_registry,  # type: ignore[arg-type]
+            repo_root=git_repo_root,
         )
         assert paused is RunStatus.WAITING_HUMAN
         submit_answer(run_id, _ANSWER_BODY, session_factory=advance_session_factory)
@@ -178,6 +180,7 @@ def swept(
             run_id,
             session_factory=advance_session_factory,
             registry=resume_registry,  # type: ignore[arg-type]
+            repo_root=git_repo_root,
         )
         # Actively exercise the log-redaction path with a line carrying every
         # seeded and configured secret at once.

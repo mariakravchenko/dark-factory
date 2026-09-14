@@ -27,6 +27,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -166,6 +167,7 @@ def test_a_terminal_run_is_claimable_by_nobody_even_while_unowned(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     run_id = start_run(
         "text:this run completes",
@@ -183,7 +185,12 @@ def test_a_terminal_run_is_claimable_by_nobody_even_while_unowned(
             )
         ]
     )
-    final = drive(run_id, session_factory=real_session_factory, registry=registry)
+    final = drive(
+        run_id,
+        session_factory=real_session_factory,
+        registry=registry,
+        repo_root=git_repo_root,
+    )
     assert final is RunStatus.COMPLETED
 
     tokens = _claim_from_n_threads(real_session_factory, run_id)

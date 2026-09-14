@@ -16,6 +16,7 @@ in a later phase while proving nothing extra.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -71,6 +72,7 @@ def test_every_status_change_is_paired_with_at_least_one_event(
     arm: str,
     advance_session_factory: SessionFactory,
     fake_worker_registry: Callable[[list[WorkerResult]], Any],
+    git_repo_root: Path,
 ) -> None:
     registry = fake_worker_registry([_ARM_SCRIPTS[arm]])
     run_id = start_run(
@@ -86,7 +88,10 @@ def test_every_status_change_is_paired_with_at_least_one_event(
     # Two real steps (CREATED->BA, BA->terminal) then terminal no-ops.
     for _ in range(6):
         new_status = advance(
-            run_id, session_factory=advance_session_factory, registry=registry
+            run_id,
+            session_factory=advance_session_factory,
+            registry=registry,
+            repo_root=git_repo_root,
         )
         _, new_events = _status_and_events(advance_session_factory, run_id)
         delta = new_events - prev_events

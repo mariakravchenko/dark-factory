@@ -38,6 +38,7 @@ from dark_factory.config.loader import load_effective_config
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.events.catalog import EventType
+from dark_factory.git.worktree import ensure_worktree, working_branch_name
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import (
     ArtifactReference,
@@ -128,7 +129,14 @@ def _start_run_and_get_run_dir(
 ) -> tuple[Any, Path]:
     """`start_run` alone -- no worker call yet -- returning `(run_id, run_dir)`
     so a scenario can write its artifact file(s) into the real run tree
-    *before* scripting the `WorkerResult` that references them."""
+    *before* scripting the `WorkerResult` that references them.
+
+    GIT-01: pre-creates the run's worktree now (idempotent -- the runner's
+    own `ensure_worktree` call inside `drive()` reuses it) so `run_dir`
+    resolves under the worktree, exactly where the runner will look for
+    scripted artifact content, mirroring what a real worker's own writes
+    would already have produced.
+    """
     snapshot = load_effective_config(root)
     run_id = start_run(
         "text:prove SC5",
@@ -136,7 +144,10 @@ def _start_run_and_get_run_dir(
         snapshot=snapshot,
     )
     cleanup_runs.append(run_id)
-    return run_id, run_root(root, run_id)
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
+    )
+    return run_id, run_root(work_dir, run_id)
 
 
 def _drive(

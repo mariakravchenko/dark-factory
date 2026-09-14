@@ -40,7 +40,7 @@ from dark_factory.git.worktree import (
     working_branch_name,
     worktree_path,
 )
-from dark_factory.orchestrator.runner import advance, start_run
+from dark_factory.orchestrator.runner import advance, drive, start_run
 from dark_factory.persistence.models import (
     ArtifactReference,
     HumanInteraction,
@@ -291,3 +291,37 @@ def test_ensure_worktree_none_working_branch_raises_worktree_path_error(
             working_branch=None,
         )
     assert str(run_id) in str(excinfo.value)
+
+
+def test_advance_against_a_non_git_repo_root_raises_git_command_error(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[tuple[Any, Path]],
+    tmp_path: Path,
+) -> None:
+    """The fail-loud contract Task 2's fan-out depends on: driving a run
+    against a ``repo_root`` that is not a real git work tree raises a named
+    ``GitCommandError`` naming the path, rather than silently degrading to
+    the main checkout -- proving Task 2's per-call-site migration is load-
+    bearing, not merely tidy (A-05-04)."""
+    root = config_root_factory(roles=("BA",))
+    snapshot = load_effective_config(root)
+
+    run_id = start_run(
+        "text:advance against a non-git repo_root must fail loudly",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append((run_id, root))
+
+    non_git_root = tmp_path / "not-a-git-repo"
+    non_git_root.mkdir()
+
+    with pytest.raises(GitCommandError) as excinfo:
+        drive(
+            run_id,
+            session_factory=real_session_factory,
+            registry=_registry(_ArtifactWritingWorker(non_git_root)),
+            repo_root=non_git_root,
+        )
+    assert str(non_git_root) in str(excinfo.value)

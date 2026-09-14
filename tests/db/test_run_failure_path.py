@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -29,7 +30,9 @@ RegistryBuilder = Callable[[list[WorkerResult]], Any]
 
 
 def _drive_failing_run(
-    session_factory: SessionFactory, registry_builder: RegistryBuilder
+    session_factory: SessionFactory,
+    registry_builder: RegistryBuilder,
+    repo_root: Path,
 ) -> Any:
     run_id = start_run(
         "text:make this fail",
@@ -45,7 +48,9 @@ def _drive_failing_run(
             )
         ]
     )
-    final = drive(run_id, session_factory=session_factory, registry=registry)
+    final = drive(
+        run_id, session_factory=session_factory, registry=registry, repo_root=repo_root
+    )
     assert final is RunStatus.FAILED
     return run_id
 
@@ -54,8 +59,11 @@ def test_failed_result_drives_run_to_failed_with_role_retained(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -71,8 +79,11 @@ def test_failure_arm_persists_role_failed_and_run_failed_events(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -98,8 +109,11 @@ def test_failure_updates_the_one_attempt_row_in_place_with_error_detail(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -122,8 +136,11 @@ def test_failure_arm_is_two_committed_advance_steps(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -142,8 +159,11 @@ def test_failed_run_keeps_its_current_step(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -158,8 +178,11 @@ def test_role_started_is_recorded_before_the_failure_events(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _drive_failing_run(advance_session_factory, fake_worker_registry)
+    run_id = _drive_failing_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:

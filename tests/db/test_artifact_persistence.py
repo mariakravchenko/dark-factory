@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from dark_factory.artifacts.paths import run_root
 from dark_factory.config.loader import load_effective_config
 from dark_factory.domain.status import RunStatus
+from dark_factory.git.worktree import ensure_worktree, working_branch_name
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import (
     ArtifactReference,
@@ -154,7 +155,15 @@ def _drive_four_role_run(
     )
     cleanup_runs.append(run_id)
 
-    run_dir = run_root(root, run_id)
+    # GIT-01: pre-create the run's worktree now (idempotent -- the runner's
+    # own ensure_worktree call inside drive() reuses it) so the scripted
+    # four-role artifact content is written exactly where the runner will
+    # look, mirroring what a real worker's own writes would already have
+    # produced.
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
+    )
+    run_dir = run_root(work_dir, run_id)
     script = four_role_script(run_dir)
     worker = FakeWorker(script)
 

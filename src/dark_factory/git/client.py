@@ -102,5 +102,5 @@ def run_git(
         check=False,
     )
     if check and result.returncode != 0:
-        raise GitCommandError(tuple(args), result.returncode, result.stderr)
+        raise GitCommandError(tuple(args), result.returncode, result.stderr, cwd=cwd)
     return result

@@ -32,6 +32,8 @@ legible to a caller from the start.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 __all__ = [
     "GIT_ENV_ALLOWLIST",
     "GIT_IDENTITY_ENV",
@@ -59,16 +61,28 @@ class GitCommandError(GitError):
 
     Carries the argument list, the exit code and the captured stderr as
     attributes (``args`` / ``returncode`` / ``stderr``), in addition to a
-    human-readable message naming the subcommand, the exit code and the
-    first line of stderr -- so a caller can inspect the failure
-    programmatically as well as read it.
+    human-readable message naming the subcommand, the exit code, the working
+    directory the subprocess ran in (when known), and the first line of
+    stderr -- so a caller can inspect the failure programmatically as well as
+    read it. The working directory is included because some git failures
+    (e.g. "not a git repository") never name a path in their own stderr,
+    which would otherwise leave a caller with no way to tell which directory
+    was at fault.
     """
 
-    def __init__(self, args: tuple[str, ...], returncode: int, stderr: str) -> None:
+    def __init__(
+        self,
+        args: tuple[str, ...],
+        returncode: int,
+        stderr: str,
+        *,
+        cwd: Path | None = None,
+    ) -> None:
         stripped = stderr.strip()
         first_line = stripped.splitlines()[0] if stripped else ""
         subcommand = args[0] if args else "<empty>"
-        message = f"git {subcommand} exited {returncode}: {first_line}"
+        cwd_part = f" (cwd={cwd})" if cwd is not None else ""
+        message = f"git {subcommand} exited {returncode}{cwd_part}: {first_line}"
         super().__init__(message)
         # ``super().__init__(message)`` sets ``self.args = (message,)`` --
         # overwrite it with the actual git argument list, per this class's

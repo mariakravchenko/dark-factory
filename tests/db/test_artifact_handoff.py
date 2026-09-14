@@ -34,6 +34,7 @@ from dark_factory.domain.worker import (
     WorkerResult,
     WorkerResultStatus,
 )
+from dark_factory.git.worktree import ensure_worktree, working_branch_name
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import (
     ArtifactReference,
@@ -170,7 +171,14 @@ def test_ba_hands_acceptance_criteria_to_architecture(
     )
     cleanup_runs.append(run_id)
 
-    run_dir = run_root(root, run_id)
+    # GIT-01: pre-create the run's worktree now (idempotent -- the runner's
+    # own ensure_worktree call inside drive() reuses it) so scripted artifact
+    # content can be written exactly where the runner will look, mirroring
+    # what a real worker's own writes would already have produced.
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
+    )
+    run_dir = run_root(work_dir, run_id)
     ba_refs = write_role_artifacts(
         run_dir, "BA", {"acceptance_criteria.json": _VALID_ACCEPTANCE_CRITERIA}
     )
@@ -257,7 +265,14 @@ def test_malformed_acceptance_criteria_fails_the_role_with_zero_artifact_rows(
     )
     cleanup_runs.append(run_id)
 
-    run_dir = run_root(root, run_id)
+    # GIT-01: pre-create the run's worktree now (idempotent -- the runner's
+    # own ensure_worktree call inside drive() reuses it) so scripted artifact
+    # content can be written exactly where the runner will look, mirroring
+    # what a real worker's own writes would already have produced.
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
+    )
+    run_dir = run_root(work_dir, run_id)
     ba_refs = write_role_artifacts(
         run_dir, "BA", {"acceptance_criteria.json": _INVALID_ACCEPTANCE_CRITERIA}
     )

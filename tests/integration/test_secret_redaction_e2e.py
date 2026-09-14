@@ -169,6 +169,7 @@ def seeded_run(
     advance_session_factory: Callable[[], Session],
     fake_worker_registry: Callable[[list[WorkerResult]], object],
     sc5_secrets: Settings,
+    git_repo_root: Path,
 ) -> SeededRun:
     registry = fake_worker_registry(
         [
@@ -190,6 +191,7 @@ def seeded_run(
             run_id,
             session_factory=advance_session_factory,
             registry=registry,  # type: ignore[arg-type]
+            repo_root=git_repo_root,
         )
         # Actively exercise the log-redaction path with a line that carries every
         # seeded and configured secret at once.

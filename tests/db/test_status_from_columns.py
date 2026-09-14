@@ -19,6 +19,7 @@ import functools
 import re
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -26,9 +27,10 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from dark_factory.domain.status import RunStatus
-from dark_factory.domain.views import NULL_MARKER, RunView
+from dark_factory.domain.views import RunView
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.events.redaction import redact
+from dark_factory.git.worktree import working_branch_name
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.runner import drive, start_run
 from dark_factory.persistence.models import RoleExecution, Run, RunEvent
@@ -55,7 +57,9 @@ _EXPECTED_FIELDS = {
 
 
 def _completed_run(
-    session_factory: SessionFactory, registry_builder: RegistryBuilder
+    session_factory: SessionFactory,
+    registry_builder: RegistryBuilder,
+    repo_root: Path,
 ) -> uuid.UUID:
     run_id = start_run(
         "text:where is this run",
@@ -71,7 +75,9 @@ def _completed_run(
             )
         ]
     )
-    final = drive(run_id, session_factory=session_factory, registry=registry)
+    final = drive(
+        run_id, session_factory=session_factory, registry=registry, repo_root=repo_root
+    )
     assert final is RunStatus.COMPLETED
     return run_id
 
@@ -100,8 +106,11 @@ def _table_counts(session_factory: SessionFactory) -> dict[str, int]:
 def test_reports_status_role_and_attempt_from_columns(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     view = read_status(run_id, session_factory=advance_session_factory)
 
@@ -140,8 +149,11 @@ def test_run_with_no_role_execution_yet_reports_null_role_and_attempt(
 def test_runview_exposes_the_full_d12_field_set(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
     view = read_status(run_id, session_factory=advance_session_factory)
 
     assert set(type(view).model_fields) == _EXPECTED_FIELDS
@@ -155,8 +167,11 @@ def test_runview_exposes_the_full_d12_field_set(
 def test_runview_survives_insert_delete_and_corruption_of_run_events(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
     baseline = read_status(run_id, session_factory=advance_session_factory)
 
     # 1. an arbitrary extra event
@@ -192,8 +207,11 @@ def test_runview_survives_insert_delete_and_corruption_of_run_events(
 def test_runview_correct_with_a_completely_empty_event_log(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -216,8 +234,11 @@ def test_runview_correct_with_a_completely_empty_event_log(
 def test_read_status_performs_no_write(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
 
     session = advance_session_factory()
     try:
@@ -248,8 +269,11 @@ def test_read_status_performs_no_write(
 def test_as_text_renders_one_line_per_field_including_the_branch_fields(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _completed_run(advance_session_factory, fake_worker_registry)
+    run_id = _completed_run(
+        advance_session_factory, fake_worker_registry, git_repo_root
+    )
     view = read_status(run_id, session_factory=advance_session_factory)
 
     lines = view.as_text().splitlines()
@@ -257,9 +281,12 @@ def test_as_text_renders_one_line_per_field_including_the_branch_fields(
     keys = {line.split(":", 1)[0] for line in lines}
     assert keys == _EXPECTED_FIELDS
     assert all(re.match(r"^\w+: ", line) for line in lines)
-    # base_branch / working_branch are shown even though null until Phase 5
-    assert f"base_branch: {NULL_MARKER}" in lines
-    assert f"working_branch: {NULL_MARKER}" in lines
+    # Since Phase 5 (GIT-01), create_run always persists both columns --
+    # base_branch from the snapshot's repository.base_branch, working_branch
+    # deterministically from the run id -- so both render with real values,
+    # never the null marker, for any run created through start_run.
+    assert "base_branch: main" in lines
+    assert f"working_branch: {working_branch_name(run_id)}" in lines
 
 
 def test_source_reference_is_redacted_in_both_render_modes(

@@ -27,6 +27,7 @@ Real commits; ``cleanup_runs`` deletes every fixture row at teardown.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -186,6 +187,7 @@ def _run_at_ba(
     factory: SessionFactory,
     registry_builder: Callable[..., Any],
     cleanup: list[Any],
+    repo_root: Path,
 ) -> UUID:
     run_id = start_run(
         "text:atomic pause proof",
@@ -194,17 +196,26 @@ def _run_at_ba(
     )
     cleanup.append(run_id)
     status = advance(
-        run_id, session_factory=factory, registry=registry_builder([_COMPLETED])
+        run_id,
+        session_factory=factory,
+        registry=registry_builder([_COMPLETED]),
+        repo_root=repo_root,
     )
     assert status is RunStatus.BA
     return run_id
 
 
 def _pause_cleanly(
-    run_id: UUID, factory: SessionFactory, registry_builder: Callable[..., Any]
+    run_id: UUID,
+    factory: SessionFactory,
+    registry_builder: Callable[..., Any],
+    repo_root: Path,
 ) -> None:
     status = advance(
-        run_id, session_factory=factory, registry=registry_builder([_NEEDS_INPUT])
+        run_id,
+        session_factory=factory,
+        registry=registry_builder([_NEEDS_INPUT]),
+        repo_root=repo_root,
     )
     assert status is RunStatus.WAITING_HUMAN
 
@@ -232,9 +243,12 @@ def test_a_crash_between_the_pause_sub_writes_leaves_the_run_unpaused(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[..., Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     prefix, must_contain = _PAUSE_INJECTION_POINTS[point]
-    run_id = _run_at_ba(real_session_factory, fake_worker_registry, cleanup_runs)
+    run_id = _run_at_ba(
+        real_session_factory, fake_worker_registry, cleanup_runs, git_repo_root
+    )
     baseline = _snapshot(real_session_factory, run_id)
     assert baseline["status"] is RunStatus.BA
 
@@ -245,6 +259,7 @@ def test_a_crash_between_the_pause_sub_writes_leaves_the_run_unpaused(
                 run_id,
                 session_factory=real_session_factory,
                 registry=fake_worker_registry([_NEEDS_INPUT]),
+                repo_root=git_repo_root,
             )
     finally:
         event.remove(engine, "after_cursor_execute", boom)
@@ -260,13 +275,14 @@ def test_a_crash_between_the_pause_sub_writes_leaves_the_run_unpaused(
     assert after["re"] == baseline["re"]  # role-execution row untouched
 
     # -- still resumable, and the eventual outcome matches the no-crash run --
-    _pause_cleanly(run_id, real_session_factory, fake_worker_registry)
+    _pause_cleanly(run_id, real_session_factory, fake_worker_registry, git_repo_root)
     resumed = submit_answer(run_id, _ANSWER, session_factory=real_session_factory)
     assert resumed is RunStatus.BA
     final = drive(
         run_id,
         session_factory=real_session_factory,
         registry=fake_worker_registry([_COMPLETED]),
+        repo_root=git_repo_root,
     )
     assert final is RunStatus.COMPLETED
     assert _ba_attempt(real_session_factory, run_id) == baseline["re"][2]
@@ -279,10 +295,13 @@ def test_a_crash_between_the_answer_sub_writes_leaves_the_run_waiting(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[..., Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     prefix, must_contain = _ANSWER_INJECTION_POINTS[point]
-    run_id = _run_at_ba(real_session_factory, fake_worker_registry, cleanup_runs)
-    _pause_cleanly(run_id, real_session_factory, fake_worker_registry)
+    run_id = _run_at_ba(
+        real_session_factory, fake_worker_registry, cleanup_runs, git_repo_root
+    )
+    _pause_cleanly(run_id, real_session_factory, fake_worker_registry, git_repo_root)
     baseline = _snapshot(real_session_factory, run_id)
     assert baseline["status"] is RunStatus.WAITING_HUMAN
     assert baseline["interaction_count"] == 1
@@ -312,6 +331,7 @@ def test_a_crash_between_the_answer_sub_writes_leaves_the_run_waiting(
         run_id,
         session_factory=real_session_factory,
         registry=fake_worker_registry([_COMPLETED]),
+        repo_root=git_repo_root,
     )
     assert final is RunStatus.COMPLETED
     assert _ba_attempt(real_session_factory, run_id) == baseline["re"][2]

@@ -60,8 +60,9 @@ def _state(*, workflow: dict[str, Any], latest_role: str | None = None) -> RunSt
         if latest_role is not None
         else None
     )
+    run_id = uuid4()
     return RunState(
-        run_id=uuid4(),
+        run_id=run_id,
         status=RunStatus.ARCHITECTURE,
         current_role=latest_role,
         current_step=0,
@@ -71,6 +72,8 @@ def _state(*, workflow: dict[str, Any], latest_role: str | None = None) -> RunSt
         quality_gate_iterations=0,
         latest_execution=latest,
         pending_answer=None,
+        base_branch="main",
+        working_branch=f"dark-factory/run-{run_id}",
     )
 
 

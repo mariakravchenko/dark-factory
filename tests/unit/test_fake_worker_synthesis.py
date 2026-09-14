@@ -6,10 +6,17 @@ a second independent literal that only coincidentally matches (D-05).
 Everything here drives the public ``FakeWorker().execute(context)`` entry
 point with a real :class:`~dark_factory.context.builder.RoleContext` (and
 real :class:`~dark_factory.context.builder.ArtifactInput` entries), under
-``monkeypatch.chdir(tmp_path)`` so synthesis writes into a ``tmp_path``-rooted
-run tree. No database, no subprocess -- the written files are read back
-through their returned ``ArtifactRef.path`` under ``run_root(tmp_path,
-run_id)``.
+``monkeypatch.chdir(tmp_path)``. No database, no subprocess -- the written
+files are read back through their returned ``ArtifactRef.path``.
+
+Since Phase 5 (GIT-01), ``FakeWorker``'s true-default synthesis writes under
+the same deterministic sibling-of-``Path.cwd()`` worktree location
+``dark_factory.git.worktree.worktree_path`` computes (mirrored, not
+imported, inside ``workers/fake.py`` itself -- GIT-02 forbids a worker module
+from importing ``dark_factory.git``), not under ``tmp_path`` directly. This
+test file is not production code, so it reads the content back through the
+real ``worktree_path`` helper rather than duplicating the formula a second
+time.
 """
 
 from __future__ import annotations
@@ -32,6 +39,7 @@ from dark_factory.domain.artifacts import (
     Verdict,
 )
 from dark_factory.domain.worker import ArtifactRef, WorkerResultStatus
+from dark_factory.git.worktree import worktree_path
 from dark_factory.workers import fake as fake_module
 from dark_factory.workers.fake import FakeWorker
 
@@ -74,7 +82,11 @@ def _input(*, filename: str, produced_by: str, content: str) -> ArtifactInput:
 
 
 def _read(tmp_path: Path, run_id: str, ref: ArtifactRef) -> str:
-    root = run_root(tmp_path, uuid_from(run_id))
+    # GIT-01: FakeWorker's true default writes under the worktree-sibling
+    # path (a sibling of tmp_path, the cwd this test set), not under
+    # tmp_path itself.
+    work_dir = worktree_path(tmp_path, uuid_from(run_id))
+    root = run_root(work_dir, uuid_from(run_id))
     return read_artifact_text(root, ref.path)
 
 

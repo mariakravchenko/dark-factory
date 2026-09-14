@@ -23,6 +23,7 @@ from ``tests/db/test_transition_atomic.py`` extended to the interaction table.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -61,7 +62,11 @@ _TWO_NODE_SNAPSHOT: dict[str, object] = {
     "roles": [
         {"name": "BA", "worker": "fake"},
         {"name": _SECOND_NODE, "worker": "fake"},
-    ]
+    ],
+    # GIT-01: create_run persists this into runs.base_branch, which
+    # ensure_worktree requires non-null the first time a run's worktree is
+    # created.
+    "repository": {"base_branch": "main"},
 }
 
 _QUESTION = "Which cluster should the health endpoint report on?"
@@ -116,6 +121,7 @@ def _advance(
     factory: SessionFactory,
     registry_builder: Callable[..., Any],
     result: WorkerResult,
+    repo_root: Path,
 ) -> RunStatus:
     """One committed step with a single-result fake.
 
@@ -130,6 +136,7 @@ def _advance(
         session_factory=factory,
         registry=registry_builder([result]),
         pipeline=_TWO_NODE_PIPELINE,
+        repo_root=repo_root,
     )
 
 
@@ -138,6 +145,7 @@ def _pause_at_node(
     factory: SessionFactory,
     registry_builder: Callable[..., Any],
     cleanup: list[Any],
+    repo_root: Path,
 ) -> UUID:
     """Drive a fresh two-node run until ``node_name`` returns ``NEEDS_INPUT``.
 
@@ -156,20 +164,25 @@ def _pause_at_node(
     )
     cleanup.append(run_id)
 
-    assert _advance(run_id, factory, registry_builder, _completed()) is RunStatus.BA
+    assert (
+        _advance(run_id, factory, registry_builder, _completed(), repo_root)
+        is RunStatus.BA
+    )
     if node_name == _SECOND_NODE:
         assert (
-            _advance(run_id, factory, registry_builder, _completed("BA done"))
+            _advance(
+                run_id, factory, registry_builder, _completed("BA done"), repo_root
+            )
             is RunStatus.ARCHITECTURE
         )
         # Entering ARCHITECTURE is its own committed step: it inserts the row
         # but calls no worker, so the status is unchanged and this scripted
         # result is never consumed.
         assert (
-            _advance(run_id, factory, registry_builder, _completed("unused"))
+            _advance(run_id, factory, registry_builder, _completed("unused"), repo_root)
             is RunStatus.ARCHITECTURE
         )
-    status = _advance(run_id, factory, registry_builder, _needs_input())
+    status = _advance(run_id, factory, registry_builder, _needs_input(), repo_root)
     assert status is RunStatus.WAITING_HUMAN
     return run_id
 
@@ -236,9 +249,14 @@ def test_either_node_pauses_with_the_same_properties(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[..., Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     run_id = _pause_at_node(
-        node_name, real_session_factory, fake_worker_registry, cleanup_runs
+        node_name,
+        real_session_factory,
+        fake_worker_registry,
+        cleanup_runs,
+        git_repo_root,
     )
     outcome = _pause_outcome(real_session_factory, run_id)
 
@@ -258,6 +276,7 @@ def test_the_two_nodes_pause_through_structurally_identical_code(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[..., Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     """The honest form of "the same code ran": collect both outcomes, project out
     the role name and the row identifiers, and assert the remainders are equal.
@@ -267,11 +286,15 @@ def test_the_two_nodes_pause_through_structurally_identical_code(
     assert _SECOND_NODE not in [node.name for node in DEFAULT_PIPELINE.nodes]
 
     first_id = _pause_at_node(
-        "BA", real_session_factory, fake_worker_registry, cleanup_runs
+        "BA", real_session_factory, fake_worker_registry, cleanup_runs, git_repo_root
     )
     first = _pause_outcome(real_session_factory, first_id)
     second_id = _pause_at_node(
-        _SECOND_NODE, real_session_factory, fake_worker_registry, cleanup_runs
+        _SECOND_NODE,
+        real_session_factory,
+        fake_worker_registry,
+        cleanup_runs,
+        git_repo_root,
     )
     second = _pause_outcome(real_session_factory, second_id)
 
@@ -291,9 +314,14 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[..., Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     run_id = _pause_at_node(
-        node_name, real_session_factory, fake_worker_registry, cleanup_runs
+        node_name,
+        real_session_factory,
+        fake_worker_registry,
+        cleanup_runs,
+        git_repo_root,
     )
     attempt_before = _pause_outcome(real_session_factory, run_id)[
         "role_execution_attempt"
@@ -310,7 +338,11 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
     # (its own role_executions row, no worker call) and then actually running
     # it (see ``orchestrator/runner._enter_role``).
     final = _advance(
-        run_id, real_session_factory, fake_worker_registry, _completed("resumed")
+        run_id,
+        real_session_factory,
+        fake_worker_registry,
+        _completed("resumed"),
+        git_repo_root,
     )
     if node_name != _SECOND_NODE:
         assert final is RunStatus.ARCHITECTURE
@@ -319,6 +351,7 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
             real_session_factory,
             fake_worker_registry,
             _completed("unused"),
+            git_repo_root,
         )
         assert final is RunStatus.ARCHITECTURE  # entered, not yet run
         final = _advance(
@@ -326,6 +359,7 @@ def test_answering_either_pause_returns_to_that_node_and_the_run_completes(
             real_session_factory,
             fake_worker_registry,
             _completed("architecture"),
+            git_repo_root,
         )
     assert final is RunStatus.COMPLETED
 
