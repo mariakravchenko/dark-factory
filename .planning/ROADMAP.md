@@ -241,7 +241,25 @@ Plans:
   3. A role that finishes with uncommitted changes is recovered on next entry — changes WIP-committed to a persisted ref, worktree clean, nothing lost — and an entry on a detached HEAD fails the role with a persisted event instead of proceeding.
   4. A role whose diff touches paths outside its configured write scope (QA touching production code) fails the role; the out-of-scope edit is reverted and the violation is logged.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — TRACER: a run persists its working branch, creates its sibling worktree, and every role executes inside it (GIT-01, GIT-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 05-02-PLAN.md — WIP-commit recovery and detached-HEAD failure: SC3 end to end (GIT-01, GIT-02)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 05-03-PLAN.md — Artifact durability: per-role artifact commits, the artifact-excluded PR diff, and COMPLETED cleanup (ART-04, GIT-02)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [ ] 05-04-PLAN.md — Write-scope enforcement and the Phase 5 acceptance gate (ROLE-05)
+
 **Invariants**: agents never own commit/push/PR policy; git effects are guarded by persisted identifiers before acting.
 **Decision**: Resolves open decision 1 — artifact-content durability for cross-machine resume (leading option: commit artifacts to a `.dark-factory/` path on the run's working branch, excluded from the published diff).
 
