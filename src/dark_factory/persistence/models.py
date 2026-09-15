@@ -177,6 +177,15 @@ class RoleExecution(Base):
     worker_session_id: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # wip_commit_sha (Phase 5, GIT-01/GIT-02, migration 0005): the SHA of the
+    # recovery commit this attempt made while entering, or NULL. NULL means
+    # exactly what NULL means on the lease columns above -- "this attempt
+    # performed no recovery" -- a git fact recorded per attempt, never derived
+    # from git state at read time. Set once, at most, per attempt, by a
+    # ``patch``-mode write (see ``RoleExecutionWrite.mode`` in mutations.py)
+    # before the attempt's own worker call; never cleared by that attempt's
+    # later completion write.
+    wip_commit_sha: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
     )

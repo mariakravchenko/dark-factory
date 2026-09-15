@@ -67,6 +67,8 @@ from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
+from dark_factory.git import DetachedHeadError
+from dark_factory.git.lifecycle import head_sha
 from dark_factory.git.worktree import ensure_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
@@ -82,10 +84,15 @@ from dark_factory.persistence.mutations import (
     apply_transition,
     create_run,
 )
-from dark_factory.persistence.repositories import RunState, load_run_state
+from dark_factory.persistence.repositories import (
+    LatestExecution,
+    RunState,
+    load_run_state,
+)
 from dark_factory.workers.registry import WorkerRegistry, default_registry
 from dark_factory.workflows.pipeline import (
     Pipeline,
+    RoleNode,
     current_node,
     pipeline_from_snapshot,
 )
@@ -446,6 +453,112 @@ def _enter_role(
         session.close()
 
 
+def _persist_wip_commit(
+    run_id: UUID,
+    state: RunState,
+    latest: LatestExecution,
+    session_factory: SessionFactory,
+    lease: LeaseHandle,
+    *,
+    sha: str,
+) -> None:
+    """Persist a WIP-recovery commit's SHA on the recovering attempt, with its
+    ``WIP_COMMIT_CREATED`` audit event, before that attempt's own worker call
+    (D-07, T-05-13). A self-transition, exactly like :func:`_enter_role`'s:
+    ``expected_status`` and ``next_status`` are both ``state.status`` and
+    neither ``current_role`` nor ``current_step`` change -- this write's only
+    job is the ``patch``, not a state change. ``apply_transition``'s "no
+    audit row for a state change" guard does not apply here (the status is
+    unchanged), but the event is written anyway: a permanent git commit with
+    no accompanying audit row is precisely the gap this project's
+    durability-is-observability core value forbids.
+    """
+    session = session_factory()
+    try:
+        apply_transition(
+            session,
+            run_id=run_id,
+            expected_status=state.status,
+            next_status=state.status,
+            next_current_role=state.current_role,
+            next_current_step=state.current_step,
+            role_execution=RoleExecutionWrite(
+                mode="patch",
+                id=latest.id,
+                role=latest.role,
+                worker=latest.worker,
+                status=latest.status,
+                wip_commit_sha=sha,
+            ),
+            events=[
+                EventWrite(
+                    type=EventType.WIP_COMMIT_CREATED,
+                    role_execution_id=latest.id,
+                    payload={
+                        "role": latest.role,
+                        "attempt": latest.attempt,
+                        "commit": sha,
+                    },
+                )
+            ],
+            expected_owner_token=lease.token,
+        )
+    finally:
+        session.close()
+
+
+def _fail_role_before_worker(
+    run_id: UUID,
+    state: RunState,
+    node: RoleNode,
+    latest: LatestExecution,
+    pipeline: Pipeline,
+    session_factory: SessionFactory,
+    lease: LeaseHandle,
+    *,
+    error: str,
+) -> RunStatus:
+    """Fail the role and the run when the before-hook pass raises
+    ``DetachedHeadError`` -- the worker is never called (D-08). Reuses the
+    exact ``ROLE_FAILED`` / ``RUN_FAILED`` failure shape the D-09
+    schema-violation branch below already writes; this helper exists to give
+    the before-hook arm a call site, not to introduce a second failure
+    vocabulary.
+    """
+    next_status, next_role, next_step = transition(state, Signal.ROLE_FAILED, pipeline)
+    session = session_factory()
+    try:
+        new_status = apply_transition(
+            session,
+            run_id=run_id,
+            expected_status=state.status,
+            next_status=next_status,
+            next_current_role=next_role,
+            next_current_step=next_step,
+            role_execution=RoleExecutionWrite(
+                mode="update",
+                id=latest.id,
+                role=latest.role,
+                worker=latest.worker,
+                status=_ROLE_FAILED,
+                result=None,
+                error={"status": "FAILED", "summary": "", "error": error},
+            ),
+            events=[
+                EventWrite(
+                    type=EventType.ROLE_FAILED,
+                    payload={"role": node.name, "error": error},
+                ),
+                EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
+            ],
+            expected_owner_token=lease.token,
+        )
+        _maybe_crash_after(state.status, new_status)
+        return new_status
+    finally:
+        session.close()
+
+
 def _run_current_role(
     run_id: UUID,
     state: RunState,
@@ -498,6 +611,21 @@ def _run_current_role(
     ``work_dir`` -- not ``resolved_root`` -- is what the run tree and the
     role context resolve against, which is what makes "every role operates
     on the same run repository state" literally true.
+
+    D-05/D-06/D-07/D-08 (Phase 5, GIT-01/GIT-02): the before-hook pass has
+    exactly two outcomes, both persisted before the worker is ever called.
+    (1) A configured ``ensure_clean_worktree`` finds the worktree dirty and
+    leaves a WIP-recovery commit on the working branch -- observed by
+    comparing ``head_sha(work_dir)`` before and after the hook pass (the
+    hook's own return type carries nothing) and persisted via
+    :func:`_persist_wip_commit`, a ``patch``-mode write that records the SHA
+    on the recovering attempt with a ``WIP_COMMIT_CREATED`` event without
+    touching that attempt's ``result``/``error`` (D-07). (2) The worktree's
+    ``HEAD`` is detached and ``assert_attached_head`` raises
+    ``DetachedHeadError``: the worker call, the lease-loss check and the
+    after-hooks are all skipped, and :func:`_fail_role_before_worker` fails
+    the role and the run in the identical shape the D-09 schema-violation
+    branch below already uses (D-08) -- never a second failure vocabulary.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -545,7 +673,35 @@ def _run_current_role(
                 )
             )
 
-    _run_hooks("before")
+    # D-05/D-06/D-08: the before-hook pass is the recovery/detached-HEAD seam.
+    # ``head_before`` / ``head_after`` bracket it so a WIP-recovery commit
+    # made by ``ensure_clean_worktree`` (if a role's YAML configures it) can
+    # be observed with no DB read and no widened action return type -- the
+    # registered action-callable type is ``(ActionContext) -> None``, so
+    # comparing the branch's own HEAD before and after is the only channel.
+    # ``DetachedHeadError`` raised from inside the hook pass skips the worker
+    # call, the lease-loss check and the after-hooks entirely: a role
+    # entered on a detached HEAD never reaches its worker (D-08).
+    head_before = head_sha(work_dir)
+    try:
+        _run_hooks("before")
+    except DetachedHeadError as exc:
+        return _fail_role_before_worker(
+            run_id,
+            state,
+            node,
+            latest,
+            pipeline,
+            session_factory,
+            lease,
+            error=str(exc),
+        )
+    head_after = head_sha(work_dir)
+    if head_after != head_before:
+        _persist_wip_commit(
+            run_id, state, latest, session_factory, lease, sha=head_after
+        )
+
     if latest.status == _ROLE_RESUMING:
         previous = WorkerResult.model_validate(latest.result)
         result = worker.resume(context, previous, state.pending_answer)

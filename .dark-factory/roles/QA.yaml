@@ -18,7 +18,11 @@ permissions:
 # collect_test_results stays: it is a genuine Phase 9 (GATE-04) placeholder
 # with no unconditional equivalent elsewhere yet. See
 # src/dark_factory/actions/builtins.py's module docstring.
-before: []
+# ensure_clean_worktree (Phase 5, GIT-01) is different: unlike context
+# assembly and artifact persistence it opens no session, so it is
+# legitimately a role-configurable hook and is listed here on every role
+# deliberately -- a role YAML that omitted it would forgo recovery.
+before: [ensure_clean_worktree]
 after: [collect_test_results]
 
 inputs: [acceptance_criteria.json, implementation_summary.json]
