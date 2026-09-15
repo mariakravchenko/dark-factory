@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dark_factory.actions import default_registry as _action_default_registry
 from dark_factory.config.repo_config import RepoConfig
-from dark_factory.git.scope import validate_write_scope_patterns
+from dark_factory.git.scope import DEFAULT_WRITE_SCOPE, validate_write_scope_patterns
 from dark_factory.workers.registry import default_registry as _worker_default_registry
 
 if TYPE_CHECKING:
@@ -63,11 +63,19 @@ class ConfigError(ValueError):
 class RolePermissions(BaseModel):
     """``permissions:`` on a role -- ``write_scope`` patterns are validated
     here at config-load time (ROLE-05, D-12) and enforced post-hoc against a
-    role's diff by ``dark_factory.git.scope.enforce_write_scope``."""
+    role's diff by ``dark_factory.git.scope.enforce_write_scope``.
+
+    The default reads ``dark_factory.git.scope.DEFAULT_WRITE_SCOPE`` (WR-03)
+    -- the same constant ``orchestrator/runner.py``'s legacy bare-string
+    fallback reads -- rather than spelling out its own ``[]`` literal, so
+    D-14's "missing/empty write_scope means zero tolerance" default cannot
+    silently diverge between the two call sites."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    write_scope: list[str] = Field(default_factory=list)
+    write_scope: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_WRITE_SCOPE)
+    )
 
 
 class RoleDefinition(BaseModel):

@@ -71,7 +71,7 @@ from dark_factory.events.catalog import EventType
 from dark_factory.git import DetachedHeadError, GitError, WriteScopeViolation
 from dark_factory.git.diff import commit_run_artifacts, push_working_branch
 from dark_factory.git.lifecycle import head_sha, wip_commit_if_dirty
-from dark_factory.git.scope import enforce_write_scope
+from dark_factory.git.scope import DEFAULT_WRITE_SCOPE, enforce_write_scope
 from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
@@ -872,18 +872,24 @@ def _run_current_role(
     # enforce. The patterns are read from the persisted snapshot's role
     # entry, defensively (`(role_def.get("permissions") or {}).get(...)`),
     # so a legacy bare-string snapshot (whose `_role_definition` fallback
-    # carries no `permissions` key at all) yields an empty list rather than
-    # raising -- and under D-14 an empty list is correct here too: a legacy
-    # run with no declared scope has effectively declared none, and a role
-    # with no declared scope may not change source. A violation reuses the
-    # exact ROLE_FAILED/RUN_FAILED shape the ArtifactError/GitError branches
-    # above already write -- no new event type, no new role-execution
-    # status -- and clears `artifact_writes` for the same reason the GitError
-    # branch does: a FAILED attempt records no `artifacts` rows, even though
-    # the artifact content itself is already durably committed on the
-    # working branch by the time this check runs.
+    # carries no `permissions` key at all) falls back to
+    # ``DEFAULT_WRITE_SCOPE`` rather than raising -- and under D-14 an empty
+    # scope is correct here too: a legacy run with no declared scope has
+    # effectively declared none, and a role with no declared scope may not
+    # change source. The fallback reads the same
+    # ``dark_factory.git.scope.DEFAULT_WRITE_SCOPE`` constant
+    # ``config/loader.py``'s ``RolePermissions.write_scope`` default reads
+    # (WR-03), so this call site cannot silently diverge from that one. A
+    # violation reuses the exact ROLE_FAILED/RUN_FAILED shape the
+    # ArtifactError/GitError branches above already write -- no new event
+    # type, no new role-execution status -- and clears `artifact_writes` for
+    # the same reason the GitError branch does: a FAILED attempt records no
+    # `artifacts` rows, even though the artifact content itself is already
+    # durably committed on the working branch by the time this check runs.
     if signal is Signal.ROLE_COMPLETED:
-        write_scope = (role_def.get("permissions") or {}).get("write_scope", [])
+        write_scope = (role_def.get("permissions") or {}).get(
+            "write_scope", list(DEFAULT_WRITE_SCOPE)
+        )
         try:
             enforce_write_scope(
                 work_dir,

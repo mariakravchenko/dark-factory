@@ -47,7 +47,18 @@ _log = structlog.get_logger(__name__)
 # logged rather than silently swallowed (WR-01).
 _RM_CACHED_NOT_STAGED_MARKER = "did not match any files"
 
+# The single source of D-14's "missing/empty write_scope means zero
+# tolerance" default (WR-03). Both ``config/loader.py``'s
+# ``RolePermissions.write_scope`` (a role whose config declares no
+# ``permissions:`` block) and ``orchestrator/runner.py``'s
+# ``_role_definition`` fallback (a legacy bare-string snapshot entry with no
+# ``permissions`` key at all) read this constant rather than each spelling
+# out their own ``[]`` literal -- a future edit to the default can no longer
+# silently diverge between the two call sites.
+DEFAULT_WRITE_SCOPE: tuple[str, ...] = ()
+
 __all__ = [
+    "DEFAULT_WRITE_SCOPE",
     "attempt_changed_paths",
     "enforce_write_scope",
     "is_out_of_scope",
