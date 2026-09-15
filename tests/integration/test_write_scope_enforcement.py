@@ -53,7 +53,7 @@ from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
 from tests.support.fake_artifacts import write_role_artifacts
-from tests.support.git_repo import git_commit_all, run_artifact_text
+from tests.support.git_repo import git_commit_all, read_committed, run_artifact_text
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -299,7 +299,22 @@ def test_an_in_scope_edit_completes_with_no_revert(
     )
     assert final is RunStatus.COMPLETED
 
-    assert (work_dir / "src" / "app.py").read_text("utf-8") == "print('in scope')\n"
+    # -- the in-scope edit is durable on the working branch, not on the
+    # worktree filesystem: on COMPLETED, `_cleanup_run_worktree` commits any
+    # trailing worktree content onto the working branch via
+    # `wip_commit_if_dirty` and then removes the entire worktree directory
+    # (D-04). The working branch is therefore the only place this content
+    # still exists after COMPLETED -- reading from `work_dir` here would be
+    # asserting against a location the design guarantees is gone. Do not
+    # "simplify" this back to a filesystem read. ---------------------------
+    working_branch = working_branch_name(run_id)
+    committed = read_committed(root, working_branch, "src/app.py")
+    assert committed == "print('in scope')\n"
+
+    # -- companion proof of the same D-04 contract: the worktree directory
+    # itself no longer exists once the run reaches COMPLETED (the mirror
+    # image of test 6's `assert work_dir.exists()` for a FAILED run). ------
+    assert not work_dir.exists()
 
 
 # --------------------------------------------------------------------------- #
