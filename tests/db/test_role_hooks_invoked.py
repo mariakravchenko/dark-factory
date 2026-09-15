@@ -24,6 +24,7 @@ at teardown (the ``tests/db/test_pause_mechanism_generic.py`` idiom).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -128,6 +129,7 @@ def cleanup_runs(engine: Engine) -> Iterator[list[Any]]:
 def test_before_then_worker_then_after(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     log: list[str] = []
     worker = _RecordingWorker(log)
@@ -140,7 +142,8 @@ def test_before_then_worker_then_after(
                 "before": ["rec_before"],
                 "after": ["rec_after"],
             }
-        ]
+        ],
+        "repository": {"base_branch": "main"},
     }
 
     run_id = start_run(
@@ -156,6 +159,7 @@ def test_before_then_worker_then_after(
             session_factory=real_session_factory,
             registry=_worker_registry(worker),
             action_registry=actions,
+            repo_root=git_repo_root,
         )
         is RunStatus.BA
     )
@@ -165,6 +169,7 @@ def test_before_then_worker_then_after(
             session_factory=real_session_factory,
             registry=_worker_registry(worker),
             action_registry=actions,
+            repo_root=git_repo_root,
         )
         is RunStatus.COMPLETED
     )
@@ -175,6 +180,7 @@ def test_before_then_worker_then_after(
 def test_two_roles_get_an_identical_context_remainder(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     seen: list[ActionContext] = []
     actions = ActionRegistry()
@@ -184,7 +190,8 @@ def test_two_roles_get_an_identical_context_remainder(
         "roles": [
             {"name": "BA", "worker": "fake", "before": ["rec"], "after": []},
             {"name": "ARCHITECTURE", "worker": "fake", "before": ["rec"], "after": []},
-        ]
+        ],
+        "repository": {"base_branch": "main"},
     }
 
     run_id = start_run(
@@ -201,6 +208,7 @@ def test_two_roles_get_an_identical_context_remainder(
             session_factory=real_session_factory,
             registry=_worker_registry(worker),
             action_registry=actions,
+            repo_root=git_repo_root,
         )
         if status is RunStatus.COMPLETED:
             break
@@ -220,6 +228,7 @@ def test_two_roles_get_an_identical_context_remainder(
 def test_a_newly_registered_action_runs(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     """A brand-new action name, registered on the injected registry and referenced
     only from a role's ``after`` list, runs with zero change to the orchestrator."""
@@ -230,7 +239,8 @@ def test_a_newly_registered_action_runs(
     snapshot: dict[str, Any] = {
         "roles": [
             {"name": "BA", "worker": "fake", "before": [], "after": ["custom_hook"]}
-        ]
+        ],
+        "repository": {"base_branch": "main"},
     }
 
     run_id = start_run(
@@ -247,6 +257,7 @@ def test_a_newly_registered_action_runs(
             session_factory=real_session_factory,
             registry=_worker_registry(worker),
             action_registry=actions,
+            repo_root=git_repo_root,
         )
         if status is RunStatus.COMPLETED:
             break
@@ -258,9 +269,17 @@ def test_a_newly_registered_action_runs(
 def test_legacy_bare_string_snapshot_invokes_no_hooks(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     """A legacy ``{"roles": ["BA"]}`` snapshot resolves to empty before/after
-    lists -- the hook loops are a no-op, and a run still drives to COMPLETED."""
+    lists -- the hook loops are a no-op, and a run still drives to COMPLETED.
+
+    Since Phase 5 (GIT-01) a ``repository.base_branch`` key is required for
+    ``ensure_worktree`` to create the run's worktree on first entry; adding
+    it here does not touch the property under test -- the legacy bare-string
+    ``roles`` shape (not the ``repository`` key) is what makes the hook loops
+    a no-op.
+    """
     calls: list[str] = []
     worker = _RecordingWorker(calls)
     actions = ActionRegistry()  # empty: any hook lookup would raise
@@ -268,7 +287,7 @@ def test_legacy_bare_string_snapshot_invokes_no_hooks(
     run_id = start_run(
         "text:legacy snapshot no hooks",
         session_factory=real_session_factory,
-        snapshot={"roles": ["BA"]},
+        snapshot={"roles": ["BA"], "repository": {"base_branch": "main"}},
     )
     cleanup_runs.append(run_id)
 
@@ -279,6 +298,7 @@ def test_legacy_bare_string_snapshot_invokes_no_hooks(
             session_factory=real_session_factory,
             registry=_worker_registry(worker),
             action_registry=actions,
+            repo_root=git_repo_root,
         )
         if status is RunStatus.COMPLETED:
             break

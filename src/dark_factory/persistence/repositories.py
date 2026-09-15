@@ -82,6 +82,11 @@ class RunState(BaseModel):
     the pipeline from this dict (``pipeline_from_snapshot(state.workflow)``) and
     never re-reads ``.dark-factory.yaml`` -- editing that file cannot change an
     in-flight run.
+
+    ``base_branch`` / ``working_branch`` (Phase 5, GIT-01) are the persisted
+    git identifiers ``create_run`` wrote before any git command ran; the
+    orchestrator reads them back from these columns and never re-derives them
+    at use time.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -96,6 +101,8 @@ class RunState(BaseModel):
     quality_gate_iterations: int
     latest_execution: LatestExecution | None
     pending_answer: str | None
+    base_branch: str | None
+    working_branch: str | None
 
 
 def load_run_state(session: Session, run_id: UUID) -> RunState | None:
@@ -169,6 +176,8 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
         quality_gate_iterations=run.quality_gate_iterations,
         latest_execution=latest,
         pending_answer=pending_answer,
+        base_branch=run.base_branch,
+        working_branch=run.working_branch,
     )
 
 

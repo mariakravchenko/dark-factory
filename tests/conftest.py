@@ -34,6 +34,7 @@ from sqlalchemy.pool import NullPool
 from dark_factory.config.settings import Settings
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
+from tests.support.git_repo import make_git_repo
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -242,6 +243,26 @@ def _schema_at_head(request: pytest.FixtureRequest) -> Iterator[None]:
 
 
 # --------------------------------------------------------------------------- #
+# Plan 05-01 — the minimal git-backed repository root (GIT-01)
+# --------------------------------------------------------------------------- #
+#
+# ``git_repo_root`` is the minimal git-backed repository root for the Phase 1
+# / Phase 2 tests that drive ``advance``/``drive`` in-process without a full
+# ``.dark-factory/`` config tree (``config_root_factory`` already git-
+# initialises its own tree via ``_write_config_tree``, above). Since
+# ``ensure_worktree`` is now an unconditional call inside
+# ``_run_current_role``, every in-process call site needs a real git
+# ``repo_root`` -- Task 2 fans this fixture out to those call sites.
+
+
+@pytest.fixture
+def git_repo_root(tmp_path: Path) -> Path:
+    """A minimal real git repository under ``tmp_path``, on ``main``, with
+    ``.dark-factory/runs/`` gitignored."""
+    return make_git_repo(tmp_path / "gitrepo")
+
+
+# --------------------------------------------------------------------------- #
 # Plan 05 — the one-mutation-path test kit
 # --------------------------------------------------------------------------- #
 #
@@ -372,7 +393,14 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
             f"# {role}\n\nScripted {role} instruction text for tests.\n",
             encoding="utf-8",
         )
-    return root
+    # Phase 5 (GIT-01): every tree this factory writes must be a real git
+    # repository -- ``ensure_worktree`` is now an unconditional call inside
+    # ``_run_current_role``, so any in-process ``advance``/``drive`` call
+    # site driving a run against this tree needs a git-initialised
+    # ``repo_root``. ``make_git_repo`` commits everything just written above,
+    # so the tree's ``.dark-factory.yaml`` / role files / instructions are
+    # all part of the initial commit on ``base_branch`` ("main").
+    return make_git_repo(root)
 
 
 @pytest.fixture

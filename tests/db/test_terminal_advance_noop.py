@@ -20,6 +20,7 @@ and the returned status is the same stop value.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -86,6 +87,7 @@ def test_advance_on_terminal_run_writes_nothing_and_returns_the_same_status(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
     run_id = start_run(
         "text:take me to a terminal state",
@@ -94,14 +96,29 @@ def test_advance_on_terminal_run_writes_nothing_and_returns_the_same_status(
     )
     registry = fake_worker_registry([_SCRIPTS[terminal]])
     assert (
-        drive(run_id, session_factory=advance_session_factory, registry=registry)
+        drive(
+            run_id,
+            session_factory=advance_session_factory,
+            registry=registry,
+            repo_root=git_repo_root,
+        )
         is terminal
     )
 
     before = _snapshot(advance_session_factory, run_id)
 
-    first = advance(run_id, session_factory=advance_session_factory, registry=registry)
-    second = advance(run_id, session_factory=advance_session_factory, registry=registry)
+    first = advance(
+        run_id,
+        session_factory=advance_session_factory,
+        registry=registry,
+        repo_root=git_repo_root,
+    )
+    second = advance(
+        run_id,
+        session_factory=advance_session_factory,
+        registry=registry,
+        repo_root=git_repo_root,
+    )
 
     assert first is terminal
     assert second is terminal
@@ -112,6 +129,7 @@ def test_repeated_advance_on_a_completed_run_adds_no_events(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
     run_id = start_run(
         "text:finish then poke it again",
@@ -120,7 +138,12 @@ def test_repeated_advance_on_a_completed_run_adds_no_events(
     )
     registry = fake_worker_registry([_SCRIPTS[RunStatus.COMPLETED]])
     assert (
-        drive(run_id, session_factory=advance_session_factory, registry=registry)
+        drive(
+            run_id,
+            session_factory=advance_session_factory,
+            registry=registry,
+            repo_root=git_repo_root,
+        )
         is RunStatus.COMPLETED
     )
 
@@ -138,7 +161,12 @@ def test_repeated_advance_on_a_completed_run_adds_no_events(
     before = _event_count()
     for _ in range(3):
         assert (
-            advance(run_id, session_factory=advance_session_factory, registry=registry)
+            advance(
+                run_id,
+                session_factory=advance_session_factory,
+                registry=registry,
+                repo_root=git_repo_root,
+            )
             is RunStatus.COMPLETED
         )
     assert _event_count() == before == 4
@@ -158,7 +186,9 @@ _NEEDS_INPUT = WorkerResult(
 
 
 def _pause_a_run(
-    session_factory: SessionFactory, registry_builder: RegistryBuilder
+    session_factory: SessionFactory,
+    registry_builder: RegistryBuilder,
+    repo_root: Path,
 ) -> Any:
     run_id = start_run(
         "text:pause on a question",
@@ -167,7 +197,12 @@ def _pause_a_run(
     )
     pausing_registry = registry_builder([_NEEDS_INPUT])
     assert (
-        drive(run_id, session_factory=session_factory, registry=pausing_registry)
+        drive(
+            run_id,
+            session_factory=session_factory,
+            registry=pausing_registry,
+            repo_root=repo_root,
+        )
         is RunStatus.WAITING_HUMAN
     )
     return run_id
@@ -177,8 +212,9 @@ def test_advance_on_a_waiting_run_writes_nothing_and_never_calls_the_worker(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _pause_a_run(advance_session_factory, fake_worker_registry)
+    run_id = _pause_a_run(advance_session_factory, fake_worker_registry, git_repo_root)
 
     before = _snapshot(advance_session_factory, run_id)
 
@@ -186,7 +222,10 @@ def test_advance_on_a_waiting_run_writes_nothing_and_never_calls_the_worker(
     # is then proven by the absence of an exception, not by inspection.
     exploding = fake_worker_registry([])
     status = advance(
-        run_id, session_factory=advance_session_factory, registry=exploding
+        run_id,
+        session_factory=advance_session_factory,
+        registry=exploding,
+        repo_root=git_repo_root,
     )
 
     assert status is RunStatus.WAITING_HUMAN
@@ -197,6 +236,7 @@ def test_drive_that_reaches_waiting_stops_there_rather_than_looping(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
     run_id = start_run(
         "text:reach waiting and stop",
@@ -211,7 +251,12 @@ def test_drive_that_reaches_waiting_stops_there_rather_than_looping(
         ]
     )
     assert (
-        drive(run_id, session_factory=advance_session_factory, registry=registry)
+        drive(
+            run_id,
+            session_factory=advance_session_factory,
+            registry=registry,
+            repo_root=git_repo_root,
+        )
         is RunStatus.WAITING_HUMAN
     )
     snap = _snapshot(advance_session_factory, run_id)
@@ -223,14 +268,20 @@ def test_drive_starting_from_waiting_returns_immediately_without_advancing(
     advance_session_factory: SessionFactory,
     fake_worker_registry: RegistryBuilder,
     use_fake_secrets: object,
+    git_repo_root: Path,
 ) -> None:
-    run_id = _pause_a_run(advance_session_factory, fake_worker_registry)
+    run_id = _pause_a_run(advance_session_factory, fake_worker_registry, git_repo_root)
 
     before = _snapshot(advance_session_factory, run_id)
 
     exploding = fake_worker_registry([])
     assert (
-        drive(run_id, session_factory=advance_session_factory, registry=exploding)
+        drive(
+            run_id,
+            session_factory=advance_session_factory,
+            registry=exploding,
+            repo_root=git_repo_root,
+        )
         is RunStatus.WAITING_HUMAN
     )
     assert _snapshot(advance_session_factory, run_id) == before

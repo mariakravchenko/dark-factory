@@ -67,6 +67,7 @@ from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
+from dark_factory.git.worktree import ensure_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
@@ -484,6 +485,19 @@ def _run_current_role(
     (D-09, ART-02): a violation forces the signal to ``ROLE_FAILED`` instead of
     trusting the worker's own ``COMPLETED`` status, and no ``artifacts`` row is
     written for that attempt.
+
+    GIT-01, D-02/D-03: immediately after ``resolved_root`` is computed, this
+    calls :func:`~dark_factory.git.worktree.ensure_worktree` -- an
+    unconditional call for every role attempt, deliberately not a role-YAML
+    hook, because the worktree is a run-level invariant ("all roles operate
+    on the same run repository state") and the run tree cannot be resolved
+    without it. The worktree is created once per run, on the first role
+    attempt that reaches this function, and every later attempt (including
+    every resume) reuses it -- ``ensure_worktree`` is idempotent, so the call
+    is safe to make unconditionally on every attempt. Its return value,
+    ``work_dir`` -- not ``resolved_root`` -- is what the run tree and the
+    role context resolve against, which is what makes "every role operates
+    on the same run repository state" literally true.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -496,14 +510,19 @@ def _run_current_role(
     worker = registry.get(node.worker)
     role_def = _role_definition(state, node.name)
 
-    run_dir = run_root(resolved_root, run_id)
+    work_dir = ensure_worktree(
+        resolved_root,
+        run_id,
+        base_branch=state.base_branch,
+        working_branch=state.working_branch,
+    )
+
+    run_dir = run_root(work_dir, run_id)
     ensure_run_tree(run_dir)
 
     context_session = session_factory()
     try:
-        context = build_role_context(
-            context_session, resolved_root, run_id, state, role_def
-        )
+        context = build_role_context(context_session, work_dir, run_id, state, role_def)
     finally:
         context_session.close()
 
@@ -519,6 +538,10 @@ def _run_current_role(
                     task=context.task,
                     answer=state.pending_answer,
                     role_definition=dict(role_def),
+                    worktree=str(work_dir),
+                    run_root=str(run_dir),
+                    base_branch=state.base_branch,
+                    working_branch=state.working_branch,
                 )
             )
 

@@ -34,6 +34,10 @@ def _context(phase: Literal["before", "after"] = "before") -> ActionContext:
         task={"kind": "text"},
         answer=None,
         role_definition={"name": "BA", "worker": "fake"},
+        worktree="/tmp/dark-factory-runs/fake-run",
+        run_root="/tmp/dark-factory-runs/fake-run/.dark-factory/runs/fake-run",
+        base_branch="main",
+        working_branch="dark-factory/run-fake-run",
     )
 
 
@@ -77,6 +81,10 @@ def test_action_context_rejects_an_unknown_constructor_key() -> None:
             task={},
             answer=None,
             role_definition={},
+            worktree="/tmp/dark-factory-runs/fake-run",
+            run_root="/tmp/dark-factory-runs/fake-run/.dark-factory/runs/fake-run",
+            base_branch="main",
+            working_branch="dark-factory/run-fake-run",
             bogus="x",  # type: ignore[call-arg]
         )
 

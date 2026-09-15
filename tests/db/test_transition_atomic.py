@@ -25,6 +25,7 @@ Rows here are really committed (a real crash leaves real rows behind); the
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -128,6 +129,7 @@ def test_crash_between_subwrites_rolls_back_whole_and_stays_resumable(
     real_session_factory: SessionFactory,
     fake_worker_registry: Callable[[list[WorkerResult]], Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     target_prefix = _INJECTION_POINTS[injection_point]
     registry = fake_worker_registry([_COMPLETED])
@@ -140,7 +142,12 @@ def test_crash_between_subwrites_rolls_back_whole_and_stays_resumable(
     )
     cleanup_runs.append(run_id)
     assert (
-        advance(run_id, session_factory=real_session_factory, registry=registry)
+        advance(
+            run_id,
+            session_factory=real_session_factory,
+            registry=registry,
+            repo_root=git_repo_root,
+        )
         is RunStatus.BA
     )
     baseline = _snapshot(real_session_factory, run_id)
@@ -165,7 +172,12 @@ def test_crash_between_subwrites_rolls_back_whole_and_stays_resumable(
     event.listen(engine, "after_cursor_execute", boom)
     try:
         with pytest.raises(_InjectedCrash):
-            advance(run_id, session_factory=real_session_factory, registry=registry)
+            advance(
+                run_id,
+                session_factory=real_session_factory,
+                registry=registry,
+                repo_root=git_repo_root,
+            )
     finally:
         event.remove(engine, "after_cursor_execute", boom)
 
@@ -179,6 +191,11 @@ def test_crash_between_subwrites_rolls_back_whole_and_stays_resumable(
     assert after["latest_re_status"] == baseline["latest_re_status"]
 
     # -- and still resumable: crash consistency means resumable, not merely intact --
-    final = drive(run_id, session_factory=real_session_factory, registry=registry)
+    final = drive(
+        run_id,
+        session_factory=real_session_factory,
+        registry=registry,
+        repo_root=git_repo_root,
+    )
     assert final is RunStatus.COMPLETED
     assert _ba_execution_count(real_session_factory, run_id) == 1  # no phantom attempt

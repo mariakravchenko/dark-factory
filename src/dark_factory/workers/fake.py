@@ -299,7 +299,25 @@ def _default_script(context: object) -> WorkerResult:
 
     criterion_ids = _extract_criterion_ids(getattr(context, "inputs", None))
 
-    root = run_root(Path.cwd(), UUID(run_id))
+    # GIT-01 (Phase 5): the orchestrator resolves every run's tree inside its
+    # worktree -- a sibling directory of the repo root ``ensure_worktree``
+    # returns, never the repo root itself. ``FakeWorker`` runs in-process
+    # (not subprocess-spawned into the worktree the way a real adapter is),
+    # so it has no direct way to observe that return value; it independently
+    # computes -- never executes -- the identical deterministic sibling path
+    # from ``Path.cwd()``, which equals the orchestrator's own ``repo_root``
+    # resolution for every caller of this true-default path (the CLI never
+    # passes an explicit ``repo_root`` different from its own cwd).
+    #
+    # This module deliberately does NOT import ``dark_factory.git`` (GIT-02:
+    # no worker module may reach into the git package -- enforced by
+    # ``tests/unit/test_git_ownership_boundary.py``), so the formula is
+    # mirrored here rather than calling
+    # ``dark_factory.git.worktree.worktree_path``. If D-02's sibling-path
+    # layout (``<repo_root's parent>/dark-factory-runs/<run_id>/``) ever
+    # changes, this literal must change with it.
+    work_dir = Path.cwd().resolve().parent / "dark-factory-runs" / run_id
+    root = run_root(work_dir, UUID(run_id))
     refs: list[ArtifactRef] = []
     for filename in outputs:
         content = _synthesize_artifact_content(filename, criterion_ids)

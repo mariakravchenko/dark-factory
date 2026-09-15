@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import types
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -46,7 +47,9 @@ _COMPLETED = WorkerResult(
 )
 
 # Volatile columns that legitimately differ between two runs of the same task.
-_VOLATILE_COLUMNS = {"id", "created_at", "updated_at"}
+# ``working_branch`` (Phase 5, GIT-01) embeds the run's own UUID
+# (``dark-factory/run-<run_id>``), so it is exactly as run-specific as ``id``.
+_VOLATILE_COLUMNS = {"id", "created_at", "updated_at", "working_branch"}
 
 
 @pytest.fixture
@@ -119,7 +122,7 @@ def _public_attr_identities(module: types.ModuleType) -> dict[str, int]:
 
 
 def _drive_with_shared_engine(
-    pg_url: str, registry: Any
+    pg_url: str, registry: Any, repo_root: Path
 ) -> tuple[Any, RunStatus, int, dict[str, Any], list[str]]:
     engine = _fresh_engine(pg_url)
     try:
@@ -132,7 +135,12 @@ def _drive_with_shared_engine(
         status = state.status
         steps = 0
         while status not in STOP_STATUSES:
-            status = advance(run_id, session_factory=session_factory, registry=registry)
+            status = advance(
+                run_id,
+                session_factory=session_factory,
+                registry=registry,
+                repo_root=repo_root,
+            )
             steps += 1
         return (
             run_id,
@@ -146,7 +154,7 @@ def _drive_with_shared_engine(
 
 
 def _drive_with_a_fresh_engine_per_step(
-    pg_url: str, registry: Any
+    pg_url: str, registry: Any, repo_root: Path
 ) -> tuple[Any, RunStatus, int, dict[str, Any], list[str]]:
     engine = _fresh_engine(pg_url)
     try:
@@ -167,6 +175,7 @@ def _drive_with_a_fresh_engine_per_step(
                 run_id,
                 session_factory=_factory_for(engine),
                 registry=registry,
+                repo_root=repo_root,
             )
             steps += 1
         return (
@@ -184,16 +193,21 @@ def test_a_fresh_engine_per_step_is_indistinguishable_from_a_shared_engine(
     pg_url: str,
     fake_worker_registry: Callable[[list[WorkerResult]], Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     before = _public_attr_identities(runner_module)
 
     shared_id, shared_status, shared_steps, shared_cols, shared_types = (
-        _drive_with_shared_engine(pg_url, fake_worker_registry([_COMPLETED]))
+        _drive_with_shared_engine(
+            pg_url, fake_worker_registry([_COMPLETED]), git_repo_root
+        )
     )
     cleanup_runs.append(shared_id)
 
     fresh_id, fresh_status, fresh_steps, fresh_cols, fresh_types = (
-        _drive_with_a_fresh_engine_per_step(pg_url, fake_worker_registry([_COMPLETED]))
+        _drive_with_a_fresh_engine_per_step(
+            pg_url, fake_worker_registry([_COMPLETED]), git_repo_root
+        )
     )
     cleanup_runs.append(fresh_id)
 
@@ -221,6 +235,7 @@ def test_orchestrator_module_exposes_no_mutable_public_state(
     pg_url: str,
     fake_worker_registry: Callable[[list[WorkerResult]], Any],
     cleanup_runs: list[Any],
+    git_repo_root: Path,
 ) -> None:
     """A full drive must not mutate any module-level object in the orchestrator,
     and there must be no mutable public container for a later step to lean on."""
@@ -233,7 +248,7 @@ def test_orchestrator_module_exposes_no_mutable_public_state(
 
     before = _public_attr_identities(runner_module)
     run_id, status, _, _, _ = _drive_with_shared_engine(
-        pg_url, fake_worker_registry([_COMPLETED])
+        pg_url, fake_worker_registry([_COMPLETED]), git_repo_root
     )
     cleanup_runs.append(run_id)
     assert status is RunStatus.COMPLETED

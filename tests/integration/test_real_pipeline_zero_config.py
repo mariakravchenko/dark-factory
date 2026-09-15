@@ -9,8 +9,23 @@ package) because, before CR-01's fix, the shipped four-role pipeline's
 BA step declared machine-artifact outputs the true-default (unscripted)
 ``FakeWorker`` reported no artifacts for, which failed the D-09 schema-
 validation gate immediately. This is the one test in the suite that runs the
-CLI against the *real* repo-root ``.dark-factory.yaml`` -- proving the gap the
-04-REVIEW found is closed, not routed around.
+CLI against the *real* shipped ``.dark-factory.yaml`` set -- proving the gap
+the 04-REVIEW found is closed, not routed around.
+
+Since Phase 5 (GIT-01), ``advance``/``drive`` create a real git worktree
+(``ensure_worktree``) as a *sibling* of the CLI's own ``cwd`` before running
+any role -- driving this test's ``cwd`` straight at this repository's own
+checkout (the pre-Phase-5 shape) would create a real ``dark-factory/run-<id>``
+branch and a real sibling worktree directory next to the developer's own
+checkout, an unacceptable side effect on a real working repository. This test
+therefore copies the shipped config set (``.dark-factory.yaml``,
+``.dark-factory/roles/``, ``.dark-factory/instructions/``) into a throwaway
+``tmp_path`` repository built by ``make_git_repo`` and drives the CLI there
+instead. The property under test -- "the shipped config resolves and drives
+to ``COMPLETED`` with no scripted worker" -- is fully preserved, because the
+config files copied in are the real, shipped ones; only the checkout they run
+against changes. A future reader should not "restore" the old
+drive-against-this-repo behaviour.
 
 This is also the G-04-1 regression guard for the artifact handoff chain
 being legible: beyond the existence/attribution assertions above, it proves
@@ -43,12 +58,39 @@ from dark_factory.domain.artifacts import (
     TestReport,
     Verdict,
 )
+from dark_factory.git.client import run_git
+from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
+from tests.support.git_repo import make_git_repo
 
 pytestmark = pytest.mark.integration
 
 # tests/integration/test_real_pipeline_zero_config.py -> repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+_SHIPPED_CONFIG_PATHS: tuple[str, ...] = (
+    ".dark-factory.yaml",
+    ".dark-factory/roles",
+    ".dark-factory/instructions",
+)
+
+
+def _copy_shipped_config_into(root: Path) -> Path:
+    """Copy this repo's real shipped config set into ``root`` (already a real
+    git repository) and commit it, so the CLI drives against the genuine
+    ``.dark-factory.yaml`` / role / instruction files without touching the
+    developer's own checkout."""
+    for relative in _SHIPPED_CONFIG_PATHS:
+        source = _REPO_ROOT / relative
+        dest = root / relative
+        if source.is_dir():
+            shutil.copytree(source, dest)
+        else:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, dest)
+    run_git(["add", "-A"], cwd=root)
+    run_git(["commit", "-m", "shipped config"], cwd=root)
+    return root
 
 
 def _read_role_artifact(
@@ -73,7 +115,7 @@ def _read_role_artifact(
 
 
 def _run_cli_against_real_repo(
-    source: str, pg_url: str
+    source: str, pg_url: str, cwd: Path
 ) -> subprocess.CompletedProcess[str]:
     env = {
         **os.environ,
@@ -86,23 +128,29 @@ def _run_cli_against_real_repo(
         capture_output=True,
         text=True,
         env=env,
-        cwd=_REPO_ROOT,  # this repo's own .dark-factory.yaml, not a throwaway tree
+        cwd=cwd,  # the shipped config set, copied into a throwaway git repo
         timeout=90,
         check=False,
     )
 
 
 def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
-    pg_url: str, engine: Engine
+    pg_url: str, engine: Engine, tmp_path: Path
 ) -> None:
-    proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url)
+    config_root = _copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
+    proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url, config_root)
 
     run_dir: Path | None = None
     try:
         assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}"
 
         run_id = UUID(proc.stdout.splitlines()[0].strip())
-        run_dir = _REPO_ROOT / ".dark-factory" / "runs" / str(run_id)
+        # GIT-01: the runner resolves the run tree inside the worktree
+        # ensure_worktree creates as a sibling of config_root, not under
+        # config_root itself.
+        run_dir = (
+            worktree_path(config_root, run_id) / ".dark-factory" / "runs" / str(run_id)
+        )
 
         with Session(engine) as session:
             run = session.get(Run, run_id)
@@ -216,8 +264,10 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
                 f"expected {ba_ids!r}"
             )
     finally:
-        # Best-effort cleanup: .dark-factory/runs/ is gitignored (per-run
-        # artifact content, not source), but there is no reason to leave a
-        # real run tree behind in a developer's checkout after this test.
+        # Best-effort cleanup of the run tree inside the throwaway worktree.
+        # Since Phase 5 (GIT-01) everything -- config_root, its sibling
+        # worktree -- lives under this test's own tmp_path, so there is no
+        # real-checkout pollution risk left to guard against here; this is
+        # tidiness, not correctness.
         if run_dir is not None and run_dir.is_dir():
             shutil.rmtree(run_dir, ignore_errors=True)

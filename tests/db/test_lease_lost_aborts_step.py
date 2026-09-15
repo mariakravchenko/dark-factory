@@ -28,6 +28,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -160,7 +161,9 @@ def _clear_lease(factory: SessionFactory, run_id: UUID) -> None:
         session.close()
 
 
-def _run_at_ba(factory: SessionFactory, cleanup: list[Any], registry: Any) -> UUID:
+def _run_at_ba(
+    factory: SessionFactory, cleanup: list[Any], registry: Any, repo_root: Path
+) -> UUID:
     """A committed run parked at BA with one RUNNING role-execution row and the
     lease released (``advance`` claims and releases per call)."""
     run_id = start_run(
@@ -169,7 +172,10 @@ def _run_at_ba(factory: SessionFactory, cleanup: list[Any], registry: Any) -> UU
         snapshot=DEFAULT_TEST_SNAPSHOT,
     )
     cleanup.append(run_id)
-    assert advance(run_id, session_factory=factory, registry=registry) is RunStatus.BA
+    assert (
+        advance(run_id, session_factory=factory, registry=registry, repo_root=repo_root)
+        is RunStatus.BA
+    )
     return run_id
 
 
@@ -210,9 +216,13 @@ def test_a_transition_with_a_non_matching_owner_token_raises_lease_lost_writes_n
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
 
@@ -250,12 +260,16 @@ def test_lease_lost_is_a_distinct_error_type_from_concurrent_transition(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     assert not issubclass(LeaseLost, ConcurrentTransition)
     assert not issubclass(ConcurrentTransition, LeaseLost)
 
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
     re_id = _snapshot(real_session_factory, run_id)["re"][0]
@@ -303,13 +317,17 @@ def test_the_fence_holds_when_the_expected_status_is_exactly_right(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     """Pitfall 2 directly: the in-memory flag races the worker call returning, so
     the commit must be independently protected. Here the status is exactly what
     the caller expected -- the only thing that fails is the token -- and every
     field of the latest role-execution row is asserted unchanged."""
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
     _overwrite_owner_token(real_session_factory, run_id)
@@ -394,6 +412,7 @@ def test_a_lease_taken_while_the_worker_call_is_in_flight_aborts_persists_nothin
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     """The realistic path: a real ``run_lease`` under the short (2 s / 1 s) lease
     settings with its genuine daemon heartbeat, a worker whose call is slow
@@ -402,7 +421,10 @@ def test_a_lease_taken_while_the_worker_call_is_in_flight_aborts_persists_nothin
     row, sets the flag, and the step aborts through the runner with nothing
     written."""
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     before = _snapshot(real_session_factory, run_id)
 
@@ -422,6 +444,7 @@ def test_a_lease_taken_while_the_worker_call_is_in_flight_aborts_persists_nothin
                 registry=fake_worker_registry([_COMPLETED], sleep_ms=4000),
                 pipeline=DEFAULT_PIPELINE,
                 lease=handle,
+                repo_root=git_repo_root,
             )
     thief.join()
 
@@ -437,12 +460,16 @@ def test_the_in_memory_flag_alone_aborts_the_step_before_any_write(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     """Flag set, token still matches the row. The abort must happen on the flag
     alone, before ``apply_transition`` is ever called -- so removing the
     commit-time fence would still leave this test green."""
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
     before = _snapshot(real_session_factory, run_id)
@@ -458,6 +485,7 @@ def test_the_in_memory_flag_alone_aborts_the_step_before_any_write(
             registry=fake_worker_registry([_COMPLETED]),
             pipeline=DEFAULT_PIPELINE,
             lease=handle,
+            repo_root=git_repo_root,
         )
 
     after = _snapshot(real_session_factory, run_id)
@@ -471,12 +499,16 @@ def test_the_token_fence_alone_aborts_when_the_in_memory_flag_is_missed(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     """Flag clear, token no longer matches. The abort must happen on the fence
     alone, inside ``apply_transition`` -- so removing the in-memory check would
     still leave this test green."""
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
     _overwrite_owner_token(real_session_factory, run_id)
@@ -491,6 +523,7 @@ def test_the_token_fence_alone_aborts_when_the_in_memory_flag_is_missed(
             registry=fake_worker_registry([_COMPLETED]),
             pipeline=DEFAULT_PIPELINE,
             lease=handle,
+            repo_root=git_repo_root,
         )
 
     after = _snapshot(real_session_factory, run_id)
@@ -503,13 +536,17 @@ def test_after_an_abort_the_discarded_step_re_runs_on_the_same_attempt(
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     fake_worker_registry: Callable[..., Any],
+    git_repo_root: Path,
 ) -> None:
     """The whole reason for preferring an abort over a partial write: a discarded
     step is idempotent. After the abort, a fresh claim runs the step again on the
     same attempt number, leaving exactly one role-execution row for the role and
     exactly one completion event."""
     run_id = _run_at_ba(
-        real_session_factory, cleanup_runs, fake_worker_registry([_COMPLETED])
+        real_session_factory,
+        cleanup_runs,
+        fake_worker_registry([_COMPLETED]),
+        git_repo_root,
     )
     my_token = _claim(real_session_factory, run_id)
     _overwrite_owner_token(real_session_factory, run_id)
@@ -522,6 +559,7 @@ def test_after_an_abort_the_discarded_step_re_runs_on_the_same_attempt(
             registry=fake_worker_registry([_COMPLETED]),
             pipeline=DEFAULT_PIPELINE,
             lease=handle,
+            repo_root=git_repo_root,
         )
 
     # the thief goes away; the run is claimable again
@@ -531,6 +569,7 @@ def test_after_an_abort_the_discarded_step_re_runs_on_the_same_attempt(
         run_id,
         session_factory=real_session_factory,
         registry=fake_worker_registry([_COMPLETED]),
+        repo_root=git_repo_root,
     )
     assert final is RunStatus.COMPLETED
 
