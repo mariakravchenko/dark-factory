@@ -168,9 +168,25 @@ def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
     supplied paths and nothing else is what keeps an enforcement mechanism
     from being a worse outcome than the violation it corrects: it must never
     destroy a role's legitimate in-scope work alongside the violation.
+
+    The containment check (:func:`_resolve_in_worktree`) is applied per-path
+    inside a ``try``/``except`` rather than left to propagate directly: a
+    single escaping path (e.g. a worker-created symlink that resolves
+    outside the worktree) must never abort the revert of every *other*,
+    perfectly revertible violation still queued after it in ``paths``. Every
+    escape is collected and raised together only after every non-escaping
+    path has been reverted -- this is what actually delivers
+    :func:`enforce_write_scope`'s docstring promise that "every violating
+    path is reverted before the exception is raised," rather than only the
+    ones that happen to sort before the first escape.
     """
+    escapes: list[str] = []
     for path in paths:
-        _resolve_in_worktree(worktree, path)
+        try:
+            _resolve_in_worktree(worktree, path)
+        except WriteScopeViolation:
+            escapes.append(path)
+            continue
         in_head = run_git(["cat-file", "-e", f"HEAD:{path}"], cwd=worktree, check=False)
         if in_head.returncode == 0:
             run_git(
@@ -184,6 +200,10 @@ def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
                 check=False,
             )
             run_git(["clean", "--force", "--", path], cwd=worktree)
+    if escapes:
+        raise WriteScopeViolation(
+            f"write-scope paths escape worktree {worktree.resolve()}: {escapes!r}"
+        )
 
 
 def enforce_write_scope(
