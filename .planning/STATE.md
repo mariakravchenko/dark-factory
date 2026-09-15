@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Isolated Workspace & Git Lifecycle
 status: executing
-stopped_at: Phase 5 context gathered
-last_updated: "2026-09-14T11:35:09.117Z"
-last_activity: 2026-09-14
-last_activity_desc: Phase 05 execution started
-state_head: 28fb381f0f9ed31c52de4f9a8fa510cf21da7901
+stopped_at: Completed 05-04-PLAN.md
+last_updated: "2026-09-15T16:05:21.707Z"
+last_activity: 2026-09-15
+last_activity_desc: Phase 05 execution resumed (wave continue)
+state_head: 4a031b5cfa4bb19e30e5b15529651b48384455d2
 progress:
   total_phases: 12
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 29
-  completed_plans: 25
-  percent: 8
+  completed_plans: 29
+  percent: 0
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-13)
 ## Current Position
 
 Phase: 05 (Isolated Workspace & Git Lifecycle) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 05
-Last activity: 2026-09-14 — Phase 05 execution started
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-09-15 — Phase 05 execution resumed (wave continue)
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -85,6 +85,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 04 P03 | 150min | 3 tasks | 17 files |
 | Phase 04 P04 | 90min | 3 tasks | 4 files |
 | Phase 04 P05 | 17min | 3 tasks | 5 files |
+| Phase 05 P04 | ~12min authoring | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,9 @@ Recent decisions affecting current work:
 - [Phase 04]: [Phase 04]: 04-05: Extraction dispatches on content shape only (structural AcceptanceCriteriaDocument validation, then a carrier-line regex) — never on context.role — keeping D-08's role-agnostic FakeWorker invariant intact while still routing content correctly
 - [Phase 04]: [Phase 04]: 04-05: Markdown outputs carry ids via a single accepted carrier-line style ('Criterion <id> met') so the DEVELOPMENT role, whose declared inputs are design.md/constraints.json and not acceptance_criteria.json, still receives ids through the markdown hop
 - [Phase 04]: [Phase 04]: 04-05: Every extracted id is filtered to a single whitespace-free token under 64 chars before use, bounding what upstream artifact content can inject downstream (T-04-19/T-04-21)
+- [Phase 05]: [Phase 05]: 05-04: is_out_of_scope is a single expression with no empty-list branch -- D-14 zero tolerance falls out of not any(...) over an empty iterable for free, never a special case
+- [Phase 05]: [Phase 05]: 05-04: revert_paths branches on git cat-file -e HEAD:<path> before choosing restore vs rm+clean -- a single-mechanism revert silently leaves a newly-created violating file on disk
+- [Phase 05]: [Phase 05]: 05-04: write-scope enforcement wired into runner.py after the D-09/D-16 artifact validate/commit/push sequence and before transition(); a violation clears artifact_writes and reuses the existing ROLE_FAILED/RUN_FAILED shape
 
 ### Pending Todos
 
@@ -189,6 +193,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-14T06:34:24.792Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-isolated-workspace-git-lifecycle/05-CONTEXT.md
+Last session: 2026-09-15T16:05:21.653Z
+Stopped at: Completed 05-04-PLAN.md
+Resume file: None

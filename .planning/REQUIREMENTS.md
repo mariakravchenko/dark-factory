@@ -30,7 +30,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **ROLE-02**: The Architect role consumes the task, BA output, and repository and emits `design.md` and `constraints.json`; it is read-only with respect to repository source code
 - [x] **ROLE-03**: The Developer role implements the change, adds/updates tests, runs tests/lint/build, iterates on failures, and emits `implementation_summary.json`; it may modify production code and tests
 - [x] **ROLE-04**: The QA role independently verifies each acceptance criterion and emits `test_report.json` and a machine-readable `verdict.json`; it may modify only tests, fixtures, and test utilities
-- [ ] **ROLE-05**: A role's permitted file-write scope is enforced after execution (e.g. QA's diff must not touch production code) using path rules from configuration
+- [x] **ROLE-05**: A role's permitted file-write scope is enforced after execution (e.g. QA's diff must not touch production code) using path rules from configuration
 - [x] **ROLE-06**: The QA verdict (pass/fail per criterion, issues with severity) is the machine input to the orchestrator's next decision; free-form prose alone never drives a transition
 
 ### Worker Abstraction
@@ -201,7 +201,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | ROLE-02 | Phase 4 | Complete |
 | ROLE-03 | Phase 4 | Complete |
 | ROLE-04 | Phase 4 | Complete |
-| ROLE-05 | Phase 5 | Pending |
+| ROLE-05 | Phase 5 | Complete |
 | ROLE-06 | Phase 4 | Complete |
 | WORK-01 | Phase 1 | Complete |
 | WORK-02 | Phase 3 | Complete |
