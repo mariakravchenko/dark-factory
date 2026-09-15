@@ -106,7 +106,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Git Lifecycle & GitHub
 
-- [ ] **GIT-01**: Each run has an explicit working branch created from the configured base branch; all roles operate on the same run repository state
+- [x] **GIT-01**: Each run has an explicit working branch created from the configured base branch; all roles operate on the same run repository state
 - [x] **GIT-02**: Dark Factory owns delivery actions (create branch, commit, push, create PR); agents never own commit/push/PR policy
 - [ ] **GIT-03**: Publishing occurs only when QA = PASS and Quality Gate = PASS, then collects the final diff, commits, pushes, creates the PR, persists PR metadata, and transitions to COMPLETED
 - [ ] **GIT-04**: Publishing is idempotent — retrying with an existing `pr_number` does not open a second PR; branch, commit SHA, PR number/URL, and clarification-comment id are persisted and checked before acting
@@ -250,7 +250,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | GATE-02 | Phase 9 | Pending |
 | GATE-03 | Phase 9 | Pending |
 | GATE-04 | Phase 9 | Pending |
-| GIT-01 | Phase 5 | Pending |
+| GIT-01 | Phase 5 | Complete |
 | GIT-02 | Phase 5 | Complete |
 | GIT-03 | Phase 10 | Pending |
 | GIT-04 | Phase 10 | Pending |
