@@ -15,9 +15,8 @@ Error hierarchy:
   checked invocation; carries ``args``, ``returncode`` and ``stderr`` as
   attributes alongside a message naming the subcommand, the exit code and the
   first line of stderr.
-* :class:`DetachedHeadError` -- declared now, raised by plan 05-02's
-  ``ensure_clean_worktree`` when a role enters a worktree whose ``HEAD`` is
-  detached.
+* :class:`DetachedHeadError` -- raised by :func:`~dark_factory.git.lifecycle.assert_attached_head`
+  when a role enters a worktree whose ``HEAD`` is detached (plan 05-02).
 * :class:`WorktreePathError` -- raised by :func:`~dark_factory.git.worktree.ensure_worktree`
   for a run with no persisted ``working_branch`` / ``base_branch``, and by
   other worktree-path failures.
@@ -37,16 +36,22 @@ from pathlib import Path
 __all__ = [
     "GIT_ENV_ALLOWLIST",
     "GIT_IDENTITY_ENV",
+    "WIP_COMMIT_SUBJECT_PREFIX",
     "WORKTREE_PARENT_DIRNAME",
     "DetachedHeadError",
     "GitCommandError",
     "GitError",
     "WorktreePathError",
     "WriteScopeViolation",
+    "assert_attached_head",
+    "dirty_paths",
     "ensure_worktree",
     "git_env",
+    "head_sha",
+    "is_dirty",
     "remove_worktree",
     "run_git",
+    "wip_commit_if_dirty",
     "working_branch_name",
     "worktree_path",
 ]
@@ -120,6 +125,14 @@ from dark_factory.git.client import (
     GIT_IDENTITY_ENV,
     git_env,
     run_git,
+)
+from dark_factory.git.lifecycle import (
+    WIP_COMMIT_SUBJECT_PREFIX,
+    assert_attached_head,
+    dirty_paths,
+    head_sha,
+    is_dirty,
+    wip_commit_if_dirty,
 )
 from dark_factory.git.worktree import (
     WORKTREE_PARENT_DIRNAME,

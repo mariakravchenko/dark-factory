@@ -67,6 +67,10 @@ class LatestExecution(BaseModel):
     attempt: int
     worker_session_id: str | None = None
     result: dict[str, Any] | None = None
+    # wip_commit_sha (Phase 5, GIT-01/GIT-02): the recovery commit SHA this
+    # attempt wrote via a ``patch``-mode write, or ``None`` -- lets the
+    # runner see whether the current attempt already recorded a recovery.
+    wip_commit_sha: str | None = None
 
 
 class RunState(BaseModel):
@@ -147,6 +151,7 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
             attempt=latest_row.attempt,
             worker_session_id=latest_row.worker_session_id,
             result=latest_row.result,
+            wip_commit_sha=latest_row.wip_commit_sha,
         )
         if latest_row is not None
         else None

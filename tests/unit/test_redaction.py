@@ -161,6 +161,62 @@ def test_forty_hex_in_a_git_object_context_survives(prefix: str) -> None:
     assert redact(text, known_secrets={}) == text
 
 
+@pytest.mark.parametrize(
+    "key", ["commit", "sha", "revision", "commit_sha", "wip_commit_sha"]
+)
+def test_forty_hex_value_under_a_git_object_dict_key_survives(key: str) -> None:
+    """Regression guard (05-02 db-tier round-trip): `redact()` recurses through
+    a Mapping value-by-value with no visibility into its own key name, so a
+    bare `{"commit": "<40hex>"}` payload value used to be redacted even though
+    its key literally says `commit` -- exactly the `WIP_COMMIT_CREATED` event
+    payload shape `_persist_wip_commit` writes."""
+    from dark_factory.events.redaction import redact
+
+    out = redact({key: SHA40, "role": "ARCHITECTURE"}, known_secrets={})
+    assert out[key] == SHA40
+    assert out["role"] == "ARCHITECTURE"
+
+
+def test_git_object_key_exemption_does_not_weaken_other_patterns() -> None:
+    """The dict-key exemption applies ONLY to the bare hex-token pattern --
+    a real secret shape under a `commit`-named key must still be redacted."""
+    from dark_factory.events.redaction import redact
+
+    out = redact({"commit": FAKE_DB_URI}, known_secrets={})
+    assert out["commit"] == "[redacted:database_url]"
+
+    out2 = redact({"commit": FAKE_GHP}, known_secrets={})
+    assert out2["commit"] == "[redacted:github_token]"
+
+
+def test_unrelated_dict_key_still_redacts_a_bare_forty_hex_value() -> None:
+    from dark_factory.events.redaction import redact
+
+    out = redact({"note": SHA40}, known_secrets={})
+    assert out["note"] == "[redacted:github_token]"
+
+
+def test_forty_hex_after_detached_head_at_phrase_survives() -> None:
+    """Regression guard (05-02 db-tier round-trip): the D-08 detached-HEAD
+    error message reads "...has a detached HEAD at <sha>; refusing..." -- the
+    word immediately before the hex is "at", not "commit"/"sha"/"revision",
+    so the original word list missed this legitimate git-object mention."""
+    from dark_factory.events.redaction import redact
+
+    text = f"worktree /tmp/wt has a detached HEAD at {SHA40}; refusing to enter"
+    assert redact(text, known_secrets={}) == text
+
+
+def test_bare_at_without_head_still_redacts() -> None:
+    """The `head at` exemption is scoped narrowly: a bare "at" preposition with
+    no "head" immediately before it must not exempt a real token."""
+    from dark_factory.events.redaction import redact
+
+    out = redact(f"the build failed at {SHA40} today", known_secrets={})
+    assert SHA40 not in out
+    assert "[redacted:github_token]" in out
+
+
 def test_forty_hex_in_github_context_is_redacted() -> None:
     from dark_factory.events.redaction import redact
 

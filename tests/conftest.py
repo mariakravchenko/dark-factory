@@ -382,7 +382,10 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
             f"instructions: ../instructions/{role.lower()}.md\n"
             "tools: []\n"
             "permissions:\n  write_scope: []\n"
-            "before: [prepare_role_context]\n"
+            # Phase 5 (GIT-01): mirrors the shipped .dark-factory/roles/*.yaml
+            # `before:` value -- see src/dark_factory/actions/builtins.py's
+            # ensure_clean_worktree docstring.
+            "before: [ensure_clean_worktree]\n"
             f"after: {_after[role]}\n"
             "inputs: []\n"
             "outputs: []\n"

@@ -97,18 +97,30 @@ class LeaseLost(RuntimeError):
 class RoleExecutionWrite(BaseModel):
     """Insert-or-update spec for a ``role_executions`` row. ``result`` / ``error``
     are **raw** — redaction happens inside ``apply_transition``. ``attempt`` is
-    never supplied by the caller; it is computed in SQL inside the transaction."""
+    never supplied by the caller; it is computed in SQL inside the transaction.
+
+    Three modes, each with a distinct contract (A-05-05, Phase 5): ``insert``
+    creates the attempt row and computes ``attempt`` in SQL; ``update`` records
+    the attempt's terminal outcome and **fully overwrites** ``status``,
+    ``worker_session_id``, ``result`` and ``error``; ``patch`` assigns **only**
+    the non-``None`` fields supplied and touches nothing else — the mode a
+    mid-attempt write (e.g. the WIP-recovery SHA) must use, because ``update``
+    would blind-assign ``result`` to ``None`` and ``result`` is the column a
+    ``RESUMING`` attempt reads back to reconstruct its previous
+    ``WorkerResult``.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["insert", "update"]
+    mode: Literal["insert", "update", "patch"]
     role: str
     worker: str
     status: str
-    id: UUID | None = None  # required for mode="update"
+    id: UUID | None = None  # required for mode="update"/"patch"
     worker_session_id: str | None = None
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
+    wip_commit_sha: str | None = None
 
 
 class EventWrite(BaseModel):
@@ -262,9 +274,16 @@ def apply_transition(
     3. ``LeaseLost`` if ``expected_owner_token`` was supplied and the already-locked
        row's ``owner_token`` differs — no writes. The row is already locked for
        update, so this is a free, correct fence: no second select.
-    4. insert or update the ``role_executions`` row; for an insert, ``attempt`` is
-       ``MAX(attempt) + 1`` for this run + role computed **in SQL, in this
-       transaction** (D-19, RESEARCH Pitfall 2), never from an in-memory counter
+    4. insert, update or patch the ``role_executions`` row; for an insert,
+       ``attempt`` is ``MAX(attempt) + 1`` for this run + role computed **in
+       SQL, in this transaction** (D-19, RESEARCH Pitfall 2), never from an
+       in-memory counter. ``patch`` exists (Phase 5, A-05-05) because a
+       mid-attempt write — persisting a WIP-recovery commit SHA before that
+       attempt's own worker call — must not use ``update``: ``update`` is a
+       full overwrite that would blind-assign ``result`` to ``None``, and
+       ``result`` is the column a ``RESUMING`` attempt reads back to
+       reconstruct its previous ``WorkerResult``. ``patch`` assigns only the
+       non-``None`` fields supplied and leaves every other column untouched.
     5. write the ``human_interactions`` row (``ask`` inserts the WAITING question;
        ``answer`` fills in the run's single WAITING row), when supplied
     6. insert one ``artifacts`` row per ``artifact_references`` entry (ART-01/03)
@@ -351,8 +370,9 @@ def _write_role_execution(
     spec: RoleExecutionWrite,
     known: Mapping[str, str],
 ) -> None:
-    """Insert or update the ``role_executions`` row for this transition. Redaction
-    of ``result`` / ``error`` happens here, at the single call site."""
+    """Insert, update or patch the ``role_executions`` row for this transition
+    (see :class:`RoleExecutionWrite`'s docstring for the three modes' contract).
+    Redaction of ``result`` / ``error`` happens here, at the single call site."""
     result = (
         redact(spec.result, known_secrets=known) if spec.result is not None else None
     )
@@ -380,15 +400,41 @@ def _write_role_execution(
         )
         return
 
+    if spec.mode == "update":
+        if spec.id is None:
+            raise ValueError("RoleExecutionWrite(mode='update') requires id")
+        row = session.get(RoleExecution, spec.id, with_for_update=True)
+        if row is None:
+            raise LookupError(spec.id)
+        row.status = spec.status
+        row.worker_session_id = spec.worker_session_id
+        row.result = result
+        row.error = error
+        row.updated_at = func.now()
+        return
+
+    # mode == "patch" (Phase 5, A-05-05): a mid-attempt write that must not
+    # touch any field the caller did not explicitly supply -- in particular
+    # it must never blind-assign ``result`` to ``None``, which is exactly
+    # what the ``update`` branch above does and is precisely the data-loss
+    # bug this mode exists to avoid. Only non-``None`` supplied fields are
+    # assigned; ``status`` is written only when the caller explicitly passed
+    # one that differs from the row's current value.
     if spec.id is None:
-        raise ValueError("RoleExecutionWrite(mode='update') requires id")
+        raise ValueError("RoleExecutionWrite(mode='patch') requires id")
     row = session.get(RoleExecution, spec.id, with_for_update=True)
     if row is None:
         raise LookupError(spec.id)
-    row.status = spec.status
-    row.worker_session_id = spec.worker_session_id
-    row.result = result
-    row.error = error
+    if spec.wip_commit_sha is not None:
+        row.wip_commit_sha = spec.wip_commit_sha
+    if spec.worker_session_id is not None:
+        row.worker_session_id = spec.worker_session_id
+    if result is not None:
+        row.result = result
+    if error is not None:
+        row.error = error
+    if spec.status != row.status:
+        row.status = spec.status
     row.updated_at = func.now()
 
 

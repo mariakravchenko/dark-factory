@@ -28,7 +28,11 @@ permissions:
 # something a role opts into -- prepare_role_context / store_role_artifacts
 # used to be listed here but named no-op stubs that never gated either one.
 # See src/dark_factory/actions/builtins.py's module docstring.
-before: []
+# ensure_clean_worktree (Phase 5, GIT-01) is different: unlike context
+# assembly and artifact persistence it opens no session, so it is
+# legitimately a role-configurable hook and is listed here on every role
+# deliberately -- a role YAML that omitted it would forgo recovery.
+before: [ensure_clean_worktree]
 after: []
 
 inputs: [design.md, constraints.json]

@@ -53,6 +53,7 @@ ROLE_EXECUTION_COLUMNS = {
     "worker_session_id",
     "result",
     "error",
+    "wip_commit_sha",
     "created_at",
     "updated_at",
 }

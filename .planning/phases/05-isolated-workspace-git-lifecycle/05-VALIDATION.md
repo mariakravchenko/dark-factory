@@ -40,9 +40,9 @@ created: "2026-09-14"
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 05-TBD | TBD | TBD | GIT-01 | T-05-TBD / — | Working branch created from configured base, unique per run; every role shares the same worktree | unit | `uv run pytest tests/unit/test_git_worktree.py -x` | ❌ W0 | ⬜ pending |
-| 05-TBD | TBD | TBD | GIT-01 | T-05-TBD / — | Same worktree reused across pause/resume (D-03), not recreated | integration | `uv run pytest tests/integration/test_worktree_lifecycle.py -x` | ❌ W0 | ⬜ pending |
-| 05-TBD | TBD | TBD | GIT-02 | T-05-TBD / — | No git mutation happens outside the orchestrator's git package (mirrors `test_single_mutation_path.py`) | unit | `uv run pytest tests/unit/test_git_ownership_boundary.py -x` | ❌ W0 | ⬜ pending |
+| T3 | 05-01 | 1 | GIT-01 | T-05-TBD / — | Working branch created from configured base, unique per run; every role shares the same worktree | unit | `uv run pytest tests/unit/test_git_worktree.py -x` | ❌ W0 | ⬜ pending |
+| T3 | 05-02 | 2 | GIT-01 | T-05-TBD / — | Same worktree reused across pause/resume (D-03), not recreated | integration | `uv run pytest tests/integration/test_worktree_lifecycle.py -x` | ❌ W0 | ⬜ pending |
+| T3 | 05-01 | 1 | GIT-02 | T-05-TBD / — | No git mutation happens outside the orchestrator's git package (mirrors `test_single_mutation_path.py`) | unit | `uv run pytest tests/unit/test_git_ownership_boundary.py -x` | ❌ W0 | ⬜ pending |
 | 05-TBD | TBD | TBD | ART-04 | T-05-TBD / — | A fresh `git clone` + checkout of the working branch has the run's artifact content available | integration | `uv run pytest tests/integration/test_artifact_cross_clone.py -x` | ❌ W0 | ⬜ pending |
 | 05-TBD | TBD | TBD | ROLE-05 | T-05-TBD / — | `write_scope` glob matching: positive, negative, deep-nesting, decoy-directory, zero-tolerance cases | unit | `uv run pytest tests/unit/test_write_scope.py -x` | ❌ W0 | ⬜ pending |
 | 05-TBD | TBD | TBD | ROLE-05 | T-05-TBD / — | A violating diff is reverted (tracked-edit and new-file cases) and the role fails with the D-09 failure shape | integration | `uv run pytest tests/integration/test_write_scope_enforcement.py -x` | ❌ W0 | ⬜ pending |
@@ -55,14 +55,14 @@ created: "2026-09-14"
 
 ## Wave 0 Requirements
 
-- [ ] `tests/support/git_repo.py` — new fixture factory for a throwaway real git repo (init, commit, branch); no such fixture exists today (`tests/support/` currently has only `config.py`, `fake_artifacts.py`, `log_sink.py`, `subprocess_runner.py`)
-- [ ] `tests/unit/test_git_worktree.py` — new unit test file (git-repo-backed, no DB, no network)
-- [ ] `tests/unit/test_write_scope.py` — new unit test file
-- [ ] `tests/unit/test_git_ownership_boundary.py` — new unit test file
-- [ ] `tests/integration/test_worktree_lifecycle.py` — new integration test file exercising the full `advance()`/`drive()` loop against a real git repo
-- [ ] `tests/integration/test_artifact_cross_clone.py` — new integration test file
-- [ ] `tests/integration/test_write_scope_enforcement.py` — new integration test file
-- [ ] Migration `0005_wip_commit_sha` + `tests/db/test_role_executions_wip_commit_sha_schema.py` (sibling to existing `tests/db/test_human_interactions_schema.py` pattern)
+- [x] `tests/support/git_repo.py` — new fixture factory for a throwaway real git repo (init, commit, branch); no such fixture exists today (`tests/support/` currently has only `config.py`, `fake_artifacts.py`, `log_sink.py`, `subprocess_runner.py`) (05-01)
+- [x] `tests/unit/test_git_worktree.py` — new unit test file (git-repo-backed, no DB, no network) (05-01)
+- [ ] `tests/unit/test_write_scope.py` — new unit test file (05-04)
+- [x] `tests/unit/test_git_ownership_boundary.py` — new unit test file (05-01)
+- [x] `tests/integration/test_worktree_lifecycle.py` — new integration test file exercising the full `advance()`/`drive()` loop against a real git repo (05-02)
+- [ ] `tests/integration/test_artifact_cross_clone.py` — new integration test file (05-03)
+- [ ] `tests/integration/test_write_scope_enforcement.py` — new integration test file (05-04)
+- [x] Migration `0005_wip_commit_sha` + `tests/db/test_role_executions_wip_commit_sha_schema.py` (sibling to existing `tests/db/test_human_interactions_schema.py` pattern) (05-02)
 
 ---
 
