@@ -241,12 +241,12 @@ Plans:
   3. A role that finishes with uncommitted changes is recovered on next entry — changes WIP-committed to a persisted ref, worktree clean, nothing lost — and an entry on a detached HEAD fails the role with a persisted event instead of proceeding.
   4. A role whose diff touches paths outside its configured write scope (QA touching production code) fails the role; the out-of-scope edit is reverted and the violation is logged.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — TRACER: a run persists its working branch, creates its sibling worktree, and every role executes inside it (GIT-01, GIT-02)
+- [x] 05-01-PLAN.md — TRACER: a run persists its working branch, creates its sibling worktree, and every role executes inside it (GIT-01, GIT-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -388,7 +388,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 2. Pause, Resume & Single-Owner Execution | 7/7 | Complete    | 2026-09-10 |
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
-| 5. Isolated Workspace & Git Lifecycle | 0/TBD | Not started | - |
+| 5. Isolated Workspace & Git Lifecycle | 1/4 | In Progress|  |
 | 6. Tools, Permissions & the Credential Boundary | 0/TBD | Not started | - |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
 | 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
