@@ -379,13 +379,22 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
         "ARCHITECTURE": "[store_role_artifacts]",
         "DEVELOPMENT": "[collect_diff, store_role_artifacts]",
     }
+    # Phase 5 (plan 05-04, ROLE-05): mirrors the shipped .dark-factory/roles/*.yaml
+    # write_scope values exactly -- DEVELOPMENT/QA get real glob patterns,
+    # BA/ARCHITECTURE keep the intended zero-tolerance empty list (D-14).
+    _write_scope = {
+        "BA": "[]",
+        "QA": '["tests/**"]',
+        "ARCHITECTURE": "[]",
+        "DEVELOPMENT": '["src/**"]',
+    }
     for role in ("BA", "QA", "ARCHITECTURE", "DEVELOPMENT"):
         (root / f".dark-factory/roles/{role}.yaml").write_text(
             f"name: {role}\n"
             "worker: fake\n"
             f"instructions: ../instructions/{role.lower()}.md\n"
             "tools: []\n"
-            "permissions:\n  write_scope: []\n"
+            f"permissions:\n  write_scope: {_write_scope[role]}\n"
             # Phase 5 (GIT-01): mirrors the shipped .dark-factory/roles/*.yaml
             # `before:` value -- see src/dark_factory/actions/builtins.py's
             # ensure_clean_worktree docstring.

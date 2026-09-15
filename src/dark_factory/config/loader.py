@@ -35,6 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from dark_factory.actions import default_registry as _action_default_registry
 from dark_factory.config.repo_config import RepoConfig
+from dark_factory.git.scope import validate_write_scope_patterns
 from dark_factory.workers.registry import default_registry as _worker_default_registry
 
 if TYPE_CHECKING:
@@ -60,7 +61,9 @@ class ConfigError(ValueError):
 
 
 class RolePermissions(BaseModel):
-    """``permissions:`` on a role -- stored in the snapshot, enforced in Phase 5."""
+    """``permissions:`` on a role -- ``write_scope`` patterns are validated
+    here at config-load time (ROLE-05, D-12) and enforced post-hoc against a
+    role's diff by ``dark_factory.git.scope.enforce_write_scope``."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -131,6 +134,12 @@ def load_effective_config(
         for hook in (*rd.before, *rd.after):
             if hook not in action_registry:
                 raise ConfigError(f"{role_path}: unknown action {hook!r}")
+        try:
+            validate_write_scope_patterns(
+                rd.permissions.write_scope, source=str(role_path)
+            )
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from exc
 
         instr_path = (role_path.parent / rd.instructions).resolve()
         if not instr_path.is_file() or not instr_path.is_relative_to(root):

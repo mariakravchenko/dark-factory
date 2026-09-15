@@ -8,8 +8,11 @@ worker: fake
 instructions: ../instructions/qa.md
 
 tools: [repo.read, repo.search, artifacts.read, artifacts.write]
+# write_scope (Phase 5, ROLE-05) is now enforced: any changed path outside
+# these patterns is reverted and fails the role (D-12, D-13). QA may write
+# only under tests/ -- fixtures and test utilities, never production code.
 permissions:
-  write_scope: []
+  write_scope: ["tests/**"]
 
 # WR-01 (04-REVIEW): context assembly and artifact persistence are
 # unconditional orchestrator behaviour (orchestrator/runner.py), not

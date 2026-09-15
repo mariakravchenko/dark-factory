@@ -20,9 +20,10 @@ Error hierarchy:
 * :class:`WorktreePathError` -- raised by :func:`~dark_factory.git.worktree.ensure_worktree`
   for a run with no persisted ``working_branch`` / ``base_branch``, and by
   other worktree-path failures.
-* :class:`WriteScopeViolation` -- declared now, raised by plan 05-04's
-  write-scope enforcement when a role's diff touches a path outside its
-  configured ``write_scope``.
+* :class:`WriteScopeViolation` -- raised by
+  :func:`~dark_factory.git.scope.enforce_write_scope` (plan 05-04, D-13) when
+  a role's diff touches a path outside its configured ``write_scope``, after
+  every violating path has already been reverted.
 * :class:`GitPushError` -- raised by :func:`~dark_factory.git.diff.push_working_branch`
   (plan 05-03, D-16) when every retry of ``git push origin <working_branch>``
   fails. A distinguishable subtype of :class:`GitError` (not of
@@ -33,8 +34,7 @@ Error hierarchy:
   runner wiring currently treats both the same way (folds into the existing
   ``ROLE_FAILED`` path).
 
-Declaring the whole hierarchy in one place, even though two members are not
-yet raised by any code in this plan, keeps the package's error surface
+Declaring the whole hierarchy in one place keeps the package's error surface
 legible to a caller from the start.
 """
 
@@ -59,17 +59,22 @@ __all__ = [
     "WorktreePathError",
     "WriteScopeViolation",
     "assert_attached_head",
+    "attempt_changed_paths",
     "collect_pr_diff",
     "commit_run_artifacts",
     "dirty_paths",
+    "enforce_write_scope",
     "ensure_worktree",
     "git_env",
     "head_sha",
     "is_dirty",
+    "is_out_of_scope",
     "pr_changed_paths",
     "push_working_branch",
     "remove_worktree",
+    "revert_paths",
     "run_git",
+    "validate_write_scope_patterns",
     "wip_commit_if_dirty",
     "working_branch_name",
     "worktree_path",
@@ -172,6 +177,13 @@ from dark_factory.git.lifecycle import (
     head_sha,
     is_dirty,
     wip_commit_if_dirty,
+)
+from dark_factory.git.scope import (
+    attempt_changed_paths,
+    enforce_write_scope,
+    is_out_of_scope,
+    revert_paths,
+    validate_write_scope_patterns,
 )
 from dark_factory.git.worktree import (
     WORKTREE_PARENT_DIRNAME,
