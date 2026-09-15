@@ -31,9 +31,21 @@ import fnmatch
 from collections.abc import Sequence
 from pathlib import Path
 
+import structlog
+
 from dark_factory.git import WriteScopeViolation
 from dark_factory.git.client import run_git
 from dark_factory.git.diff import ARTIFACT_EXCLUDE_PATHSPEC
+
+_log = structlog.get_logger(__name__)
+
+# The exact substring git emits on stderr when ``git rm --cached`` is asked
+# to remove a path with no index entry at all -- the expected, no-op-shaped
+# failure ``revert_paths`` deliberately tolerates for a role-created file
+# that was never staged. Any other non-zero exit is an unexpected failure
+# (permission error, corrupted index entry, a git-level conflict) and is
+# logged rather than silently swallowed (WR-01).
+_RM_CACHED_NOT_STAGED_MARKER = "did not match any files"
 
 __all__ = [
     "attempt_changed_paths",
@@ -159,7 +171,15 @@ def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
       index entry is cleared first with ``git rm --cached --force --quiet``
       (``check=False``: a path that was never staged makes this a
       no-op-shaped failure, not a real error), then the file itself is
-      removed with ``git clean --force``.
+      removed with ``git clean --force``. A non-zero ``git rm --cached`` exit
+      whose stderr does not match the expected "pathspec did not match any
+      files" text is an *unexpected* failure (permission error, corrupted
+      index entry, a git-level conflict) and is logged via
+      ``write_scope.revert_rm_cached_unexpected_failure`` rather than
+      silently swallowed alongside the expected case -- ``git clean`` is
+      still attempted immediately after either way, since a real ``rm
+      --cached`` failure is not itself something ``git clean`` could resolve
+      or avoid (WR-01).
 
     Branching on HEAD membership is mandatory: a single-mechanism revert
     (always ``restore``, or always ``clean``) leaves every newly-created
@@ -194,11 +214,21 @@ def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
                 cwd=worktree,
             )
         else:
-            run_git(
+            rm_cached = run_git(
                 ["rm", "--cached", "--force", "--quiet", "--", path],
                 cwd=worktree,
                 check=False,
             )
+            if (
+                rm_cached.returncode != 0
+                and _RM_CACHED_NOT_STAGED_MARKER not in rm_cached.stderr
+            ):
+                _log.warning(
+                    "write_scope.revert_rm_cached_unexpected_failure",
+                    path=path,
+                    returncode=rm_cached.returncode,
+                    stderr=rm_cached.stderr.strip(),
+                )
             run_git(["clean", "--force", "--", path], cwd=worktree)
     if escapes:
         raise WriteScopeViolation(
