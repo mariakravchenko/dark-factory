@@ -19,6 +19,12 @@ per-test `WorkerRegistry` wrapping one ordered `FakeWorker` script, `drive`
 with the test's `repo_root`. Each scenario varies only the bytes
 `write_role_artifacts` puts on disk (once the run id -- and therefore the run
 tree -- exists) and the prose in the scripted `WorkerResult.summary`.
+
+05-03 (D-04): unlike the artifact-reading tests migrated onto
+`tests.support.git_repo.run_artifact_text` in this same plan, every scenario
+here drives a run that ends `FAILED` (a schema violation), and `FAILED` runs
+keep their worktree on disk (D-04's failure arm) -- so reading artifact
+content directly off `run_dir` below is still correct, not a leftover.
 """
 
 from __future__ import annotations

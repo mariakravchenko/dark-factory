@@ -23,6 +23,15 @@ Error hierarchy:
 * :class:`WriteScopeViolation` -- declared now, raised by plan 05-04's
   write-scope enforcement when a role's diff touches a path outside its
   configured ``write_scope``.
+* :class:`GitPushError` -- raised by :func:`~dark_factory.git.diff.push_working_branch`
+  (plan 05-03, D-16) when every retry of ``git push origin <working_branch>``
+  fails. A distinguishable subtype of :class:`GitError` (not of
+  :class:`GitCommandError`, since its message is already redacted and
+  reworded rather than the raw subprocess failure) so a caller (or a future
+  retry-aware caller) can tell "the artifact commit itself failed" from "the
+  commit succeeded but publishing it did not," even though this plan's
+  runner wiring currently treats both the same way (folds into the existing
+  ``ROLE_FAILED`` path).
 
 Declaring the whole hierarchy in one place, even though two members are not
 yet raised by any code in this plan, keeps the package's error surface
@@ -34,21 +43,31 @@ from __future__ import annotations
 from pathlib import Path
 
 __all__ = [
+    "ARTIFACT_COMMIT_SUBJECT_PREFIX",
+    "ARTIFACT_EXCLUDE_PATHSPEC",
+    "DIFF_PATCH_FILENAME",
     "GIT_ENV_ALLOWLIST",
     "GIT_IDENTITY_ENV",
+    "GIT_PUSH_TOKEN_ENV_VAR",
+    "MAX_DIFF_BYTES",
     "WIP_COMMIT_SUBJECT_PREFIX",
     "WORKTREE_PARENT_DIRNAME",
     "DetachedHeadError",
     "GitCommandError",
     "GitError",
+    "GitPushError",
     "WorktreePathError",
     "WriteScopeViolation",
     "assert_attached_head",
+    "collect_pr_diff",
+    "commit_run_artifacts",
     "dirty_paths",
     "ensure_worktree",
     "git_env",
     "head_sha",
     "is_dirty",
+    "pr_changed_paths",
+    "push_working_branch",
     "remove_worktree",
     "run_git",
     "wip_commit_if_dirty",
@@ -116,6 +135,15 @@ class WriteScopeViolation(GitError):
     ``write_scope`` (plan 05-04)."""
 
 
+class GitPushError(GitError):
+    """Raised by :func:`~dark_factory.git.diff.push_working_branch` (plan
+    05-03, D-16) when every retry of ``git push origin <working_branch>``
+    fails. Its message has already been passed through
+    :func:`~dark_factory.events.redaction.redact` -- defense in depth
+    against a future git version or network intermediary echoing the push
+    token into an error string despite the ``GIT_ASKPASS`` mechanism."""
+
+
 # Import the submodules after the error hierarchy is declared, so their own
 # ``from dark_factory.git import <ErrorClass>`` succeeds against this
 # module's already-populated namespace (avoids a circular-import ordering
@@ -125,6 +153,17 @@ from dark_factory.git.client import (
     GIT_IDENTITY_ENV,
     git_env,
     run_git,
+)
+from dark_factory.git.diff import (
+    ARTIFACT_COMMIT_SUBJECT_PREFIX,
+    ARTIFACT_EXCLUDE_PATHSPEC,
+    DIFF_PATCH_FILENAME,
+    GIT_PUSH_TOKEN_ENV_VAR,
+    MAX_DIFF_BYTES,
+    collect_pr_diff,
+    commit_run_artifacts,
+    pr_changed_paths,
+    push_working_branch,
 )
 from dark_factory.git.lifecycle import (
     WIP_COMMIT_SUBJECT_PREFIX,

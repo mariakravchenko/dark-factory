@@ -49,6 +49,7 @@ from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
 from tests.support.fake_artifacts import four_role_script
+from tests.support.git_repo import run_artifact_text
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -142,9 +143,17 @@ def _drive_four_role_run(
     config_root_factory: Callable[..., Path],
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
-) -> tuple[Any, Path]:
+    engine: Engine,
+) -> tuple[Any, Path, Path, str]:
     """Shared setup: drive one real four-role run to COMPLETED, return
-    ``(run_id, run_dir)``."""
+    ``(run_id, run_dir, root, working_branch)``.
+
+    05-03 (D-04): a run that reaches COMPLETED has its worktree removed by
+    cleanup, so ``run_dir`` is no longer on disk by the time this returns --
+    callers that need the artifact content read it through
+    ``run_artifact_text(root, run_id, working_branch, ...)`` off the working
+    branch, never off ``run_dir`` directly.
+    """
     root = _write_four_role_tree(config_root_factory)
     snapshot = load_effective_config(root)
 
@@ -174,7 +183,13 @@ def _drive_four_role_run(
         repo_root=root,
     )
     assert final is RunStatus.COMPLETED
-    return run_id, run_dir
+
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        working_branch = run.working_branch
+    assert working_branch is not None
+    return run_id, run_dir, root, working_branch
 
 
 def test_seven_artifacts_rows_reference_metadata_only_with_checksum_round_trip(
@@ -183,8 +198,8 @@ def test_seven_artifacts_rows_reference_metadata_only_with_checksum_round_trip(
     cleanup_runs: list[Any],
     engine: Engine,
 ) -> None:
-    run_id, run_dir = _drive_four_role_run(
-        config_root_factory, real_session_factory, cleanup_runs
+    run_id, _run_dir, root, working_branch = _drive_four_role_run(
+        config_root_factory, real_session_factory, cleanup_runs, engine
     )
 
     with Session(engine) as session:
@@ -211,11 +226,10 @@ def test_seven_artifacts_rows_reference_metadata_only_with_checksum_round_trip(
         execution = executions_by_id[row.role_execution_id]
         assert execution.run_id == run_id
 
-        # -- relative path resolves under the run root, content matches the
-        # -- checksum --
-        path = run_dir / row.path
-        assert path.is_file(), f"expected {path} to exist"
-        file_bytes = path.read_bytes()
+        # -- content matches the checksum, read through the working branch
+        # -- (05-03, D-04): the worktree this run wrote into is gone by now --
+        file_text = run_artifact_text(root, run_id, working_branch, row.path)
+        file_bytes = file_text.encode("utf-8")
         assert row.checksum == hashlib.sha256(file_bytes).hexdigest()
 
         # -- metadata is an empty object --
@@ -228,14 +242,17 @@ def test_no_database_column_holds_any_artifact_body_text(
     cleanup_runs: list[Any],
     engine: Engine,
 ) -> None:
-    run_id, run_dir = _drive_four_role_run(
-        config_root_factory, real_session_factory, cleanup_runs
+    run_id, _run_dir, root, working_branch = _drive_four_role_run(
+        config_root_factory, real_session_factory, cleanup_runs, engine
     )
 
     # -- first: prove each substring really is present in its source file, so
-    # -- the sweep below cannot pass by searching for nothing --
+    # -- the sweep below cannot pass by searching for nothing -- read through
+    # -- the working branch (05-03, D-04): the worktree is gone by now.
     for role, filename, substring in _BODY_SUBSTRINGS:
-        body = (run_dir / "artifacts" / role / filename).read_text("utf-8")
+        body = run_artifact_text(
+            root, run_id, working_branch, f"artifacts/{role}/{filename}"
+        )
         assert substring in body, (
             f"test bug: {substring!r} is not actually in {role}/{filename}"
         )
@@ -283,8 +300,8 @@ def test_duplicate_role_execution_id_and_path_raises_integrity_error(
     cleanup_runs: list[Any],
     engine: Engine,
 ) -> None:
-    run_id, _run_dir = _drive_four_role_run(
-        config_root_factory, real_session_factory, cleanup_runs
+    run_id, _run_dir, _root, _working_branch = _drive_four_role_run(
+        config_root_factory, real_session_factory, cleanup_runs, engine
     )
 
     with Session(engine) as session:

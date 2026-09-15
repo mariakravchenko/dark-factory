@@ -62,12 +62,14 @@ from dark_factory.actions.registry import ActionRegistry
 from dark_factory.artifacts import ArtifactError
 from dark_factory.artifacts.paths import ensure_run_tree, run_root
 from dark_factory.artifacts.validation import collect_role_artifacts
+from dark_factory.config.settings import get_settings
 from dark_factory.context.builder import build_role_context
 from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
-from dark_factory.git import DetachedHeadError
+from dark_factory.git import DetachedHeadError, GitError
+from dark_factory.git.diff import commit_run_artifacts, push_working_branch
 from dark_factory.git.lifecycle import head_sha
 from dark_factory.git.worktree import ensure_worktree
 from dark_factory.input.loaders import load
@@ -599,6 +601,21 @@ def _run_current_role(
     trusting the worker's own ``COMPLETED`` status, and no ``artifacts`` row is
     written for that attempt.
 
+    D-09/D-11/D-16 (Phase 5, plan 05-03): once ``collect_role_artifacts``
+    succeeds, this role's newly-written run-tree content is committed onto
+    the working branch via :func:`~dark_factory.git.diff.commit_run_artifacts`
+    and, when that produced a new commit, immediately pushed to ``origin``
+    via :func:`~dark_factory.git.diff.push_working_branch` (skipped silently
+    when no push token is configured) -- both inside the same ``GitError``
+    catch that downgrades the signal to ``ROLE_FAILED``, exactly as the
+    schema-violation branch immediately above does for ``ArtifactError``.
+    The ordering is deliberate and plain: **validate, then commit, then
+    push, then transition.** A committed *and pushed* artifact is therefore
+    always one that already passed its schema check, and a role that
+    reaches its transition below has either pushed its progress to a remote
+    an ephemeral CI retry can reconstruct via D-15's path, or had nothing
+    new to push in the first place.
+
     GIT-01, D-02/D-03: immediately after ``resolved_root`` is computed, this
     calls :func:`~dark_factory.git.worktree.ensure_worktree` -- an
     unconditional call for every role attempt, deliberately not a role-YAML
@@ -740,6 +757,43 @@ def _run_current_role(
         except ArtifactError as exc:
             signal = Signal.ROLE_FAILED
             outcome = {**outcome, "error": str(exc)}
+        else:
+            # D-09/D-11/D-16: validate, then commit, then push, then
+            # transition -- in that order. commit_run_artifacts runs only
+            # now that collect_role_artifacts has succeeded, so a
+            # schema-invalid artifact is never committed; push_working_branch
+            # runs immediately after, inside the same GitError catch, so a
+            # committed *and pushed* artifact is always one that passed its
+            # schema check, and a role that reaches its transition below has
+            # either pushed its progress or had nothing new to push. Neither
+            # call introduces a new failure vocabulary: a commit or push
+            # failure is a role failure, folded into the same ROLE_FAILED /
+            # RUN_FAILED pair the ArtifactError branch above already uses.
+            assert state.working_branch is not None  # ensure_worktree already required it
+            try:
+                artifact_sha = commit_run_artifacts(work_dir, run_id, role=node.name)
+                if artifact_sha is not None:
+                    settings = get_settings()
+                    push_token = (
+                        settings.github_token.get_secret_value()
+                        if settings.github_token is not None
+                        else None
+                    )
+                    push_working_branch(
+                        work_dir,
+                        working_branch=state.working_branch,
+                        token=push_token,
+                    )
+            except GitError as exc:
+                signal = Signal.ROLE_FAILED
+                outcome = {**outcome, "error": str(exc)}
+                # Mirror the ArtifactError branch above: a role that fails at
+                # the commit/push step must not leave `artifacts` rows
+                # referencing content whose durability guarantee (D-09/D-11)
+                # never actually landed -- ART-04's transparency prohibition
+                # forbids reporting artifacts as durable when the commit
+                # meant to carry them did not happen.
+                artifact_writes = []
 
     next_status, next_role, next_step = transition(state, signal, pipeline)
 

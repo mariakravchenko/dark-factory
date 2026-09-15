@@ -61,7 +61,7 @@ from dark_factory.domain.artifacts import (
 from dark_factory.git.client import run_git
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
-from tests.support.git_repo import make_git_repo
+from tests.support.git_repo import make_git_repo, run_artifact_text
 
 pytestmark = pytest.mark.integration
 
@@ -94,15 +94,23 @@ def _copy_shipped_config_into(root: Path) -> Path:
 
 
 def _read_role_artifact(
-    session: Session, run_dir: Path, role_execution_id: object, filename: str
+    session: Session,
+    config_root: Path,
+    run_id: UUID,
+    working_branch: str,
+    role_execution_id: object,
+    filename: str,
 ) -> str:
     """Resolve ``filename`` through its ``ArtifactReference`` row for
-    ``role_execution_id`` and read its content from disk.
+    ``role_execution_id`` and read its content through the working branch.
 
     Going through the row (rather than hand-building
-    ``run_dir / "artifacts" / role / filename``) keeps the assertion honest
-    about the Neon-reference-plus-filesystem-content split and fails loudly
-    if a row ever points somewhere the content is not.
+    ``artifacts/<role>/<filename>``) keeps the assertion honest about the
+    Neon-reference-plus-git-content split and fails loudly if a row ever
+    points somewhere the content is not. 05-03 (D-04): this run reaches
+    ``COMPLETED``, so its worktree is removed by cleanup by the time this is
+    called -- ``run_artifact_text`` reads through ``config_root``'s
+    ``working_branch`` ref instead of a now-gone disk path.
     """
     row = session.scalar(
         select(ArtifactReference).where(
@@ -111,7 +119,7 @@ def _read_role_artifact(
         )
     )
     assert row is not None, f"no ArtifactReference row for {filename!r}"
-    return (run_dir / row.path).read_text(encoding="utf-8")
+    return run_artifact_text(config_root, run_id, working_branch, row.path)
 
 
 def _run_cli_against_real_repo(
@@ -156,6 +164,8 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
             run = session.get(Run, run_id)
             assert run is not None
             assert run.status.value == "COMPLETED"
+            working_branch = run.working_branch
+            assert working_branch is not None
 
             # Every one of the four shipped roles ran and completed --
             # BA -> ARCHITECTURE -> DEVELOPMENT -> QA (.dark-factory.yaml's
@@ -202,7 +212,12 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
             # guard exists to catch (two independently coinciding literals,
             # not a real handoff).
             ba_content = _read_role_artifact(
-                session, run_dir, by_role["BA"].id, "acceptance_criteria.json"
+                session,
+                config_root,
+                run_id,
+                working_branch,
+                by_role["BA"].id,
+                "acceptance_criteria.json",
             )
             ba_ids = [
                 criterion.id
@@ -213,7 +228,12 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
             assert ba_ids, "BA emitted zero acceptance criteria"
 
             design_content = _read_role_artifact(
-                session, run_dir, by_role["ARCHITECTURE"].id, "design.md"
+                session,
+                config_root,
+                run_id,
+                working_branch,
+                by_role["ARCHITECTURE"].id,
+                "design.md",
             )
             for criterion_id in ba_ids:
                 assert criterion_id in design_content, (
@@ -223,7 +243,9 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
 
             implementation_summary_content = _read_role_artifact(
                 session,
-                run_dir,
+                config_root,
+                run_id,
+                working_branch,
                 by_role["DEVELOPMENT"].id,
                 "implementation_summary.json",
             )
@@ -238,7 +260,12 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
                 )
 
             test_report_content = _read_role_artifact(
-                session, run_dir, by_role["QA"].id, "test_report.json"
+                session,
+                config_root,
+                run_id,
+                working_branch,
+                by_role["QA"].id,
+                "test_report.json",
             )
             case_names = " ".join(
                 case.name
@@ -252,7 +279,12 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
                 )
 
             verdict_content = _read_role_artifact(
-                session, run_dir, by_role["QA"].id, "verdict.json"
+                session,
+                config_root,
+                run_id,
+                working_branch,
+                by_role["QA"].id,
+                "verdict.json",
             )
             verdict_ids = [
                 criterion.criterion_id

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from dark_factory.git import GitCommandError
@@ -77,6 +77,7 @@ def run_git(
     cwd: Path,
     check: bool = True,
     timeout: int = 120,
+    env_extra: Mapping[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``git <args>`` in ``cwd`` with the explicit env allowlist.
 
@@ -86,16 +87,26 @@ def run_git(
     guaranteed by ``GIT_TERMINAL_PROMPT=0``) nor hang indefinitely (T-05-10);
     exceeding it surfaces as ``subprocess.TimeoutExpired``.
 
+    ``env_extra`` (Phase 5, D-16) is a narrow, explicit escape hatch layered
+    on top of :func:`git_env`'s return value (``{**git_env(), **(env_extra or
+    {})}``) -- this is the single point every git invocation still passes
+    through, now with a way for exactly one call site (the D-16 push) to
+    carry a call-scoped credential without widening the general allowlist
+    every other invocation shares.
+
     Returns the completed process when ``check`` is false, so a caller can
     inspect an expected non-zero exit (``git symbolic-ref -q HEAD`` exiting
     1, ``git show-ref --verify --quiet`` exiting 1) without a raise. Raises
     :class:`~dark_factory.git.GitCommandError` when ``check`` is true and the
     exit code is non-zero.
     """
+    env = git_env()
+    if env_extra:
+        env = {**env, **env_extra}
     result = subprocess.run(
         ["git", *args],
         cwd=str(cwd),
-        env=git_env(),
+        env=env,
         capture_output=True,
         text=True,
         timeout=timeout,

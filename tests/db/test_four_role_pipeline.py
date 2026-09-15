@@ -59,6 +59,7 @@ from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
 from tests.support.fake_artifacts import four_role_script
+from tests.support.git_repo import run_artifact_text
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -218,10 +219,19 @@ def test_four_roles_run_in_order_and_produce_the_sc1_artifact_set(
     assert all(e.status == "COMPLETED" for e in executions)
     assert all(e.attempt == 1 for e in executions)
 
-    # -- every SC1 file exists on disk ---------------------------------------
+    # -- every SC1 file exists -- 05-03 (D-04): this run reaches COMPLETED,
+    # -- so its worktree is removed by cleanup; read through the working
+    # -- branch, the only place the content still exists.
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        working_branch = run.working_branch
+    assert working_branch is not None
     for role, filename in _EXPECTED_FILES:
-        path = run_dir / "artifacts" / role / filename
-        assert path.is_file(), f"expected {path} to exist"
+        content = run_artifact_text(
+            root, run_id, working_branch, f"artifacts/{role}/{filename}"
+        )
+        assert content, f"expected artifacts/{role}/{filename} to have content"
 
     # -- exactly four worker calls, one per role -----------------------------
     assert len(captured) == 4

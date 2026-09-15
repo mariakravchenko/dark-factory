@@ -14,10 +14,17 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from uuid import UUID
 
 from dark_factory.git.client import run_git
 
-__all__ = ["clone_repo", "git_commit_all", "make_git_repo", "read_committed"]
+__all__ = [
+    "clone_repo",
+    "git_commit_all",
+    "make_git_repo",
+    "read_committed",
+    "run_artifact_text",
+]
 
 
 def make_git_repo(
@@ -64,3 +71,21 @@ def clone_repo(source: Path, dest: Path, *, branch: str | None = None) -> Path:
     args += [str(source), str(dest)]
     run_git(args, cwd=dest.parent)
     return dest
+
+
+def run_artifact_text(
+    repo_root: Path, run_id: UUID, working_branch: str, relative_path: str
+) -> str:
+    """Read a run's artifact content through the working branch, not the
+    filesystem (05-03).
+
+    Composes ``.dark-factory/runs/<run_id>/`` with ``relative_path`` (the
+    same run-root-relative path an ``artifacts`` row's ``path`` column
+    stores) and reads it with :func:`read_committed`. After a run reaches
+    ``COMPLETED`` its worktree is removed (D-04), so the working branch is
+    the only place its artifact content still exists -- a test that reads
+    from disk instead is testing a window that has already closed.
+    """
+    return read_committed(
+        repo_root, working_branch, f".dark-factory/runs/{run_id}/{relative_path}"
+    )

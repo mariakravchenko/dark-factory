@@ -47,6 +47,7 @@ from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
 from tests.support.fake_artifacts import write_role_artifacts
+from tests.support.git_repo import run_artifact_text
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
@@ -207,11 +208,19 @@ def test_ba_hands_acceptance_criteria_to_architecture(
     )
     assert final is RunStatus.COMPLETED
 
-    # -- the file exists on disk with BA's content -------------------------
-    artifact_path = run_dir / "artifacts" / "BA" / "acceptance_criteria.json"
-    assert artifact_path.is_file()
-    file_bytes = artifact_path.read_bytes()
-    assert file_bytes.decode("utf-8") == _VALID_ACCEPTANCE_CRITERIA
+    # -- 05-03 (D-04): this run reaches COMPLETED, so its worktree is
+    # -- removed by cleanup -- the content now lives only on the working
+    # -- branch. read through the branch, never the (now-gone) disk path.
+    with Session(engine) as session:
+        completed_run = session.get(Run, run_id)
+        assert completed_run is not None
+        working_branch = completed_run.working_branch
+    assert working_branch is not None
+    file_text = run_artifact_text(
+        root, run_id, working_branch, "artifacts/BA/acceptance_criteria.json"
+    )
+    assert file_text == _VALID_ACCEPTANCE_CRITERIA
+    file_bytes = file_text.encode("utf-8")
 
     # -- exactly one artifacts row, metadata only ---------------------------
     with Session(engine) as session:
