@@ -65,12 +65,36 @@ def _kv_replacement(match: re.Match[str]) -> str:
 
 # A 40-hex (classic PAT) or 64-hex token is redacted UNLESS the text right before
 # it names it as a git object -- ``commit`` / ``sha`` / ``revision`` followed only
-# by separators. Proximity to the literal "github" is deliberately NOT the gate:
-# a bare 40-hex PAT in prose ("auth failed with <40hex>", "key: <40hex>") must be
-# caught regardless (WR-06 / the D-15 pattern table is the only scrub for
-# third-party credentials echoed into a WorkerResult).
-_GIT_OBJECT_CONTEXT = re.compile(r"(?i)\b(?:commit|sha|revision)\b[\s:=#/-]*\Z")
+# by separators, or the phrase ``head at`` (the D-08 detached-HEAD error message's
+# "has a detached HEAD at <sha>" wording). Proximity to the literal "github" is
+# deliberately NOT the gate: a bare 40-hex PAT in prose ("auth failed with
+# <40hex>", "key: <40hex>") must be caught regardless (WR-06 / the D-15 pattern
+# table is the only scrub for third-party credentials echoed into a
+# WorkerResult). The ``head at`` arm is deliberately narrow -- it requires
+# ``head`` immediately followed by the separator word ``at``, not a bare ``at``
+# on its own, so an unrelated "... failed at <40hex>" is still redacted.
+_GIT_OBJECT_CONTEXT = re.compile(
+    r"(?i)(?:\b(?:commit|sha|revision)\b[\s:=#/-]*|\bhead\b\s+at\s+)\Z"
+)
 _HEX_TOKEN = re.compile(r"\b[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?\b")
+
+# Dict keys whose value is a git object identifier (a commit SHA), never a
+# secret -- when `redact()` recurses into a Mapping under one of these keys,
+# the bare hex-token pattern is skipped for that value (D-15/WR-06 mislabels a
+# key-value pair like `{"commit": "<40hex>"}` as a token because the recursive
+# per-value redaction has no visibility into its own key name). This exemption
+# applies ONLY to `_HEX_TOKEN` -- every other pattern (github_pat_, gh[porsu]_,
+# postgres URLs, bearer tokens) still redacts unconditionally under these keys,
+# because those shapes are never legitimately a commit SHA.
+_GIT_OBJECT_KEYS: frozenset[str] = frozenset(
+    {
+        "commit",
+        "sha",
+        "revision",
+        "commit_sha",
+        "wip_commit_sha",
+    }
+)
 
 
 def _hex_token_replacement(match: re.Match[str]) -> str:
@@ -136,10 +160,18 @@ def _scrub_known(value: str, known_secrets: Mapping[str, str]) -> str:
     return value
 
 
-def _redact_str(value: str, known_secrets: Mapping[str, str], *, patterns: bool) -> str:
+def _redact_str(
+    value: str,
+    known_secrets: Mapping[str, str],
+    *,
+    patterns: bool,
+    exempt_hex_token: bool = False,
+) -> str:
     value = _scrub_known(value, known_secrets)
     if patterns:
         for compiled, replacement in _PATTERNS:
+            if exempt_hex_token and compiled is _HEX_TOKEN:
+                continue
             value = compiled.sub(replacement, value)
     return value
 
@@ -149,12 +181,18 @@ def redact(
     *,
     known_secrets: Mapping[str, str],
     patterns: bool = True,
+    exempt_hex_token: bool = False,
 ) -> Any:
     """Recursively redact ``value``.
 
     * ``Mapping`` — a key whose lowercased form is in the sensitivity set has
       its value replaced by ``[redacted:<key>]`` regardless of the value's
-      shape; every other value is redacted recursively.
+      shape; a key whose lowercased form is in ``_GIT_OBJECT_KEYS`` (``commit``,
+      ``sha``, ``revision``, ...) is redacted recursively with the bare
+      hex-token pattern exempted for that value only -- every other pattern
+      (github_pat_, gh[porsu]_, postgres URLs, bearer tokens) still applies
+      unconditionally, because those shapes are never legitimately a commit
+      SHA; every other value is redacted recursively with no exemption.
     * ``list`` / ``tuple`` — redacted elementwise, always returned as a list.
     * ``set`` / ``frozenset`` — redacted elementwise, returned as a list (JSONB
       is JSON-typed, so this is defence-in-depth for a set of secret strings
@@ -174,13 +212,22 @@ def redact(
             if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS:
                 redacted[key] = f"[redacted:{key.lower()}]"
             else:
+                item_exempt = isinstance(key, str) and key.lower() in _GIT_OBJECT_KEYS
                 redacted[key] = redact(
-                    item, known_secrets=known_secrets, patterns=patterns
+                    item,
+                    known_secrets=known_secrets,
+                    patterns=patterns,
+                    exempt_hex_token=item_exempt,
                 )
         return redacted
     if isinstance(value, (list, tuple, set, frozenset)):
         return [
-            redact(item, known_secrets=known_secrets, patterns=patterns)
+            redact(
+                item,
+                known_secrets=known_secrets,
+                patterns=patterns,
+                exempt_hex_token=exempt_hex_token,
+            )
             for item in value
         ]
     if isinstance(value, (bytes, bytearray)):
@@ -188,9 +235,13 @@ def redact(
             text = bytes(value).decode("utf-8")
         except UnicodeDecodeError:
             return value
-        return _redact_str(text, known_secrets, patterns=patterns).encode("utf-8")
+        return _redact_str(
+            text, known_secrets, patterns=patterns, exempt_hex_token=exempt_hex_token
+        ).encode("utf-8")
     if isinstance(value, str):
-        return _redact_str(value, known_secrets, patterns=patterns)
+        return _redact_str(
+            value, known_secrets, patterns=patterns, exempt_hex_token=exempt_hex_token
+        )
     return value
 
 
