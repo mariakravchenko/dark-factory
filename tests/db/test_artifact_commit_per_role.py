@@ -20,6 +20,7 @@ pass.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -52,11 +53,114 @@ from dark_factory.persistence.models import (
 from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
-from tests.support.fake_artifacts import four_role_script
+from tests.support.fake_artifacts import write_role_artifacts
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 
 SessionFactory = Callable[[], Session]
+
+# The same minimal, schema-valid-per-D-07 content
+# ``tests.support.fake_artifacts.four_role_script`` writes -- but keyed by
+# role so :class:`_LazyFourRoleWorker` below can write only one role's files
+# at a time, from *inside* that role's own ``execute()`` call.
+_ROLE_ARTIFACT_FILES: dict[str, dict[str, str]] = {
+    "BA": {
+        "requirements.md": (
+            "# Requirements\n\n1. The system does the thing correctly.\n"
+        ),
+        "acceptance_criteria.json": json.dumps(
+            {"criteria": [{"id": "AC-1", "description": "the thing works"}]}
+        ),
+    },
+    "ARCHITECTURE": {
+        "design.md": (
+            "# Design\n\nImplement the thing in the existing service layer; "
+            "no new component is needed.\n"
+        ),
+        "constraints.json": json.dumps(
+            {"constraints": [{"id": "C-1", "description": "no new database migration"}]}
+        ),
+    },
+    "DEVELOPMENT": {
+        "implementation_summary.json": json.dumps(
+            {
+                "summary": "implemented the thing",
+                "changed_files": [],
+                "tests_added": [],
+            }
+        ),
+    },
+    "QA": {
+        "test_report.json": json.dumps(
+            {
+                "cases": [
+                    {
+                        "name": "AC-1: the thing works",
+                        "result": "PASS",
+                        "detail": "reproduced manually",
+                    }
+                ]
+            }
+        ),
+        "verdict.json": json.dumps(
+            {
+                "criteria": [{"criterion_id": "AC-1", "result": "PASS", "notes": ""}],
+                "issues": [],
+                "status": "PASS",
+            }
+        ),
+    },
+}
+
+
+class _LazyFourRoleWorker(CodingWorker):
+    """Writes each role's artifact files at ``execute()`` time -- not
+    upfront the way ``tests.support.fake_artifacts.four_role_script`` does.
+
+    ``commit_run_artifacts``'s force-add pathspec covers the *whole* run
+    tree (``.dark-factory/runs/<run_id>``, not a per-role subdirectory --
+    it must also carry ``verification/diff.patch`` when a role's ``after:``
+    list configures ``collect_diff``), relying on nothing appearing under
+    that tree until the role that produces it actually runs. A
+    front-loaded write (``four_role_script``'s shape) defeats that: every
+    later role's not-yet-run files would already be sitting on disk when
+    the *first* completed role's own artifact commit force-adds the whole
+    tree, so that first commit sweeps them all up and leaves nothing new
+    for the later roles' own commits to stage -- exactly the bug this test
+    exists to prove does NOT happen. A real worker call only ever writes
+    its own role's files exactly when it runs; this fixture matches that
+    timing.
+    """
+
+    def __init__(self, run_dir: Path) -> None:
+        self._run_dir = run_dir
+
+    def _record(self, context: object) -> WorkerResult:
+        role = getattr(context, "role", None)
+        assert role in _ROLE_ARTIFACT_FILES, role
+        refs = write_role_artifacts(self._run_dir, role, _ROLE_ARTIFACT_FILES[role])
+        return WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary=f"{role} completed",
+            worker_session_id=f"fake-{role.lower()}",
+            artifacts=refs,
+        )
+
+    def execute(self, context: object) -> WorkerResult:
+        return self._record(context)
+
+    def resume(
+        self, context: object, previous: WorkerResult, answer: str | None
+    ) -> WorkerResult:
+        return self._record(context)
+
+    def capabilities(self) -> WorkerCapabilities:
+        return WorkerCapabilities(
+            native_resume=False,
+            session_id=True,
+            structured_output=True,
+            non_interactive=True,
+        )
 
 
 def _write_four_role_tree(config_root_factory: Callable[..., Path]) -> Path:
@@ -148,15 +252,20 @@ def test_one_artifact_commit_per_role_force_added_and_source_edits_survive(
         root, run_id, base_branch="main", working_branch=working_branch
     )
     run_dir = run_root(work_dir, run_id)
-    script = four_role_script(run_dir)
-    registry = _registry(FakeWorker(script))
+    registry = _registry(_LazyFourRoleWorker(run_dir))
 
     # CREATED -> BA (enter: insert the row, no worker call yet)
-    advance(run_id, session_factory=real_session_factory, registry=registry, repo_root=root)
+    advance(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
     # BA runs -> ARCHITECTURE (BA's artifact commit happens here)
-    advance(run_id, session_factory=real_session_factory, registry=registry, repo_root=root)
+    advance(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
     # ARCHITECTURE (enter)
-    advance(run_id, session_factory=real_session_factory, registry=registry, repo_root=root)
+    advance(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
 
     # Stage a source-code edit in the worktree's index BEFORE the second
     # role's (ARCHITECTURE's) own advance -- proving a pathspec-limited
@@ -169,7 +278,9 @@ def test_one_artifact_commit_per_role_force_added_and_source_edits_survive(
     run_git(["add", "source_edit.txt"], cwd=work_dir)
 
     # ARCHITECTURE runs -> DEVELOPMENT (ARCHITECTURE's artifact commit)
-    advance(run_id, session_factory=real_session_factory, registry=registry, repo_root=root)
+    advance(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
 
     staged_after = run_git(
         ["diff", "--cached", "--name-only"], cwd=work_dir
