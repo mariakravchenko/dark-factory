@@ -141,29 +141,47 @@ def test_a_paused_run_is_resumed_by_a_fresh_process_reusing_the_same_worktree(
         ).scalar_one()
     assert final_status.value == "COMPLETED"
 
-    # -- the worktree's absolute path is byte-identical before/after ---------
+    # -- ARCHITECTURE is this run's terminal role, so its own completion
+    # -- fires 05-03 Task 3's COMPLETED cleanup (recover-then-remove): the
+    # -- worktree is gone by the time `resume` returns -- proven through
+    # -- git's own bookkeeping in the main repository, never via `work_dir`,
+    # -- which no longer exists once this call returns (D-04, D-09, D-11).
+    # -- `recorded_path` stays meaningful as the path cleanup removed --
+    # -- `Path.resolve()` normalises a nonexistent path exactly like an
+    # -- existing one on POSIX, so this still proves no other path was ever
+    # -- substituted for the one the paused run recorded.
     assert work_dir.resolve() == recorded_path
-    assert work_dir.is_dir()
+    assert not work_dir.exists()
 
     worktree_list_after = run_git(["worktree", "list", "--porcelain"], cwd=root).stdout
-    assert worktree_list_after.count(f"worktree {work_dir}\n") == 1
+    assert f"worktree {work_dir}\n" not in worktree_list_after
 
-    # -- a recovery commit landed, carrying the WIP prefix ---------------------
-    subjects = run_git(["log", "--format=%s"], cwd=work_dir).stdout.splitlines()
+    # -- a recovery commit landed, carrying the WIP prefix -- read from the
+    # -- branch in the main repository rather than the now-removed worktree,
+    # -- exactly like `tests/db/test_wip_commit_recovery.py`'s post-COMPLETED
+    # -- assertions do for the same reason.
+    subjects = run_git(["log", "--format=%s", branch], cwd=root).stdout.splitlines()
     recovery_subjects = [s for s in subjects if s.startswith(WIP_COMMIT_SUBJECT_PREFIX)]
     assert len(recovery_subjects) == 1, subjects
 
-    new_tip = run_git(["rev-parse", "HEAD"], cwd=work_dir).stdout.strip()
+    new_tip = run_git(["rev-parse", branch], cwd=root).stdout.strip()
     assert new_tip != recorded_tip
 
     # -- the second process appended to the same history, never started a
-    # fresh one: recorded_tip must be an ancestor of the new tip. A path
-    # comparison alone would also pass against an implementation that deleted
-    # and re-created the worktree at the same path -- exactly what D-03
-    # forbids -- so ancestry is the assertion that actually proves reuse.
+    # fresh one: recorded_tip must be an ancestor of the new tip. This is
+    # what actually proves the SAME worktree was reused across the
+    # pause/resume boundary while the run was still in-flight -- D-03's
+    # whole point -- and reading it from `root`'s own view of the branch
+    # after the terminal cleanup removed the worktree filesystem copy does
+    # not weaken that proof, since the branch (read here) is the durable
+    # record the worktree filesystem copy was only ever a working copy of.
+    # A path comparison alone would also pass against an implementation
+    # that deleted and re-created the worktree at the same path -- exactly
+    # what D-03 forbids -- so ancestry is the assertion that actually
+    # proves reuse.
     ancestry = run_git(
         ["merge-base", "--is-ancestor", recorded_tip, new_tip],
-        cwd=work_dir,
+        cwd=root,
         check=False,
     )
     assert ancestry.returncode == 0, (

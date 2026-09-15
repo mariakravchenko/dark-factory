@@ -59,7 +59,7 @@ _FEATURE_SOURCE = "def new_feature():\n    return True\n"
 _DEVELOPMENT_SUMMARY = json.dumps(
     {
         "summary": "implemented the new feature",
-        "changed_files": ["feature.py"],
+        "changed_files": [{"path": "feature.py", "change": "added"}],
         "tests_added": [],
     }
 )
