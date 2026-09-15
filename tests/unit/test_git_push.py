@@ -134,6 +134,42 @@ def test_none_token_is_a_silent_noop_with_no_run_git_call(
     assert calls == []
 
 
+def test_no_origin_remote_is_a_silent_noop_with_no_run_git_push_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A repository with no ``origin`` configured at all (this whole test
+    suite's own ``make_git_repo`` default) must not fail a role merely
+    because a push token happens to be present in the environment -- D-16's
+    reconstruction path has nothing to serve without a remote in the first
+    place."""
+    repo = make_git_repo(tmp_path / "repo")
+    real_run_git = diff_module.run_git
+    push_calls: list[object] = []
+
+    def _spy(
+        args: Sequence[str],
+        *,
+        cwd: Path,
+        check: bool = True,
+        timeout: int = 120,
+        env_extra: Mapping[str, str] | None = None,
+    ) -> object:
+        if list(args)[:1] == ["push"]:
+            push_calls.append(args)
+        return real_run_git(
+            args, cwd=cwd, check=check, timeout=timeout, env_extra=env_extra
+        )
+
+    monkeypatch.setattr(diff_module, "run_git", _spy)
+
+    result = push_working_branch(
+        repo, working_branch="dark-factory/run-no-origin", token="fake-push-token-003"
+    )
+
+    assert result is None
+    assert push_calls == []
+
+
 def test_transient_push_failure_is_retried_and_eventually_succeeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -187,6 +223,7 @@ def test_retry_exhaustion_raises_git_push_error_with_a_redacted_message(
         (work_dir / "file.txt").write_text("content\n", encoding="utf-8")
         git_commit_all(work_dir, "add file")
 
+        real_run_git = diff_module.run_git
         attempts = {"push": 0}
 
         def _always_fails(
@@ -202,7 +239,11 @@ def test_retry_exhaustion_raises_git_push_error_with_a_redacted_message(
                 raise GitCommandError(
                     tuple(args), 1, f"push denied: bad credentials {token}", cwd=cwd
                 )
-            raise AssertionError("only the push subcommand should be exercised")
+            # non-push calls (e.g. the `remote get-url origin` preflight
+            # check) pass through to the real implementation unchanged.
+            return real_run_git(
+                args, cwd=cwd, check=check, timeout=timeout, env_extra=env_extra
+            )
 
         monkeypatch.setattr(diff_module, "run_git", _always_fails)
 

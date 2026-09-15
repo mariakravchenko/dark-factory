@@ -8,6 +8,14 @@ loop) so a source-file edit can be staged in the worktree's index at a
 precise point between roles -- the same in-process db-test idiom as
 ``tests/db/test_four_role_pipeline.py``, but calling ``advance()`` directly
 to control timing.
+
+Also carries the Task 3 cleanup-arm coverage (D-04): a ``COMPLETED`` run
+whose terminal role left a trailing uncommitted edit gets a final recovery
+commit and then loses its worktree; a ``FAILED`` run and a ``WAITING_HUMAN``
+run both keep theirs. Each asserts through ``git worktree list
+--porcelain`` in the main repository, not merely directory existence, so a
+half-removed worktree with stale ``.git/worktrees/`` bookkeeping cannot
+pass.
 """
 
 from __future__ import annotations
@@ -24,8 +32,14 @@ from sqlalchemy.orm import Session
 from dark_factory.artifacts.paths import run_root
 from dark_factory.config.loader import load_effective_config
 from dark_factory.domain.status import RunStatus
+from dark_factory.domain.worker import (
+    WorkerCapabilities,
+    WorkerResult,
+    WorkerResultStatus,
+)
 from dark_factory.git.client import run_git
 from dark_factory.git.diff import ARTIFACT_COMMIT_SUBJECT_PREFIX
+from dark_factory.git.lifecycle import WIP_COMMIT_SUBJECT_PREFIX
 from dark_factory.git.worktree import ensure_worktree, working_branch_name
 from dark_factory.orchestrator.runner import advance, drive, start_run
 from dark_factory.persistence.models import (
@@ -204,3 +218,162 @@ def test_one_artifact_commit_per_role_force_added_and_source_edits_survive(
         check=False,
     )
     assert ignored.returncode == 0
+
+
+# --------------------------------------------------------------------------- #
+# Task 3 cleanup-arm coverage (D-04): COMPLETED recovers-then-removes,
+# FAILED and WAITING_HUMAN both keep their worktree.
+# --------------------------------------------------------------------------- #
+
+
+def test_completed_run_with_a_trailing_edit_gets_a_recovery_commit_then_loses_its_worktree(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+) -> None:
+    root = config_root_factory(roles=("BA",))
+    snapshot = load_effective_config(root)
+
+    run_id = start_run(
+        "text:terminal role leaves a trailing uncommitted edit",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append(run_id)
+
+    working_branch = working_branch_name(run_id)
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch
+    )
+
+    class _TrailingEditWorker(CodingWorker):
+        """Leaves an uncommitted trailing edit *inside* its own ``execute``
+        call -- after the before-hook's own ``ensure_clean_worktree`` pass
+        has already run and found the tree clean, so only the ``COMPLETED``
+        cleanup's own recovery pass (not the before-hook) can catch it."""
+
+        def __init__(self, inner: FakeWorker) -> None:
+            self._inner = inner
+
+        def execute(self, context: Any) -> WorkerResult:
+            (work_dir / "trailing_edit.txt").write_text(
+                "left behind by the terminal role\n", encoding="utf-8"
+            )
+            return self._inner.execute(context)
+
+        def resume(
+            self, context: Any, previous: WorkerResult, answer: str | None
+        ) -> WorkerResult:
+            return self._inner.resume(context, previous, answer)
+
+        def capabilities(self) -> WorkerCapabilities:
+            return self._inner.capabilities()
+
+    inner = FakeWorker(
+        [
+            WorkerResult(
+                status=WorkerResultStatus.COMPLETED,
+                summary="BA done, but left a trailing edit",
+                worker_session_id="fake-ba-trailing",
+            )
+        ]
+    )
+    registry = _registry(_TrailingEditWorker(inner))
+
+    final = drive(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
+    assert final is RunStatus.COMPLETED
+
+    # -- the worktree is gone, proven through git's own bookkeeping, not
+    # -- merely directory existence -----------------------------------------
+    assert not work_dir.exists()
+    porcelain = run_git(["worktree", "list", "--porcelain"], cwd=root).stdout
+    assert str(work_dir) not in porcelain
+
+    # -- the trailing edit was recovered onto the working branch via a WIP
+    # -- commit before removal (A-05-07, RESEARCH Pitfall 5) ----------------
+    log_output = run_git(
+        ["log", working_branch, "--format=%s"], cwd=root
+    ).stdout.splitlines()
+    assert any(subject.startswith(WIP_COMMIT_SUBJECT_PREFIX) for subject in log_output)
+
+
+def test_failed_run_keeps_its_worktree(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+) -> None:
+    root = config_root_factory(roles=("BA",))
+    snapshot = load_effective_config(root)
+
+    run_id = start_run(
+        "text:BA fails outright",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append(run_id)
+
+    working_branch = working_branch_name(run_id)
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch
+    )
+
+    script = [
+        WorkerResult(
+            status=WorkerResultStatus.FAILED,
+            summary="BA failed",
+            worker_session_id="fake-ba-failed",
+            error="synthetic failure",
+        )
+    ]
+    registry = _registry(FakeWorker(script))
+
+    final = drive(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
+    assert final is RunStatus.FAILED
+
+    assert work_dir.exists()
+    porcelain = run_git(["worktree", "list", "--porcelain"], cwd=root).stdout
+    assert str(work_dir) in porcelain
+
+
+def test_waiting_human_run_keeps_its_worktree(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+) -> None:
+    root = config_root_factory(roles=("BA",))
+    snapshot = load_effective_config(root)
+
+    run_id = start_run(
+        "text:BA needs a human answer",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append(run_id)
+
+    working_branch = working_branch_name(run_id)
+    work_dir = ensure_worktree(
+        root, run_id, base_branch="main", working_branch=working_branch
+    )
+
+    script = [
+        WorkerResult(
+            status=WorkerResultStatus.NEEDS_INPUT,
+            summary="BA needs clarification",
+            worker_session_id="fake-ba-needs-input",
+            questions=["What should the endpoint be named?"],
+        )
+    ]
+    registry = _registry(FakeWorker(script))
+
+    final = drive(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
+    assert final is RunStatus.WAITING_HUMAN
+
+    assert work_dir.exists()
+    porcelain = run_git(["worktree", "list", "--porcelain"], cwd=root).stdout
+    assert str(work_dir) in porcelain

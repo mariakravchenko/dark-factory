@@ -70,8 +70,8 @@ from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
 from dark_factory.git import DetachedHeadError, GitError
 from dark_factory.git.diff import commit_run_artifacts, push_working_branch
-from dark_factory.git.lifecycle import head_sha
-from dark_factory.git.worktree import ensure_worktree
+from dark_factory.git.lifecycle import head_sha, wip_commit_if_dirty
+from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
@@ -561,6 +561,59 @@ def _fail_role_before_worker(
         session.close()
 
 
+def _cleanup_run_worktree(
+    run_id: UUID,
+    work_dir: Path,
+    repo_root: Path,
+    *,
+    role: str,
+    attempt: int,
+) -> None:
+    """Recover any trailing uncommitted content and remove the run's
+    worktree for a run that just reached ``COMPLETED`` (D-04, A-05-07,
+    A-05-11).
+
+    Runs **after** the terminal transition has already committed to Neon,
+    never before: a lingering worktree after a recorded ``COMPLETED``
+    status is a recoverable disk-space gap, whereas a removed worktree
+    paired with a database write that then failed would be an unrecoverable
+    loss window.
+
+    Calls :func:`~dark_factory.git.lifecycle.wip_commit_if_dirty` first --
+    the terminal role has no "next entry" to recover it the way every
+    earlier role's own before-hook pass would (A-05-07, RESEARCH Pitfall 5)
+    -- and only then :func:`~dark_factory.git.worktree.remove_worktree`
+    **without** ``force``: the recovery pass has just made the tree clean,
+    so a non-forced removal succeeding is itself the proof that nothing
+    uncommitted was discarded, and a non-forced removal failing on some
+    other git-level obstruction is a signal worth surfacing rather than one
+    to suppress by forcing through it.
+
+    A run's artifact content occupies two locations while it is in flight:
+    the worktree filesystem (the working copy) and the run's working branch
+    (the durable record, per D-09/D-11). After this function returns, only
+    the durable record remains -- the worktree filesystem copy is gone, and
+    every later reader (a fresh clone, Phase 9's quality gate, Phase 10's
+    publisher) reads the branch, never the worktree.
+
+    A :class:`~dark_factory.git.GitError` here is caught, logged as a
+    warning naming the run id and the worktree path, and swallowed: a
+    cleanup failure never downgrades an already-``COMPLETED`` run back to
+    ``FAILED`` -- the run genuinely is complete regardless of whether its
+    disk-space reclamation succeeded.
+    """
+    try:
+        wip_commit_if_dirty(work_dir, role=role, attempt=attempt)
+        remove_worktree(repo_root, run_id)
+    except GitError as exc:
+        _log.warning(
+            "worktree.cleanup_failed",
+            run_id=str(run_id),
+            worktree=str(work_dir),
+            error=str(exc),
+        )
+
+
 def _run_current_role(
     run_id: UUID,
     state: RunState,
@@ -878,6 +931,14 @@ def _run_current_role(
             artifact_references=artifact_writes,
         )
         _maybe_crash_after(state.status, new_status)
+        if new_status is RunStatus.COMPLETED:
+            _cleanup_run_worktree(
+                run_id,
+                work_dir,
+                resolved_root,
+                role=node.name,
+                attempt=latest.attempt,
+            )
         return new_status
     finally:
         session.close()

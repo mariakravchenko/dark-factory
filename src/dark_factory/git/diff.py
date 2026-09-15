@@ -227,7 +227,17 @@ def push_working_branch(
     Returns immediately, writing nothing and calling no subprocess, when
     ``token`` is ``None`` -- a repository with no configured push token
     keeps working exactly as it did before D-16: the local commit still
-    exists, nothing is pushed, and the role still completes.
+    exists, nothing is pushed, and the role still completes. The same
+    no-op applies, and for the identical reason, when the repository has no
+    ``origin`` remote configured at all (checked with a cheap
+    ``git remote get-url origin`` before any push is attempted): D-16 exists
+    to let an *already-configured* ephemeral-CI-retry path reconstruct via
+    D-15, and a repository with no remote has no such path to serve in the
+    first place -- treating "no remote" as a role failure would make every
+    purely local Dark Factory deployment (and this project's own test
+    suite, which drives roles against throwaway repositories with no
+    ``origin``) fail every completed role the moment a push token merely
+    happens to be configured in the environment.
 
     The token reaches git **only** through ``GIT_ASKPASS`` and the
     call-scoped :data:`GIT_PUSH_TOKEN_ENV_VAR` -- never as a subprocess
@@ -252,6 +262,10 @@ def push_working_branch(
     :class:`~dark_factory.git.GitPushError` (T-05-22).
     """
     if token is None:
+        return None
+
+    remote_check = run_git(["remote", "get-url", "origin"], cwd=worktree, check=False)
+    if remote_check.returncode != 0:
         return None
 
     with tempfile.NamedTemporaryFile(
