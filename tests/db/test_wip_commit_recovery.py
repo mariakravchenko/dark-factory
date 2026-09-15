@@ -38,7 +38,11 @@ from dark_factory.domain.worker import (
 from dark_factory.events.catalog import EventType
 from dark_factory.git.client import run_git
 from dark_factory.git.lifecycle import WIP_COMMIT_SUBJECT_PREFIX
-from dark_factory.git.worktree import remove_worktree, worktree_path
+from dark_factory.git.worktree import (
+    remove_worktree,
+    working_branch_name,
+    worktree_path,
+)
 from dark_factory.orchestrator.lease import run_lease
 from dark_factory.orchestrator.runner import _persist_wip_commit, advance, start_run
 from dark_factory.persistence.models import (
@@ -150,6 +154,7 @@ def test_dirty_worktree_is_recovered_on_the_next_roles_entry(
     cleanup_runs.append((run_id, root))
 
     work_dir = worktree_path(root, run_id)
+    working_branch = working_branch_name(run_id)
     script = [
         WorkerResult(
             status=WorkerResultStatus.COMPLETED,
@@ -223,22 +228,31 @@ def test_dirty_worktree_is_recovered_on_the_next_roles_entry(
     # now listed on every shipped/config_root_factory role) finds the
     # worktree dirty, recovers it with one commit, persists the SHA on the
     # recovering attempt with a WIP_COMMIT_CREATED event BEFORE the worker is
-    # called, then runs the worker to completion.
+    # called, then runs the worker to completion. ARCHITECTURE is this run's
+    # terminal role, so reaching COMPLETED also fires 05-03 Task 3's own
+    # cleanup (recover-then-remove): its final wip_commit_if_dirty pass finds
+    # nothing left dirty (the before-hook already recovered everything at
+    # entry, so this stays a single recovery commit, not two), and then the
+    # worktree itself is removed -- so every assertion below reads the
+    # recovery commit from the branch via `root`, never via `work_dir`,
+    # which no longer exists once this call returns (D-04, D-09, D-11).
     status = advance(
         run_id, session_factory=real_session_factory, registry=registry, repo_root=root
     )
     assert status is RunStatus.COMPLETED
 
-    # -- the worktree is clean after recovery --------------------------------
-    clean_status = run_git(
-        ["status", "--porcelain=v1", "--untracked-files=all"], cwd=work_dir
-    ).stdout
-    assert clean_status == ""
+    # -- the worktree is gone: 05-03 Task 3's COMPLETED cleanup removed it,
+    # -- proven through git's own bookkeeping in the main repository -------
+    assert not work_dir.exists()
+    porcelain = run_git(["worktree", "list", "--porcelain"], cwd=root).stdout
+    assert str(work_dir) not in porcelain
 
-    # -- exactly one recovery commit, containing both changes ----------------
+    # -- exactly one recovery commit, containing both changes, read from the
+    # -- branch in the main repository rather than the now-removed worktree --
     log = (
         run_git(
-            ["log", "--format=%H %s", f"{head_before_dirtying}..HEAD"], cwd=work_dir
+            ["log", "--format=%H %s", f"{head_before_dirtying}..{working_branch}"],
+            cwd=root,
         )
         .stdout.strip()
         .splitlines()
@@ -247,7 +261,7 @@ def test_dirty_worktree_is_recovered_on_the_next_roles_entry(
     recovery_sha, recovery_subject = log[0].split(" ", 1)
     assert recovery_subject.startswith(WIP_COMMIT_SUBJECT_PREFIX)
     assert "ARCHITECTURE" in recovery_subject
-    show = run_git(["show", "--stat", "--format=", recovery_sha], cwd=work_dir).stdout
+    show = run_git(["show", "--stat", "--format=", recovery_sha], cwd=root).stdout
     assert "README.md" in show
     assert "new_untracked_file.txt" in show
 

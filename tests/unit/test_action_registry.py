@@ -41,10 +41,18 @@ def _context(phase: Literal["before", "after"] = "before") -> ActionContext:
     )
 
 
-def test_builtin_action_resolves_to_a_callable_noop() -> None:
+def test_collect_diff_is_a_noop_with_no_branch_identity() -> None:
+    """05-03 (D-10): ``collect_diff`` is real since plan 05-03, but it still
+    no-ops -- writing nothing, calling no git subprocess -- for a context
+    whose ``base_branch``/``working_branch`` are both ``None``: a legacy run
+    predating persisted branch identity has nothing to diff, and a hook is
+    not the place to fail a run for that gap."""
     fn = default_registry.get("collect_diff")
     assert callable(fn)
-    assert fn(_context()) is None
+    ctx = _context(phase="after").model_copy(
+        update={"base_branch": None, "working_branch": None}
+    )
+    assert fn(ctx) is None
 
 
 def test_unknown_action_name_raises_and_is_not_a_member() -> None:

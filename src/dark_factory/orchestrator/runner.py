@@ -62,14 +62,16 @@ from dark_factory.actions.registry import ActionRegistry
 from dark_factory.artifacts import ArtifactError
 from dark_factory.artifacts.paths import ensure_run_tree, run_root
 from dark_factory.artifacts.validation import collect_role_artifacts
+from dark_factory.config.settings import get_settings
 from dark_factory.context.builder import build_role_context
 from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
-from dark_factory.git import DetachedHeadError
-from dark_factory.git.lifecycle import head_sha
-from dark_factory.git.worktree import ensure_worktree
+from dark_factory.git import DetachedHeadError, GitError
+from dark_factory.git.diff import commit_run_artifacts, push_working_branch
+from dark_factory.git.lifecycle import head_sha, wip_commit_if_dirty
+from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
@@ -559,6 +561,59 @@ def _fail_role_before_worker(
         session.close()
 
 
+def _cleanup_run_worktree(
+    run_id: UUID,
+    work_dir: Path,
+    repo_root: Path,
+    *,
+    role: str,
+    attempt: int,
+) -> None:
+    """Recover any trailing uncommitted content and remove the run's
+    worktree for a run that just reached ``COMPLETED`` (D-04, A-05-07,
+    A-05-11).
+
+    Runs **after** the terminal transition has already committed to Neon,
+    never before: a lingering worktree after a recorded ``COMPLETED``
+    status is a recoverable disk-space gap, whereas a removed worktree
+    paired with a database write that then failed would be an unrecoverable
+    loss window.
+
+    Calls :func:`~dark_factory.git.lifecycle.wip_commit_if_dirty` first --
+    the terminal role has no "next entry" to recover it the way every
+    earlier role's own before-hook pass would (A-05-07, RESEARCH Pitfall 5)
+    -- and only then :func:`~dark_factory.git.worktree.remove_worktree`
+    **without** ``force``: the recovery pass has just made the tree clean,
+    so a non-forced removal succeeding is itself the proof that nothing
+    uncommitted was discarded, and a non-forced removal failing on some
+    other git-level obstruction is a signal worth surfacing rather than one
+    to suppress by forcing through it.
+
+    A run's artifact content occupies two locations while it is in flight:
+    the worktree filesystem (the working copy) and the run's working branch
+    (the durable record, per D-09/D-11). After this function returns, only
+    the durable record remains -- the worktree filesystem copy is gone, and
+    every later reader (a fresh clone, Phase 9's quality gate, Phase 10's
+    publisher) reads the branch, never the worktree.
+
+    A :class:`~dark_factory.git.GitError` here is caught, logged as a
+    warning naming the run id and the worktree path, and swallowed: a
+    cleanup failure never downgrades an already-``COMPLETED`` run back to
+    ``FAILED`` -- the run genuinely is complete regardless of whether its
+    disk-space reclamation succeeded.
+    """
+    try:
+        wip_commit_if_dirty(work_dir, role=role, attempt=attempt)
+        remove_worktree(repo_root, run_id)
+    except GitError as exc:
+        _log.warning(
+            "worktree.cleanup_failed",
+            run_id=str(run_id),
+            worktree=str(work_dir),
+            error=str(exc),
+        )
+
+
 def _run_current_role(
     run_id: UUID,
     state: RunState,
@@ -598,6 +653,21 @@ def _run_current_role(
     (D-09, ART-02): a violation forces the signal to ``ROLE_FAILED`` instead of
     trusting the worker's own ``COMPLETED`` status, and no ``artifacts`` row is
     written for that attempt.
+
+    D-09/D-11/D-16 (Phase 5, plan 05-03): once ``collect_role_artifacts``
+    succeeds, this role's newly-written run-tree content is committed onto
+    the working branch via :func:`~dark_factory.git.diff.commit_run_artifacts`
+    and, when that produced a new commit, immediately pushed to ``origin``
+    via :func:`~dark_factory.git.diff.push_working_branch` (skipped silently
+    when no push token is configured) -- both inside the same ``GitError``
+    catch that downgrades the signal to ``ROLE_FAILED``, exactly as the
+    schema-violation branch immediately above does for ``ArtifactError``.
+    The ordering is deliberate and plain: **validate, then commit, then
+    push, then transition.** A committed *and pushed* artifact is therefore
+    always one that already passed its schema check, and a role that
+    reaches its transition below has either pushed its progress to a remote
+    an ephemeral CI retry can reconstruct via D-15's path, or had nothing
+    new to push in the first place.
 
     GIT-01, D-02/D-03: immediately after ``resolved_root`` is computed, this
     calls :func:`~dark_factory.git.worktree.ensure_worktree` -- an
@@ -740,6 +810,45 @@ def _run_current_role(
         except ArtifactError as exc:
             signal = Signal.ROLE_FAILED
             outcome = {**outcome, "error": str(exc)}
+        else:
+            # D-09/D-11/D-16: validate, then commit, then push, then
+            # transition -- in that order. commit_run_artifacts runs only
+            # now that collect_role_artifacts has succeeded, so a
+            # schema-invalid artifact is never committed; push_working_branch
+            # runs immediately after, inside the same GitError catch, so a
+            # committed *and pushed* artifact is always one that passed its
+            # schema check, and a role that reaches its transition below has
+            # either pushed its progress or had nothing new to push. Neither
+            # call introduces a new failure vocabulary: a commit or push
+            # failure is a role failure, folded into the same ROLE_FAILED /
+            # RUN_FAILED pair the ArtifactError branch above already uses.
+            assert (
+                state.working_branch is not None
+            )  # ensure_worktree already required it
+            try:
+                artifact_sha = commit_run_artifacts(work_dir, run_id, role=node.name)
+                if artifact_sha is not None:
+                    settings = get_settings()
+                    push_token = (
+                        settings.github_token.get_secret_value()
+                        if settings.github_token is not None
+                        else None
+                    )
+                    push_working_branch(
+                        work_dir,
+                        working_branch=state.working_branch,
+                        token=push_token,
+                    )
+            except GitError as exc:
+                signal = Signal.ROLE_FAILED
+                outcome = {**outcome, "error": str(exc)}
+                # Mirror the ArtifactError branch above: a role that fails at
+                # the commit/push step must not leave `artifacts` rows
+                # referencing content whose durability guarantee (D-09/D-11)
+                # never actually landed -- ART-04's transparency prohibition
+                # forbids reporting artifacts as durable when the commit
+                # meant to carry them did not happen.
+                artifact_writes = []
 
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
@@ -824,6 +933,14 @@ def _run_current_role(
             artifact_references=artifact_writes,
         )
         _maybe_crash_after(state.status, new_status)
+        if new_status is RunStatus.COMPLETED:
+            _cleanup_run_worktree(
+                run_id,
+                work_dir,
+                resolved_root,
+                role=node.name,
+                attempt=latest.attempt,
+            )
         return new_status
     finally:
         session.close()

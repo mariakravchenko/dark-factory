@@ -22,8 +22,13 @@ permissions:
 # assembly and artifact persistence it opens no session, so it is
 # legitimately a role-configurable hook and is listed here on every role
 # deliberately -- a role YAML that omitted it would forgo recovery.
+# collect_diff (plan 05-03, D-10) is real and git-only too. DEVELOPMENT and
+# QA are the two roles that can change repository source, so only they list
+# it -- BA and ARCHITECTURE are read-only with respect to source, and a
+# patch file from either would record only earlier roles' work under a
+# misleading attribution. collect_test_results stays first in this list.
 before: [ensure_clean_worktree]
-after: [collect_test_results]
+after: [collect_test_results, collect_diff]
 
 inputs: [acceptance_criteria.json, implementation_summary.json]
 outputs: [test_report.json, verdict.json]

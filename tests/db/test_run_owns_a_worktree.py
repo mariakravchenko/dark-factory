@@ -177,17 +177,37 @@ def test_two_role_run_creates_and_reuses_one_worktree(
     real_session_factory: SessionFactory,
     cleanup_runs: list[tuple[Any, Path]],
 ) -> None:
-    """The full SC1 tracer: a two-role run creates exactly one worktree
-    checked out on its persisted working branch, both roles execute inside
-    it, the second role's entry reuses the worktree with no second
-    ``git worktree add`` (an unchanged branch ``HEAD`` SHA and an unchanged
-    worktree count prove it), and the run tree ends up under the worktree,
-    never under the main checkout."""
-    root = config_root_factory(roles=("BA", "ARCHITECTURE"))
+    """The full SC1 tracer: a run creates exactly one worktree checked out
+    on its persisted working branch, every role executes inside it, a
+    non-terminal role's entry reuses the worktree with no second
+    ``git worktree add`` (an unchanged worktree *count* and the same branch
+    ref prove it), the run tree ends up under the worktree, never under the
+    main checkout, and -- 05-03 Task 3's own contract, D-04 -- the worktree
+    is gone once the run reaches ``COMPLETED``.
+
+    A third role (DEVELOPMENT) is added over the original two-role shape so
+    the reuse proof can be captured at ARCHITECTURE's own entry, which is
+    *not* the run's terminal transition: the terminal role's own completion
+    is the same call that fires 05-03 Task 3's ``COMPLETED`` cleanup
+    (recover-then-remove, per the Task 1 checkpoint decision), so "the
+    worktree is still present and reused" can only be observed for a
+    non-terminal role -- by the time a terminal role's own ``advance()``
+    call returns, its worktree has already been removed.
+
+    The original "unchanged HEAD SHA" reuse proof is dropped for the same
+    05-03 Task 2 reason: HEAD now legitimately advances on every completed
+    role, because that role's own artifact commit (D-09) lands on the
+    branch inside the same worktree. A SHA that never moved was a valid
+    "zero git activity happened here" signal only in the pre-05-03 world
+    where nothing committed automatically; it is now replaced by the
+    worktree-count/branch-ref proof, which remains a correct reuse-not-
+    recreate signal regardless of how many legitimate commits land.
+    """
+    root = config_root_factory(roles=("BA", "ARCHITECTURE", "DEVELOPMENT"))
     snapshot = load_effective_config(root)
 
     run_id = start_run(
-        "text:two roles share one worktree",
+        "text:two roles share one worktree, cleanup removes it at COMPLETED",
         session_factory=real_session_factory,
         snapshot=snapshot,
     )
@@ -233,12 +253,13 @@ def test_two_role_run_creates_and_reuses_one_worktree(
     )
     assert status is RunStatus.ARCHITECTURE
 
-    # Step 4: run ARCHITECTURE's worker -> COMPLETED. This is the SECOND
-    # ensure_worktree call for this run: must reuse, not recreate.
+    # Step 4: run ARCHITECTURE's worker -> DEVELOPMENT (not this run's
+    # terminal transition -- DEVELOPMENT still has to run). This is the
+    # SECOND ensure_worktree call for this run: must reuse, not recreate.
     status = advance(
         run_id, session_factory=real_session_factory, registry=registry, repo_root=root
     )
-    assert status is RunStatus.COMPLETED
+    assert status is RunStatus.DEVELOPMENT
 
     porcelain_after_reuse = run_git(
         ["worktree", "list", "--porcelain"], cwd=root
@@ -247,14 +268,32 @@ def test_two_role_run_creates_and_reuses_one_worktree(
     assert porcelain_after_creation.count("worktree ") == porcelain_after_reuse.count(
         "worktree "
     )
+    assert f"refs/heads/{branch}" in porcelain_after_reuse
 
+    # HEAD has legitimately moved -- ARCHITECTURE's own artifact commit
+    # (05-03 D-09) landed on the same branch inside the same worktree, not
+    # a stale-SHA proof that no git activity happened at all.
     sha_after_reuse = run_git(["rev-parse", "HEAD"], cwd=work_dir).stdout.strip()
-    assert sha_after_reuse == sha_after_creation
+    assert sha_after_reuse != sha_after_creation
 
-    # Every role wrote into the worktree, not the main checkout.
+    # BA and ARCHITECTURE both wrote into the worktree, not the main
+    # checkout -- captured while the worktree still exists, before
+    # DEVELOPMENT's own completion triggers 05-03 Task 3's cleanup.
     assert (run_dir / "artifacts" / "BA").is_dir()
     assert (run_dir / "artifacts" / "ARCHITECTURE").is_dir()
     assert not (root / ".dark-factory" / "runs" / str(run_id)).exists()
+
+    # Step 5+: drive DEVELOPMENT (this run's actual terminal role) to
+    # COMPLETED -- 05-03 Task 3's cleanup fires, and the worktree is gone.
+    final = drive(
+        run_id, session_factory=real_session_factory, registry=registry, repo_root=root
+    )
+    assert final is RunStatus.COMPLETED
+    assert not work_dir.exists()
+    porcelain_after_completion = run_git(
+        ["worktree", "list", "--porcelain"], cwd=root
+    ).stdout
+    assert f"worktree {work_dir}" not in porcelain_after_completion
 
 
 def test_ensure_worktree_invalid_base_branch_raises_git_command_error(

@@ -12,9 +12,9 @@ which this package's actions are forbidden to do. The shipped role YAMLs
 (``.dark-factory/roles/*.yaml``) no longer list either name in
 ``before:``/``after:``; both calls happen unconditionally in
 ``orchestrator/runner.py`` for every role, not as something a role's config
-opts into. ``collect_diff`` becomes real in a later phase named in its own
-docstring; ``ensure_clean_worktree`` became real in Phase 5 (GIT-01, D-05,
-D-06, D-08) -- it is no longer one of the stubs waiting on a later phase.
+opts into. ``ensure_clean_worktree`` became real in Phase 5 (GIT-01, D-05,
+D-06, D-08); ``collect_diff`` became real in plan 05-03 (D-10) -- only
+``collect_test_results`` still waits on a later phase (Phase 9, GATE-04).
 """
 
 from __future__ import annotations
@@ -22,6 +22,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dark_factory.artifacts.paths import resolve_under_run_root
+from dark_factory.git.diff import DIFF_PATCH_FILENAME, collect_pr_diff
 from dark_factory.git.lifecycle import assert_attached_head, wip_commit_if_dirty
 
 if TYPE_CHECKING:
@@ -73,7 +75,37 @@ def ensure_clean_worktree(ctx: ActionContext) -> None:
 
 
 def collect_diff(ctx: ActionContext) -> None:
-    """No-op until Phase 5 / Phase 9: collects the role's working-tree diff."""
+    """Real since plan 05-03 (D-10): writes the PR-bound diff of the run's
+    working branch against its base, with every ``.dark-factory`` path
+    excluded, to ``verification/<DIFF_PATCH_FILENAME>`` under the run root.
+
+    This action performs **git and filesystem work only** and opens no
+    ``Session`` (WR-01): the registered action-callable type is
+    ``(ActionContext) -> None``, so a file in the run tree is the only
+    durable channel to hand its result to Phase 9's quality gate and
+    Phase 10's publisher. Because the ``after:`` hook pass runs *before*
+    that role's artifact commit (``orchestrator/runner.py``'s
+    ``commit_run_artifacts`` call), this patch file is carried by that same
+    commit and is itself excluded from the PR-bound diff by the same
+    pathspec that excludes the rest of ``.dark-factory`` (A-05-09).
+
+    Returns immediately, writing nothing, when either ``ctx.base_branch`` or
+    ``ctx.working_branch`` is ``None`` -- a legacy run predating this phase
+    has no branch identity to diff, and a hook is not the place to fail a
+    run for that.
+    """
+    if ctx.base_branch is None or ctx.working_branch is None:
+        return None
+    diff_text = collect_pr_diff(
+        Path(ctx.worktree),
+        base_branch=ctx.base_branch,
+        working_branch=ctx.working_branch,
+    )
+    destination = resolve_under_run_root(
+        Path(ctx.run_root), f"verification/{DIFF_PATCH_FILENAME}"
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(diff_text, encoding="utf-8")
     return None
 
 

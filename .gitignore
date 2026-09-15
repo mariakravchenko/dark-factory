@@ -18,4 +18,14 @@ dist/
 
 # Per-run artifact content (Phase 4). The config set — .dark-factory.yaml,
 # .dark-factory/roles/, .dark-factory/instructions/ — stays tracked source.
+#
+# This rule keeps run-artifact content out of the base branch's permanent
+# history (D-11): a normal `git add` / `git status` on the base branch never
+# sees it. The same content is deliberately force-added (`git add -f`) onto
+# each run's own working branch, so it travels with a clone of that branch —
+# see `dark_factory.git.diff.commit_run_artifacts` (D-09). The PR-bound diff
+# (`dark_factory.git.diff.collect_pr_diff`, D-10) excludes the whole
+# `.dark-factory` path at diff-computation time, so none of it ever reaches
+# a pull request either. A force-add in the source and an ignore rule here
+# are not in tension — this comment is the reconciliation.
 .dark-factory/runs/
