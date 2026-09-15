@@ -822,7 +822,9 @@ def _run_current_role(
             # call introduces a new failure vocabulary: a commit or push
             # failure is a role failure, folded into the same ROLE_FAILED /
             # RUN_FAILED pair the ArtifactError branch above already uses.
-            assert state.working_branch is not None  # ensure_worktree already required it
+            assert (
+                state.working_branch is not None
+            )  # ensure_worktree already required it
             try:
                 artifact_sha = commit_run_artifacts(work_dir, run_id, role=node.name)
                 if artifact_sha is not None:

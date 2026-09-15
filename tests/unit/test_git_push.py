@@ -52,9 +52,7 @@ def _origin_and_worktree(tmp_path: Path) -> tuple[Path, Path, str]:
 
     run_id: UUID = uuid4()
     branch = working_branch_name(run_id)
-    work_dir = ensure_worktree(
-        repo, run_id, base_branch="main", working_branch=branch
-    )
+    work_dir = ensure_worktree(repo, run_id, base_branch="main", working_branch=branch)
     return bare_origin, work_dir, branch
 
 
@@ -124,9 +122,7 @@ def test_none_token_is_a_silent_noop_with_no_run_git_call(
 ) -> None:
     _bare_origin, work_dir, branch = _origin_and_worktree(tmp_path)
     calls: list[object] = []
-    monkeypatch.setattr(
-        diff_module, "run_git", lambda *a, **kw: calls.append((a, kw))
-    )
+    monkeypatch.setattr(diff_module, "run_git", lambda *a, **kw: calls.append((a, kw)))
 
     result = push_working_branch(work_dir, working_branch=branch, token=None)
 
@@ -191,9 +187,7 @@ def test_transient_push_failure_is_retried_and_eventually_succeeds(
         if list(args)[:1] == ["push"]:
             attempts["push"] += 1
             if attempts["push"] < 3:
-                raise GitCommandError(
-                    tuple(args), 1, "transient failure", cwd=cwd
-                )
+                raise GitCommandError(tuple(args), 1, "transient failure", cwd=cwd)
         return real_run_git(
             args, cwd=cwd, check=check, timeout=timeout, env_extra=env_extra
         )

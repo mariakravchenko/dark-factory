@@ -117,9 +117,7 @@ def test_fresh_clone_of_the_working_branch_carries_every_artifact_byte(
         config_root, tmp_path / "fresh-clone-working", branch=working_branch
     )
     for row in artifact_rows:
-        content_path = (
-            working_clone / ".dark-factory" / "runs" / str(run_id) / row.path
-        )
+        content_path = working_clone / ".dark-factory" / "runs" / str(run_id) / row.path
         assert content_path.is_file(), f"expected {content_path} to exist"
         data = content_path.read_bytes()
         assert hashlib.sha256(data).hexdigest() == row.checksum, (

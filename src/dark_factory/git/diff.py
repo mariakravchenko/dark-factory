@@ -72,7 +72,7 @@ _ASKPASS_SCRIPT = (
     "#!/bin/sh\n"
     'case "$1" in\n'
     "Username*) printf '%s\\n' \"x-access-token\" ;;\n"
-    f'Password*) printf \'%s\\n\' "${GIT_PUSH_TOKEN_ENV_VAR}" ;;\n'
+    f"Password*) printf '%s\\n' \"${GIT_PUSH_TOKEN_ENV_VAR}\" ;;\n"
     "esac\n"
 )
 
@@ -187,7 +187,9 @@ def collect_pr_diff(worktree: Path, *, base_branch: str, working_branch: str) ->
     last_newline = truncated.rfind(b"\n")
     if last_newline != -1:
         truncated = truncated[: last_newline + 1]
-    marker = f"\n... [dark-factory: diff truncated; original size {len(encoded)} bytes]\n"
+    marker = (
+        f"\n... [dark-factory: diff truncated; original size {len(encoded)} bytes]\n"
+    )
     return truncated.decode("utf-8", errors="ignore") + marker
 
 
