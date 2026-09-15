@@ -33,7 +33,7 @@ _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "dark_factory"
 _ALLOWED = {_SRC_ROOT / "git" / "client.py"}
 
 # actions/ is exempt from the "no import of dark_factory.git" half of this
-# guard: plans 05-02 (ensure_clean_worktree) and 05-04 (collect_diff) make
+# guard: plans 05-02 (ensure_clean_worktree) and 05-03 (collect_diff) make
 # these two built-ins thin dispatchers into dark_factory.git -- they perform
 # only git-level work and never open a Session (WR-01), which is the
 # invariant test_single_mutation_path.py polices instead. Stating the

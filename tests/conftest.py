@@ -369,11 +369,15 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
         "publishing:\n  create_pr: true\n",
         encoding="utf-8",
     )
+    # Phase 5 (plan 05-03, D-10): collect_diff is real and git-only, added to
+    # DEVELOPMENT and QA -- the two roles that can change repository source --
+    # mirroring the shipped .dark-factory/roles/*.yaml set. BA and
+    # ARCHITECTURE stay without it (read-only with respect to source).
     _after = {
         "BA": "[store_role_artifacts]",
-        "QA": "[collect_test_results, store_role_artifacts]",
+        "QA": "[collect_test_results, collect_diff, store_role_artifacts]",
         "ARCHITECTURE": "[store_role_artifacts]",
-        "DEVELOPMENT": "[store_role_artifacts]",
+        "DEVELOPMENT": "[collect_diff, store_role_artifacts]",
     }
     for role in ("BA", "QA", "ARCHITECTURE", "DEVELOPMENT"):
         (root / f".dark-factory/roles/{role}.yaml").write_text(
