@@ -68,9 +68,10 @@ from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
-from dark_factory.git import DetachedHeadError, GitError
+from dark_factory.git import DetachedHeadError, GitError, WriteScopeViolation
 from dark_factory.git.diff import commit_run_artifacts, push_working_branch
 from dark_factory.git.lifecycle import head_sha, wip_commit_if_dirty
+from dark_factory.git.scope import enforce_write_scope
 from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
@@ -696,6 +697,20 @@ def _run_current_role(
     after-hooks are all skipped, and :func:`_fail_role_before_worker` fails
     the role and the run in the identical shape the D-09 schema-violation
     branch below already uses (D-08) -- never a second failure vocabulary.
+
+    ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04): once the artifact
+    validate/commit/push sequence above leaves the signal at
+    ``ROLE_COMPLETED``, :func:`~dark_factory.git.scope.enforce_write_scope`
+    checks this attempt's own uncommitted repository changes against the
+    role's configured ``write_scope`` and reverts anything outside it --
+    restoring a tracked edit from ``HEAD``, removing a newly-created file
+    from both the working tree and the index. A violation downgrades the
+    signal to ``ROLE_FAILED`` and reuses the same failure branch every other
+    post-worker check in this function already writes through; the ordering
+    is **validate, then commit, then push, then enforce scope, then
+    transition**, so a role that reaches its transition below has either
+    stayed inside its declared boundary or had the offending change reverted
+    before the attempt was ever accepted.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -849,6 +864,37 @@ def _run_current_role(
                 # forbids reporting artifacts as durable when the commit
                 # meant to carry them did not happen.
                 artifact_writes = []
+
+    # ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04): enforce_write_scope runs
+    # only when the signal is still ROLE_COMPLETED after the artifact
+    # validate/commit/push sequence above -- an attempt that already failed
+    # schema validation or the commit/push step has nothing further to
+    # enforce. The patterns are read from the persisted snapshot's role
+    # entry, defensively (`(role_def.get("permissions") or {}).get(...)`),
+    # so a legacy bare-string snapshot (whose `_role_definition` fallback
+    # carries no `permissions` key at all) yields an empty list rather than
+    # raising -- and under D-14 an empty list is correct here too: a legacy
+    # run with no declared scope has effectively declared none, and a role
+    # with no declared scope may not change source. A violation reuses the
+    # exact ROLE_FAILED/RUN_FAILED shape the ArtifactError/GitError branches
+    # above already write -- no new event type, no new role-execution
+    # status -- and clears `artifact_writes` for the same reason the GitError
+    # branch does: a FAILED attempt records no `artifacts` rows, even though
+    # the artifact content itself is already durably committed on the
+    # working branch by the time this check runs.
+    if signal is Signal.ROLE_COMPLETED:
+        write_scope = (role_def.get("permissions") or {}).get("write_scope", [])
+        try:
+            enforce_write_scope(
+                work_dir,
+                write_scope=write_scope,
+                role=node.name,
+                attempt=latest.attempt,
+            )
+        except WriteScopeViolation as exc:
+            signal = Signal.ROLE_FAILED
+            outcome = {**outcome, "error": str(exc)}
+            artifact_writes = []
 
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
