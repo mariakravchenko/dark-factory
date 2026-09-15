@@ -47,7 +47,18 @@ ARTIFACT_COMMIT_SUBJECT_PREFIX = "chore(dark-factory):"
 # The magic pathspec D-10 names, shared by both the artifact-commit path
 # search and the PR-bound diff -- one constant, so the exclusion cannot
 # silently drift between the two call sites that both must honour it.
-ARTIFACT_EXCLUDE_PATHSPEC = ":(exclude).dark-factory"
+#
+# Scoped to exactly the gitignored, ephemeral per-run artifact subtree
+# (``.gitignore``'s own ``.dark-factory/runs/`` entry) -- NOT the whole
+# ``.dark-factory/`` directory. ``.dark-factory.yaml``, ``.dark-factory/roles/*.yaml``
+# and ``.dark-factory/instructions/*.md`` are ordinary tracked source files
+# (per this repo's own ``.gitignore`` comment) and must remain fully subject
+# to write-scope enforcement (``git/scope.py``) and visible in the PR-bound
+# diff (``collect_pr_diff``/``pr_changed_paths`` below) -- excluding them
+# entirely would let a role with a narrow ``write_scope`` silently rewrite
+# another role's permissions/instructions with the change invisible to both
+# enforcement and human/quality-gate review (CR-01).
+ARTIFACT_EXCLUDE_PATHSPEC = ":(exclude).dark-factory/runs"
 
 # The cap a single PR-bound diff may occupy in memory / on disk (T-05-07),
 # in the register of ``artifacts/paths.py::_MAX_ARTIFACT_BYTES`` and
