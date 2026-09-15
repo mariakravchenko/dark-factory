@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 05
 current_phase_name: Isolated Workspace & Git Lifecycle
 status: executing
-stopped_at: Completed 05-04-PLAN.md
-last_updated: "2026-09-15T16:05:21.707Z"
+stopped_at: Completed 05-05-PLAN.md
+last_updated: "2026-09-15T19:03:32.086Z"
 last_activity: 2026-09-15
-last_activity_desc: Phase 05 execution resumed (wave continue)
-state_head: 4a031b5cfa4bb19e30e5b15529651b48384455d2
+last_activity_desc: Phase 05 execution started
+state_head: d494c339b0fe4f423b44bc60762e6a836416a6aa
 progress:
   total_phases: 12
   completed_phases: 0
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 31
+  completed_plans: 30
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-13)
 ## Current Position
 
 Phase: 05 (Isolated Workspace & Git Lifecycle) — EXECUTING
-Plan: 2 of 4
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-09-15 — Phase 05 execution resumed (wave continue)
+Last activity: 2026-09-15 — Phase 05 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -86,6 +86,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 04 P04 | 90min | 3 tasks | 4 files |
 | Phase 04 P05 | 17min | 3 tasks | 5 files |
 | Phase 05 P04 | ~12min authoring | 3 tasks | 14 files |
+| Phase 05 P05 | 20min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -168,6 +169,7 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05]: 05-04: is_out_of_scope is a single expression with no empty-list branch -- D-14 zero tolerance falls out of not any(...) over an empty iterable for free, never a special case
 - [Phase 05]: [Phase 05]: 05-04: revert_paths branches on git cat-file -e HEAD:<path> before choosing restore vs rm+clean -- a single-mechanism revert silently leaves a newly-created violating file on disk
 - [Phase 05]: [Phase 05]: 05-04: write-scope enforcement wired into runner.py after the D-09/D-16 artifact validate/commit/push sequence and before transition(); a violation clears artifact_writes and reuses the existing ROLE_FAILED/RUN_FAILED shape
+- [Phase 05]: [Phase 05]: 05-05: G-05-1 closed as a test-defect fix -- test_an_in_scope_edit_completes_with_no_revert now reads the in-scope edit through read_committed(root, working_branch_name(run_id), ...) instead of the work_dir filesystem D-04 deletes on COMPLETED, plus a companion work_dir-gone assertion; zero production changes, all six SC4 scenarios pass against real PostgreSQL 17
 
 ### Pending Todos
 
@@ -193,6 +195,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-15T16:05:21.653Z
-Stopped at: Completed 05-04-PLAN.md
+Last session: 2026-09-15T19:03:32.032Z
+Stopped at: Completed 05-05-PLAN.md
 Resume file: None
