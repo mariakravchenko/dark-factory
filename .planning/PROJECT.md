@@ -49,6 +49,10 @@ resume it; durability and observability are the same requirement.
 - ✓ `ArtifactReference` metadata (id, run_id, role_execution_id, type, path, metadata, created_at) stored in Neon; filesystem holds the real content — Phase 4
 - ✓ `artifacts` table (metadata only) — Phase 4
 - ✓ Run a task from a spec file: `dark-factory run spec:./path.md` — Phase 4
+- ✓ Each run has an explicit working branch created from the configured base branch; all roles operate on the same run repository state — Phase 5 (GIT-01)
+- ✓ Dark Factory owns delivery actions (create branch, commit, push, create PR); agents never own commit/push/PR policy — Phase 5 (GIT-02)
+- ✓ Role-specific tool permissions enforced (write-scope authorization: a role's permitted file-write scope is enforced after execution against path rules from configuration) — Phase 5 (ROLE-05)
+- ✓ Artifact content is available to a resuming process on a different machine — commit-per-role onto the run's working branch, proven via cross-clone tests — Phase 5 (ART-04)
 
 ### Active
 
@@ -61,7 +65,7 @@ resume it; durability and observability are the same requirement.
 - [ ] Normalize every source to one internal `NormalizedTask` model
 
 **Role orchestration**
-- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; tools/permissions enforcement is Phase 5/6)
+- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement is Phase 6)
 
 **Worker (agent runtime) abstraction**
 - [ ] `CodingWorker` contract: `execute()`, `resume()`, `capabilities()`
@@ -75,7 +79,6 @@ resume it; durability and observability are the same requirement.
 
 **Tools, permissions, security boundary**
 - [ ] `ToolRegistry` capability layer: `repo.read/search/write/write_tests`, `shell.execute`, `git.status/diff/history`, `github.issue.read`, `github.comments.read`, `artifacts.read/write`; extensible without touching every role executor
-- [ ] Role-specific tool permissions enforced (BA/Architect read-only on code; Developer write+shell; QA write_tests+shell, no publish)
 - [ ] Tool permission config is a security boundary: workers never receive `DATABASE_URL`, `GITHUB_TOKEN`, or other infrastructure credentials; only the minimum env required for the role
 - [ ] MCP supported as one optional transport adapter for exposing tools to compatible workers; orchestrator never depends on MCP internally
 
@@ -108,8 +111,6 @@ resume it; durability and observability are the same requirement.
 - [ ] Quality-gate result written to `verification/quality_gate.json`
 
 **Git lifecycle & GitHub integration**
-- [ ] Each run has an explicit working branch created from the configured base branch; all roles operate on the same run repo state
-- [ ] Dark Factory owns delivery actions (create branch, commit, push, create PR); agents do not own commit/push/PR policy
 - [ ] Publishing occurs only when QA = PASS **and** Quality Gate = PASS → collect diff, commit, push, create PR, persist PR metadata → COMPLETED
 - [ ] GitHub as task source, human-interaction channel (post clarification comment, ingest reply), and publishing destination
 - [ ] GitHub event handler: a new issue comment finds the associated run + pending interaction, stores the answer, resumes the same `RoleExecution` (never creates a new run)
@@ -184,6 +185,8 @@ resume it; durability and observability are the same requirement.
 | Config-driven role pipeline over hardcoded role calls | Spec §5; enables shorter/reordered pipelines without orchestrator rewrites | — Pending |
 | MCP is an optional tool transport, never an internal dependency | Spec §70 | — Pending |
 | Zero-config artifact synthesis derives every downstream criterion id from the role's resolved `context.inputs` (structural validation, then a Markdown carrier-line regex) rather than any hardcoded literal — dispatch stays on content shape only, never `context.role` | UAT gap G-04-1: `FakeWorker`'s placeholder synthesis had two independent hardcoded ids that only coincidentally matched, so renaming one didn't move the other; regression tests now compare against the origin artifact's own emitted ids, never a fixed expectation, so a reintroduced hardcode fails the test the way the original defect would have | Shipped Phase 4 (plan 04-05) |
+| On COMPLETED, the run driver commits any trailing worktree content onto the run's working branch (via `wip_commit_if_dirty`, which stages untracked files) *before* deleting the worktree — the working branch, not the worktree filesystem, is the durable record D-04 guarantees | UAT gap G-05-1: the SC4 in-scope-edit test asserted against the worktree filesystem, a location D-04 deliberately deletes after COMPLETED — a test defect, not a product bug. Root cause: `.planning/debug/in-scope-edit-missing-after-completed.md` | Shipped Phase 5 (plan 05-05); zero production changes |
+| CR-02's `revert_paths` escape-ordering fix needed unit-tier coverage with no database — the scope module never touched Postgres, but its tests were partitioned "pure functions only" vs. "full pipeline behind a DB fixture," leaving no DB-free home and letting a Critical review fix ship with zero executed coverage | UAT gap G-05-2: `tests/unit/test_write_scope_revert.py` added as a new DB-free unit-tier home (mirroring `test_git_lifecycle.py`'s real-git-on-`tmp_path` pattern), proving escape-first/last/only/multiple cases directly against `revert_paths` and `enforce_write_scope`. Root cause: `.planning/debug/cr02-revert-ordering-test-gap.md` | Shipped Phase 5 (plan 05-06); zero production changes |
 
 ## Evolution
 
@@ -203,4 +206,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-13 after Phase 4*
+*Last updated: 2026-09-16 after Phase 5*
