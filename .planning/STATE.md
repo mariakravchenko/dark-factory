@@ -20,7 +20,7 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-13)
+See: .planning/PROJECT.md (updated 2026-09-16)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
 **Current focus:** Phase 05 — Isolated Workspace & Git Lifecycle
@@ -182,11 +182,11 @@ None yet.
 
 ### Blockers/Concerns
 
-Three research-flagged decisions, each scheduled inside the phase that first needs it:
+One research-flagged decision remains open, scheduled inside the phase that first needs it:
 
-- Artifact-content durability for cross-machine resume → resolve in Phase 5 (leading option: commit artifacts to the run's working branch). Schema implications noted in Phase 1.
-- Lease TTL vs. unpredictable agent step duration → resolve in Phase 2 (heartbeat every TTL/3; slow-step + competing-process test).
 - Exact non-interactive flag/env matrix for the Copilot and Hermes CLIs → hands-on spike in Phase 8; can be spiked earlier to de-risk.
+
+Resolved this phase: artifact-content durability for cross-machine resume (Phase 5 — commit artifacts to the run's working branch, proven via cross-clone tests, ART-04). Resolved earlier: lease TTL vs. unpredictable agent step duration (Phase 2).
 
 ## Deferred Items
 
