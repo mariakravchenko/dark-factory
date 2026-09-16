@@ -46,6 +46,7 @@ created: "2026-09-14"
 | Task 3 | 05-03 | 3 | ART-04 | T-05-06 / mitigate | A fresh `git clone` + checkout of the working branch has the run's artifact content available | integration | `uv run pytest tests/integration/test_artifact_cross_clone.py -x` | ✅ | ✅ green (05-03) |
 | Task 3 | 05-04 | 4 | ROLE-05 | T-05-05 / mitigate | `write_scope` glob matching: positive, negative, deep-nesting, decoy-directory, zero-tolerance cases | unit | `uv run pytest tests/unit/test_write_scope.py -x` | ✅ | ✅ green (16 passed, verified in this plan's own sandbox) |
 | Task 2 | 05-04 | 4 | ROLE-05 | T-05-03 / mitigate | A violating diff is reverted (tracked-edit and new-file cases) and the role fails with the D-09 failure shape | integration | `uv run pytest tests/integration/test_write_scope_enforcement.py -x` | ✅ | ⬜ pending — DB-reachability handoff (see 05-04-SUMMARY.md Test Execution Handoff) |
+| Task 1-2 | 05-06 | 5 | ROLE-05 | T-05-G2-01 / T-05-G2-02 / mitigate | CR-02 regression: an escaping path sorted anywhere in the violation list (first, last, only, or duplicated) never suppresses the revert of the other violations, exactly one `WriteScopeViolation` names every escape, and the escaping path itself is never acted upon; `enforce_write_scope`'s own sort is proven to produce the escape-first ordering | unit | `uv run pytest -m unit tests/unit/test_write_scope_revert.py -x` | ✅ | ✅ green (05-06, 7 passed, no database) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -60,6 +61,7 @@ created: "2026-09-14"
 - [x] `tests/integration/test_worktree_lifecycle.py` — new integration test file exercising the full `advance()`/`drive()` loop against a real git repo (05-02)
 - [x] `tests/integration/test_artifact_cross_clone.py` — new integration test file (05-03)
 - [x] `tests/integration/test_write_scope_enforcement.py` — new integration test file (05-04)
+- [x] `tests/unit/test_write_scope_revert.py` — new unit test file, the CR-02 regression coverage for `revert_paths`' escape-ordering guarantee (G-05-2, 05-06)
 - [x] Migration `0005_wip_commit_sha` + `tests/db/test_role_executions_wip_commit_sha_schema.py` (sibling to existing `tests/db/test_human_interactions_schema.py` pattern) (05-02)
 
 ---

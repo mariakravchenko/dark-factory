@@ -83,6 +83,7 @@ SUCCESS_CRITERIA: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/integration/test_write_scope_enforcement.py",
             "tests/unit/test_write_scope.py",
+            "tests/unit/test_write_scope_revert.py",
         ),
     ),
 }
@@ -120,6 +121,7 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         (
             "tests/integration/test_write_scope_enforcement.py",
             "tests/unit/test_write_scope.py",
+            "tests/unit/test_write_scope_revert.py",
         ),
     ),
 }
@@ -139,6 +141,7 @@ _VALIDATION_PROOF_FILES: frozenset[str] = frozenset(
         "tests/integration/test_artifact_cross_clone.py",
         "tests/unit/test_write_scope.py",
         "tests/integration/test_write_scope_enforcement.py",
+        "tests/unit/test_write_scope_revert.py",
     }
 )
 
