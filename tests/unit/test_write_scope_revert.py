@@ -41,7 +41,7 @@ import pytest
 
 from dark_factory.git import WriteScopeViolation
 from dark_factory.git.client import run_git
-from dark_factory.git.scope import revert_paths
+from dark_factory.git.scope import enforce_write_scope, revert_paths
 from tests.support.git_repo import git_commit_all, make_git_repo
 
 pytestmark = pytest.mark.unit
@@ -228,3 +228,40 @@ def test_multiple_escapes_are_all_named_in_the_single_raised_exception(
     )
     staged = run_git(["diff", "--cached", "--name-only"], cwd=scenario.repo).stdout
     assert "src/app.py" not in staged.splitlines()
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: enforce_write_scope -- the ordering premise, produced end to end
+# --------------------------------------------------------------------------- #
+
+
+def test_enforce_write_scope_produces_the_escape_first_ordering_itself(
+    scenario: _Scenario,
+) -> None:
+    """Task 1's cases hand-construct an already-sorted list to prove the
+    property "escape position does not affect which violations are
+    reverted." This test proves the ordering that makes the escape-first
+    case reachable in production is not hand-built: it is
+    `enforce_write_scope`'s own `sorted(...)` over the changed-path set. The
+    escaping symlink is visible to `attempt_changed_paths`'s enumeration as
+    an untracked entry (`git ls-files --others`), which is how it reaches
+    the violation list at all. `aa-escape` sorts before both `src/app.py`
+    and `src/new.py` alphabetically, so a `write_scope` matching none of
+    them reproduces the escape-first ordering with no test-side sorting.
+
+    When an escape is present, the exception that surfaces to the caller
+    comes from the revert step (`revert_paths`'s raise), not from
+    `enforce_write_scope`'s own final raise -- the revert step raises
+    first. The assertion below is on the escaping path's name, never on the
+    role or the write_scope patterns, which would be asserting the wrong
+    exception for the wrong reason.
+    """
+    _make_escape_symlink(scenario, "aa-escape")
+
+    with pytest.raises(WriteScopeViolation) as excinfo:
+        enforce_write_scope(scenario.repo, write_scope=[], role="QA", attempt=1)
+
+    message = str(excinfo.value)
+    assert "aa-escape" in message
+
+    _assert_in_repo_violations_reverted(scenario.repo)
