@@ -285,9 +285,17 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 06-01-PLAN.md — Deny-by-default capability enforcement end-to-end: the `dark_factory.tools` package, `ToolRegistry.invoke()`, `CAPABILITY_DENIED`, the `artifacts.read` production call site, QA's D-16 grants, and the TOOL-02 extensibility proof (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — The credential boundary: `build_worker_env()` proven by a real subprocess env dump, plus `shell.execute` as its first production call site (wave 2)
 - [ ] 06-03-PLAN.md — The optional MCP transport: `build_mcp_server()` proven with an in-memory client, and the AST guard proving core code imports nothing from MCP (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-04-PLAN.md — SEC-01 secret sweep across the denial path and the Phase 6 acceptance gate (wave 3)
 
 **Invariants**: worker environments are built up from an empty dict, never from `os.environ`; permission checks happen on every invocation and are never delegated to the worker.
