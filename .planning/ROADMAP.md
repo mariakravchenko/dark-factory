@@ -282,7 +282,14 @@ Plans:
   4. Grepping every role artifact, worker prompt, event payload, log and report for the known secret values returns zero occurrences.
   5. Tools are exposed to a compatible worker over the optional MCP transport, and removing MCP entirely leaves the orchestrator fully functional — core code imports nothing from MCP.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Deny-by-default capability enforcement end-to-end: the `dark_factory.tools` package, `ToolRegistry.invoke()`, `CAPABILITY_DENIED`, the `artifacts.read` production call site, QA's D-16 grants, and the TOOL-02 extensibility proof (wave 1)
+- [ ] 06-02-PLAN.md — The credential boundary: `build_worker_env()` proven by a real subprocess env dump, plus `shell.execute` as its first production call site (wave 2)
+- [ ] 06-03-PLAN.md — The optional MCP transport: `build_mcp_server()` proven with an in-memory client, and the AST guard proving core code imports nothing from MCP (wave 2)
+- [ ] 06-04-PLAN.md — SEC-01 secret sweep across the denial path and the Phase 6 acceptance gate (wave 3)
+
 **Invariants**: worker environments are built up from an empty dict, never from `os.environ`; permission checks happen on every invocation and are never delegated to the worker.
 
 ### Phase 7: Claude Code — the First Real Worker
