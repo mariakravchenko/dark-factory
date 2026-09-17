@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 6
 current_phase_name: Tools, Permissions & the Credential Boundary
 status: planning
-stopped_at: Phase 05 complete, ready to plan Phase 6
-last_updated: "2026-09-16T15:19:43.195Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-09-17T19:29:57.503Z"
 last_activity: 2026-09-16
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 466cbbd01028261d29bd18cefd2856e0028aa9d5
+state_head: 3f585875a003718f2b7e651e266c7d2c83c6f0d9
 progress:
   total_phases: 12
   completed_phases: 1
@@ -198,6 +198,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-16T06:53:44.232Z
-Stopped at: Phase 05 complete, ready to plan Phase 6
-Resume file: None
+Last session: 2026-09-17T19:29:57.397Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-tools-permissions-the-credential-boundary/06-CONTEXT.md
