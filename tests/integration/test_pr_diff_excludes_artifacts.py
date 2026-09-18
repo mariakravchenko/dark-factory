@@ -75,7 +75,10 @@ def _write_two_role_tree(config_root_factory: Callable[..., Path]) -> Path:
         "name: BA\n"
         "worker: fake\n"
         "instructions: ../instructions/ba.md\n"
-        "tools: []\n"
+        # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+        # BA.yaml grant set -- artifact reads are now capability-gated
+        # (D-03), so a declared `outputs:` entry needs `artifacts.read`.
+        "tools: [repo.read, repo.search, artifacts.read, artifacts.write]\n"
         "permissions:\n  write_scope: []\n"
         "before: [ensure_clean_worktree]\n"
         "after: []\n"
@@ -88,7 +91,8 @@ def _write_two_role_tree(config_root_factory: Callable[..., Path]) -> Path:
         "name: DEVELOPMENT\n"
         "worker: fake\n"
         "instructions: ../instructions/development.md\n"
-        "tools: []\n"
+        "tools: [repo.read, repo.search, repo.write, repo.write_tests, "
+        "shell.execute, artifacts.read, artifacts.write]\n"
         "permissions:\n  write_scope: []\n"
         "before: [ensure_clean_worktree]\n"
         "after: [collect_diff]\n"

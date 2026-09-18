@@ -92,6 +92,9 @@ from dark_factory.persistence.repositories import (
     RunState,
     load_run_state,
 )
+from dark_factory.tools import CapabilityDeniedError
+from dark_factory.tools import default_registry as tool_default_registry
+from dark_factory.tools.registry import ToolRegistry
 from dark_factory.workers.registry import WorkerRegistry, default_registry
 from dark_factory.workflows.pipeline import (
     Pipeline,
@@ -247,9 +250,16 @@ def advance(
     pipeline: Pipeline | None = None,
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
+    tool_registry: ToolRegistry = tool_default_registry,
 ) -> RunStatus:
     """Reconstruct from Neon, execute exactly one committed step under the lease,
     return the new status.
+
+    ``tool_registry`` defaults to :data:`~dark_factory.tools.default_registry`
+    and is threaded straight through to :func:`_advance_once` -> (eventually)
+    :func:`_run_current_role`, exactly mirroring how ``action_registry`` is
+    already threaded -- the test injection seam for a synthetic capability
+    (TOOL-02, SC3).
 
     A run already in a **stop** status -- terminal *or* ``WAITING_HUMAN`` -- is
     returned immediately, without claiming a lease and without writing anything
@@ -288,6 +298,7 @@ def advance(
             lease=lease,
             action_registry=action_registry,
             repo_root=repo_root,
+            tool_registry=tool_registry,
         )
 
 
@@ -300,6 +311,7 @@ def _advance_once(
     lease: LeaseHandle,
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
+    tool_registry: ToolRegistry = tool_default_registry,
 ) -> RunStatus:
     """One reconstruct-and-commit step. **Assumes the lease is already held** and
     never claims it -- ``drive`` claims once for the whole loop, ``advance``
@@ -315,6 +327,10 @@ def _advance_once(
     one place this whole call chain evaluates the working directory -- and
     threaded down to :func:`_run_current_role`, which is where a role's
     context and its run-tree directory are actually resolved against it.
+
+    ``tool_registry`` defaults to :data:`~dark_factory.tools.default_registry`
+    and is threaded straight through to :func:`_run_current_role`, mirroring
+    ``action_registry``.
     """
     read_session = session_factory()
     try:
@@ -355,6 +371,7 @@ def _advance_once(
             lease,
             action_registry=action_registry,
             repo_root=resolved_repo_root,
+            tool_registry=tool_registry,
         )
     finally:
         unbind_contextvars("run_id", "role", "attempt")
@@ -625,6 +642,7 @@ def _run_current_role(
     *,
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
+    tool_registry: ToolRegistry = tool_default_registry,
 ) -> RunStatus:
     """Run the current role's worker outside any transaction, then commit the outcome.
 
@@ -711,6 +729,23 @@ def _run_current_role(
     transition**, so a role that reaches its transition below has either
     stayed inside its declared boundary or had the offending change reverted
     before the attempt was ever accepted.
+
+    TOOL-01/TOOL-03, D-01/D-06 (Phase 6, plan 06-01): the role's grant list
+    is read once from the persisted snapshot as ``granted =
+    list(role_def.get("tools", []))`` -- the ``.get`` with an empty-list
+    default is deliberate, so a legacy snapshot entry carrying no ``tools``
+    key at all grants nothing (deny-by-default, never allow-by-omission). It
+    is threaded into
+    :func:`~dark_factory.artifacts.validation.collect_role_artifacts`, whose
+    every artifact read now goes through
+    ``tool_registry.invoke(role, "artifacts.read", granted, ...)``. A denied
+    read raises :class:`~dark_factory.tools.CapabilityDeniedError`, caught in
+    its own arm placed *before* the ``ArtifactError`` catch below so the
+    denial's structured facts (role, capability, reason) can be captured
+    separately: the overall ordering becomes **check the grant, then read,
+    then validate, then commit, then push, then enforce scope, then
+    transition**, and a denial reuses the identical ``FAILED`` shape every
+    other post-worker check here already writes (D-05).
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -813,7 +848,17 @@ def _run_current_role(
     # signal already has its own terminal handling below and never writes
     # artifacts.
     artifact_writes: list[ArtifactReferenceWrite] = []
+    # TOOL-01/TOOL-03, D-07/D-08 (Phase 6, plan 06-01): non-None only when the
+    # ArtifactError-adjacent try/except below actually caught a
+    # CapabilityDeniedError -- carries the three payload keys the
+    # CAPABILITY_DENIED event below writes verbatim.
+    capability_denial: dict[str, str] | None = None
     if signal is Signal.ROLE_COMPLETED:
+        # D-01/D-06: read once from the persisted snapshot -- ``.get`` with
+        # an empty-list default means a legacy snapshot entry with no
+        # ``tools`` key at all grants nothing (deny-by-default, never
+        # allow-by-omission).
+        granted = list(role_def.get("tools", []))
         try:
             artifact_writes = collect_role_artifacts(
                 run_dir,
@@ -821,7 +866,17 @@ def _run_current_role(
                 latest.id,
                 list(role_def.get("outputs", [])),
                 list(result.artifacts),
+                granted=granted,
+                tool_registry=tool_registry,
             )
+        except CapabilityDeniedError as exc:
+            signal = Signal.ROLE_FAILED
+            outcome = {**outcome, "error": str(exc)}
+            capability_denial = {
+                "role": node.name,
+                "capability": exc.capability,
+                "reason": "capability not granted",
+            }
         except ArtifactError as exc:
             signal = Signal.ROLE_FAILED
             outcome = {**outcome, "error": str(exc)}
@@ -938,6 +993,18 @@ def _run_current_role(
             ),
             EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
         ]
+        # D-07/D-08: a capability denial is prepended ahead of ROLE_FAILED /
+        # RUN_FAILED, in the SAME apply_transition call -- additive, never
+        # instead of them, so no existing observability consumer needs a new
+        # branch to recognise a failed run.
+        if capability_denial is not None:
+            events.insert(
+                0,
+                EventWrite(
+                    type=EventType.CAPABILITY_DENIED,
+                    payload=capability_denial,
+                ),
+            )
     elif signal is Signal.ROLE_NEEDS_INPUT:
         # Mirror the failure arm's shape. The serialised NEEDS_INPUT outcome MUST
         # be stored, not discarded: it is what a resume validates back into
@@ -1007,6 +1074,7 @@ def drive(
     pipeline: Pipeline | None = None,
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
+    tool_registry: ToolRegistry = tool_default_registry,
 ) -> RunStatus:
     """Loop one step until the run reaches a stop status; return that status.
 
@@ -1022,6 +1090,10 @@ def drive(
     ``repo_root`` is threaded straight through to every ``_advance_once`` call
     in the loop, unresolved -- each step resolves it (to ``Path.cwd()`` when
     ``None``) independently, exactly as a single ``advance`` call would.
+
+    ``tool_registry`` defaults to :data:`~dark_factory.tools.default_registry`
+    and is threaded straight through to every ``_advance_once`` call in the
+    loop, mirroring ``action_registry``.
     """
     read_session = session_factory()
     try:
@@ -1047,6 +1119,7 @@ def drive(
                 lease=lease,
                 action_registry=action_registry,
                 repo_root=repo_root,
+                tool_registry=tool_registry,
             )
             if new_status != status and on_transition is not None:
                 on_transition(status, new_status)

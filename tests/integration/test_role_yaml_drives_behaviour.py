@@ -61,7 +61,12 @@ def _write_ba_role(
         "name: BA\n"
         f"worker: {worker}\n"
         f"instructions: {instructions}\n"
-        "tools: []\n"
+        # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+        # BA.yaml grant set (this role declares empty `outputs:`, so the
+        # grant is not load-bearing here, but every test config tree
+        # mirrors the shipped grants now that artifact reads are
+        # capability-gated -- D-03).
+        "tools: [repo.read, repo.search, artifacts.read, artifacts.write]\n"
         "permissions:\n  write_scope: []\n"
         f"before: {before}\n"
         f"after: {after}\n"

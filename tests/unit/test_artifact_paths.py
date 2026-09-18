@@ -23,6 +23,7 @@ from dark_factory.artifacts.paths import (
 from dark_factory.artifacts.store import read_artifact_text
 from dark_factory.artifacts.validation import collect_role_artifacts
 from dark_factory.domain.worker import ArtifactRef
+from dark_factory.tools.registry import default_registry as tool_default_registry
 
 pytestmark = pytest.mark.unit
 
@@ -137,7 +138,15 @@ def test_t_04_03_collect_role_artifacts_propagates_missing_file(
     refs = [ArtifactRef(type="missing.json", path="missing.json", checksum=None)]
 
     with pytest.raises(MissingArtifactContentError):
-        collect_role_artifacts(root, "BA", "irrelevant-id", ["missing.json"], refs)  # type: ignore[arg-type]
+        collect_role_artifacts(
+            root,
+            "BA",
+            "irrelevant-id",  # type: ignore[arg-type]
+            ["missing.json"],
+            refs,
+            granted=["artifacts.read"],
+            tool_registry=tool_default_registry,
+        )
 
 
 # --------------------------------------------------------------------------- #

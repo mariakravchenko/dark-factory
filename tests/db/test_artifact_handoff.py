@@ -106,7 +106,10 @@ def _write_two_role_tree(
         "name: BA\n"
         "worker: fake\n"
         "instructions: ../instructions/ba.md\n"
-        "tools: []\n"
+        # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+        # BA.yaml grant set -- artifact reads are now capability-gated
+        # (D-03), so a declared `outputs:` entry needs `artifacts.read`.
+        "tools: [repo.read, repo.search, artifacts.read, artifacts.write]\n"
         "permissions:\n  write_scope: []\n"
         "before: [prepare_role_context]\n"
         "after: [store_role_artifacts]\n"
@@ -119,7 +122,7 @@ def _write_two_role_tree(
         "name: ARCHITECTURE\n"
         "worker: fake\n"
         "instructions: ../instructions/architecture.md\n"
-        "tools: []\n"
+        "tools: [repo.read, repo.search, artifacts.read, artifacts.write]\n"
         "permissions:\n  write_scope: []\n"
         "before: [prepare_role_context]\n"
         "after: [store_role_artifacts]\n"

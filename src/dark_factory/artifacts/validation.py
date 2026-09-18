@@ -7,11 +7,21 @@ declared ``outputs`` includes a machine filename that fails schema validation
 must fail the attempt, not silently advance the run (ART-02, D-09).
 Dispatch is always by **filename**, never by role name (config-driven,
 no-role-name-branching discipline).
+
+Artifact reads are capability-gated (TOOL-03, D-03): every declared output is
+read through ``tool_registry.invoke(role, "artifacts.read", granted, ...)``
+rather than a direct filesystem call, so a role whose ``tools:`` grant list
+omits ``artifacts.read`` fails this attempt with
+:class:`~dark_factory.tools.CapabilityDeniedError` instead of reading the
+file -- deny-by-default is proven at the one real, unconditional,
+every-role-execution call site this function is (``orchestrator/runner.py``
+calls it after every ``ROLE_COMPLETED`` signal).
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from uuid import UUID
 
@@ -19,7 +29,6 @@ from pydantic import BaseModel, ValidationError
 
 from dark_factory.artifacts import ArtifactContractError, ArtifactSchemaError
 from dark_factory.artifacts.paths import checksum
-from dark_factory.artifacts.store import read_artifact_text
 from dark_factory.domain.artifacts import (
     AcceptanceCriteriaDocument,
     ConstraintsDocument,
@@ -29,6 +38,7 @@ from dark_factory.domain.artifacts import (
 )
 from dark_factory.domain.worker import ArtifactRef
 from dark_factory.persistence.mutations import ArtifactReferenceWrite
+from dark_factory.tools.registry import ToolRegistry
 
 __all__ = ["MACHINE_ARTIFACT_MODELS", "collect_role_artifacts"]
 
@@ -51,6 +61,9 @@ def collect_role_artifacts(
     role_execution_id: UUID,
     declared_outputs: list[str],
     reported_refs: list[ArtifactRef],
+    *,
+    granted: Sequence[str],
+    tool_registry: ToolRegistry,
 ) -> list[ArtifactReferenceWrite]:
     """Validate and collect one :class:`ArtifactReferenceWrite` per declared
     output filename.
@@ -58,10 +71,15 @@ def collect_role_artifacts(
     For every filename in ``declared_outputs``: find the reported
     :class:`~dark_factory.domain.worker.ArtifactRef` whose path basename
     matches, raising :class:`~dark_factory.artifacts.ArtifactContractError`
-    when none does; read it through :func:`read_artifact_text` (T-04-02/03
-    apply here); when the filename is a key of :data:`MACHINE_ARTIFACT_MODELS`,
-    ``json.loads`` the text and validate it, converting a
-    :class:`pydantic.ValidationError` into
+    when none does; read it through
+    ``tool_registry.invoke(role, "artifacts.read", granted, root=root,
+    relative_path=ref.path)`` (TOOL-03, D-03) -- a role whose ``granted``
+    list omits ``artifacts.read`` raises
+    :class:`~dark_factory.tools.CapabilityDeniedError` here instead of
+    reading anything (T-04-02/03 still apply, inside the capability's own
+    implementation); when the filename is a key of
+    :data:`MACHINE_ARTIFACT_MODELS`, ``json.loads`` the text and validate it,
+    converting a :class:`pydantic.ValidationError` into
     :class:`~dark_factory.artifacts.ArtifactSchemaError` naming the filename
     and the underlying message. Files not in :data:`MACHINE_ARTIFACT_MODELS`
     (Markdown documentation) get a reference row with no schema validation --
@@ -82,7 +100,11 @@ def collect_role_artifacts(
                 f"matching artifact"
             )
 
-        text = read_artifact_text(root, ref.path)
+        text = str(
+            tool_registry.invoke(
+                role, "artifacts.read", granted, root=root, relative_path=ref.path
+            )
+        )
 
         if filename in MACHINE_ARTIFACT_MODELS:
             model = MACHINE_ARTIFACT_MODELS[filename]

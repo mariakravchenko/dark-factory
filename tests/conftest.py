@@ -388,12 +388,29 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
         "ARCHITECTURE": "[]",
         "DEVELOPMENT": '["src/**"]',
     }
+    # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+    # .dark-factory/roles/*.yaml `tools:` grants exactly -- artifact reads
+    # are now capability-gated (D-03), so an empty grant list here would
+    # fail every role with a declared `outputs:` entry. QA's list is the
+    # post-D-16 grant set plan 06-01 Task 2 writes into the shipped file.
+    _tools = {
+        "BA": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+        "ARCHITECTURE": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+        "DEVELOPMENT": (
+            "[repo.read, repo.search, repo.write, repo.write_tests, "
+            "shell.execute, artifacts.read, artifacts.write]"
+        ),
+        "QA": (
+            "[repo.read, repo.search, repo.write_tests, shell.execute, "
+            "artifacts.read, artifacts.write]"
+        ),
+    }
     for role in ("BA", "QA", "ARCHITECTURE", "DEVELOPMENT"):
         (root / f".dark-factory/roles/{role}.yaml").write_text(
             f"name: {role}\n"
             "worker: fake\n"
             f"instructions: ../instructions/{role.lower()}.md\n"
-            "tools: []\n"
+            f"tools: {_tools[role]}\n"
             f"permissions:\n  write_scope: {_write_scope[role]}\n"
             # Phase 5 (GIT-01): mirrors the shipped .dark-factory/roles/*.yaml
             # `before:` value -- see src/dark_factory/actions/builtins.py's

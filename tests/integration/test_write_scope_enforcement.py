@@ -192,7 +192,12 @@ def _development_with_declared_output(config_root_factory: Callable[..., Path]) 
         "name: DEVELOPMENT\n"
         "worker: fake\n"
         "instructions: ../instructions/development.md\n"
-        "tools: []\n"
+        # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+        # DEVELOPMENT.yaml grant set -- artifact reads are now
+        # capability-gated (D-03), so a declared `outputs:` entry needs
+        # `artifacts.read`.
+        "tools: [repo.read, repo.search, repo.write, repo.write_tests, "
+        "shell.execute, artifacts.read, artifacts.write]\n"
         'permissions:\n  write_scope: ["src/**"]\n'
         "before: [ensure_clean_worktree]\n"
         "after: []\n"

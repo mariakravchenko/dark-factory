@@ -183,12 +183,28 @@ def _write_four_role_tree(config_root_factory: Callable[..., Path]) -> Path:
             "[test_report.json, verdict.json]",
         ),
     }
+    # Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+    # .dark-factory/roles/*.yaml `tools:` grants exactly -- artifact reads
+    # are now capability-gated (D-03), so every role above (all four
+    # declare non-empty `outputs:`) needs `artifacts.read`.
+    tools = {
+        "BA": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+        "ARCHITECTURE": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+        "DEVELOPMENT": (
+            "[repo.read, repo.search, repo.write, repo.write_tests, "
+            "shell.execute, artifacts.read, artifacts.write]"
+        ),
+        "QA": (
+            "[repo.read, repo.search, repo.write_tests, shell.execute, "
+            "artifacts.read, artifacts.write]"
+        ),
+    }
     for role, (inputs, outputs) in definitions.items():
         (root / f".dark-factory/roles/{role}.yaml").write_text(
             f"name: {role}\n"
             "worker: fake\n"
             f"instructions: ../instructions/{role.lower()}.md\n"
-            "tools: []\n"
+            f"tools: {tools[role]}\n"
             "permissions:\n  write_scope: []\n"
             "before: [prepare_role_context]\n"
             "after: [store_role_artifacts]\n"

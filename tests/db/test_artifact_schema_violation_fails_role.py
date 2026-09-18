@@ -104,6 +104,24 @@ def cleanup_runs(engine: Engine) -> Iterator[list[Any]]:
             conn.execute(sa.delete(Run).where(Run.id.in_(ids)))
 
 
+# Phase 6 (plan 06-01, TOOL-03, A-06-02): mirrors the shipped
+# .dark-factory/roles/*.yaml `tools:` grants exactly -- artifact reads are
+# now capability-gated (D-03), so every scenario's declared `outputs:`
+# needs `artifacts.read`. Only BA and QA are exercised in this module.
+_TOOLS_BY_ROLE = {
+    "BA": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+    "ARCHITECTURE": "[repo.read, repo.search, artifacts.read, artifacts.write]",
+    "DEVELOPMENT": (
+        "[repo.read, repo.search, repo.write, repo.write_tests, "
+        "shell.execute, artifacts.read, artifacts.write]"
+    ),
+    "QA": (
+        "[repo.read, repo.search, repo.write_tests, shell.execute, "
+        "artifacts.read, artifacts.write]"
+    ),
+}
+
+
 def _single_role_tree(
     config_root_factory: Callable[..., Path], role: str, *, outputs: str
 ) -> Path:
@@ -116,7 +134,7 @@ def _single_role_tree(
         f"name: {role}\n"
         "worker: fake\n"
         f"instructions: ../instructions/{role.lower()}.md\n"
-        "tools: []\n"
+        f"tools: {_TOOLS_BY_ROLE[role]}\n"
         "permissions:\n  write_scope: []\n"
         "before: [prepare_role_context]\n"
         "after: [store_role_artifacts]\n"

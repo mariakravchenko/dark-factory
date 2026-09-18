@@ -9,7 +9,14 @@ recovery commit landing on the run's working branch) with no accompanying
 ``run_events`` row is precisely the gap this project's "durability and
 observability are the same requirement" core value forbids, so declaring this
 member does not violate the not-yet-reachable-types rule below -- it is
-reachable, and reached, by this phase's own code. The remainder listed in
+reachable, and reached, by this phase's own code. Phase 6 adds exactly one
+more -- CAPABILITY_DENIED (D-07) -- the capability-denial audit tie
+``orchestrator/runner.py`` genuinely writes: a role whose invocation was
+denied by ``ToolRegistry.invoke()`` (T-06-05) must leave a first-class,
+auditable fact behind, not just the ``ROLE_FAILED`` / ``RUN_FAILED`` pair a
+denial already produces -- this member is emitted *in addition to* those
+two, never instead of them (D-08), so no existing observability consumer
+needs a new branch to recognise a failed run. The remainder listed in
 PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED, QUALITY_GATE_FAILED/PASSED,
 PUBLISH_STARTED, PR_CREATED -- still arrive in Phase 12. A member present in the
 enum but never written is a false signal in the audit surface, so the
@@ -40,3 +47,6 @@ class EventType(StrEnum):
 
     # Phase 5 -- the WIP-recovery audit tie (A-05-06).
     WIP_COMMIT_CREATED = "WIP_COMMIT_CREATED"
+
+    # Phase 6 -- the capability-denial audit tie (D-07, D-08).
+    CAPABILITY_DENIED = "CAPABILITY_DENIED"
