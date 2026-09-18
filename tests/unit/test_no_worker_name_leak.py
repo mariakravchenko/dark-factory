@@ -14,6 +14,16 @@ pytestmark = pytest.mark.unit
 
 _SRC_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src" / "dark_factory"
 _EXEMPT_TOP_LEVEL = {"workers", "config"}
+# Phase 6 (plan 06-01, D-02): `tools/native.py` is the per-worker-runtime
+# native-tool translation *table* -- a design contract Phase 7+ adapters
+# implement against, with no runtime consumer this phase
+# (`tests/unit/test_native_tool_contract.py` proves that inertness
+# structurally). Its whole job is naming `claude_code`/`copilot`/`hermes` as
+# translation-table keys, which is data about a worker, exactly like
+# `config/`'s already-exempt `worker: fake` YAML values -- never a per-worker
+# branch in orchestrator "core" code, which is what this guard actually
+# protects against.
+_EXEMPT_FILES = {_SRC_ROOT / "tools" / "native.py"}
 _FORBIDDEN_RUNTIME_NAMES = ("claude", "copilot", "hermes")
 
 
@@ -38,6 +48,8 @@ def _strip_claude_md_filename(line: str) -> str:
 def _scanned_files() -> list[pathlib.Path]:
     files: list[pathlib.Path] = []
     for path in sorted(_SRC_ROOT.rglob("*.py")):
+        if path in _EXEMPT_FILES:
+            continue
         relative = path.relative_to(_SRC_ROOT)
         if relative.parts and relative.parts[0] in _EXEMPT_TOP_LEVEL:
             continue

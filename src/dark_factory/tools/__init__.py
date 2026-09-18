@@ -38,7 +38,9 @@ exist in this module's namespace by the time that submodule import runs.
 from __future__ import annotations
 
 __all__ = [
+    "NATIVE_TOOL_CONTRACT",
     "CapabilityDeniedError",
+    "NativeToolGrant",
     "ToolError",
     "ToolRegistry",
     "UnknownCapabilityError",
@@ -80,7 +82,8 @@ class UnknownCapabilityError(ToolError, KeyError):
     :class:`~dark_factory.actions.registry.UnknownActionError`."""
 
 
-# Import the submodule after the error hierarchy is declared, so its own
+# Import the submodules after the error hierarchy is declared, so their own
 # ``from dark_factory.tools import <ErrorClass>`` succeeds against this
 # module's already-populated namespace (see the module docstring).
+from dark_factory.tools.native import NATIVE_TOOL_CONTRACT, NativeToolGrant
 from dark_factory.tools.registry import ToolRegistry, default_registry
