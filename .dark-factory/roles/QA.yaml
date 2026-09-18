@@ -7,7 +7,21 @@ name: QA
 worker: fake
 instructions: ../instructions/qa.md
 
-tools: [repo.read, repo.search, artifacts.read, artifacts.write]
+# Phase 6 (plan 06-01, D-16): a deliberate permission expansion resolving
+# the discrepancy 06-RESEARCH.md Open Question 1 surfaced -- ROADMAP Phase 6
+# SC1 states verbatim that QA can write tests and shell but cannot publish,
+# and QA already carried write_scope: ["tests/**"] below with no capability
+# behind it. `repo.write` remains absent: QA writes tests, never production
+# source, and that absence is the "cannot publish" half of SC1.
+tools:
+  [
+    repo.read,
+    repo.search,
+    repo.write_tests,
+    shell.execute,
+    artifacts.read,
+    artifacts.write,
+  ]
 # write_scope (Phase 5, ROLE-05) is now enforced: any changed path outside
 # these patterns is reverted and fails the role (D-12, D-13). QA may write
 # only under tests/ -- fixtures and test utilities, never production code.

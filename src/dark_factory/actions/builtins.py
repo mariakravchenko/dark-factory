@@ -15,6 +15,13 @@ which this package's actions are forbidden to do. The shipped role YAMLs
 opts into. ``ensure_clean_worktree`` became real in Phase 5 (GIT-01, D-05,
 D-06, D-08); ``collect_diff`` became real in plan 05-03 (D-10) -- only
 ``collect_test_results`` still waits on a later phase (Phase 9, GATE-04).
+
+Phase 6 (plan 06-01, TOOL-03): artifact-tier capability grants are checked
+inside ``collect_role_artifacts`` itself, at the same unconditional
+post-``ROLE_COMPLETED`` call site -- never here. A role-configurable
+``after:`` hook is opt-in, so a permission check hosted inside one is a
+check a role's own config could omit; deny-by-default that a role's config
+can switch off is not deny-by-default.
 """
 
 from __future__ import annotations
@@ -115,7 +122,14 @@ def store_role_artifacts(ctx: ActionContext) -> None:
     call after every ``ROLE_COMPLETED`` signal, not a hook a role's
     ``after:`` list opts into -- an action may not write the mutation-path
     state that call produces. Kept only because a role YAML predating this
-    fix may still reference the name; no shipped role lists it anymore."""
+    fix may still reference the name; no shipped role lists it anymore.
+
+    Phase 6 (plan 06-01, TOOL-03): this is also where the artifact-tier
+    capability grant (``artifacts.read``) is checked, via
+    ``collect_role_artifacts``'s own ``tool_registry.invoke(...)`` call --
+    deliberately not here, for the identical reason: an ``after:`` hook is
+    opt-in per role, and a permission check a role's own config can omit by
+    dropping the hook name is not deny-by-default."""
     return None
 
 

@@ -31,6 +31,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from dark_factory.artifacts.paths import resolve_under_run_root
 from dark_factory.artifacts.store import read_artifact_text, write_artifact_text
 from dark_factory.tools import CapabilityDeniedError, UnknownCapabilityError
 
@@ -110,16 +111,97 @@ def _artifacts_write(
     return write_artifact_text(root, role, filename, text)
 
 
+def _repo_read(*, worktree: Path, relative_path: str) -> str:
+    """Read ``relative_path`` under ``worktree`` as UTF-8 text (D-04).
+
+    Resolves through :func:`~dark_factory.artifacts.paths.resolve_under_run_root`
+    first -- the exact same containment guard the artifact-tier capabilities
+    reuse (that function is root-agnostic: it only proves the resolved
+    candidate stays inside whatever root it is handed), so a resolved path
+    outside ``worktree`` raises :class:`~dark_factory.artifacts.ArtifactPathError`
+    before any file is opened (threat T-06-07). The grant check already ran
+    in :meth:`ToolRegistry.invoke`; this implementation must never re-check
+    or second-guess it.
+    """
+    path = resolve_under_run_root(worktree, relative_path)
+    return path.read_text("utf-8")
+
+
+def _repo_search(
+    *, worktree: Path, pattern: str, path_prefix: str = ""
+) -> list[tuple[str, int, str]]:
+    """A literal (never regex) scan of every file under
+    ``<worktree>/<path_prefix>`` for lines containing ``pattern``, returning
+    ``(relative_path, lineno, line)`` tuples (D-04).
+
+    Never shells out -- pure Python file iteration -- and never accepts a
+    caller-supplied regular expression, so a pathological pattern cannot
+    become a denial-of-service. ``path_prefix`` (default ``""``, meaning the
+    whole worktree) resolves through the same containment guard
+    :func:`_repo_read` uses (threat T-06-07). Files that are not valid UTF-8
+    text are skipped, not raised on -- a binary file in the tree is not a
+    capability-layer failure.
+    """
+    scan_root = resolve_under_run_root(worktree, path_prefix)
+    resolved_worktree = worktree.resolve()
+    matches: list[tuple[str, int, str]] = []
+    for file_path in sorted(scan_root.rglob("*")):
+        if not file_path.is_file():
+            continue
+        try:
+            text = file_path.read_text("utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        relative = str(file_path.relative_to(resolved_worktree))
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if pattern in line:
+                matches.append((relative, lineno, line))
+    return matches
+
+
+def _repo_write(*, worktree: Path, relative_path: str, text: str) -> str:
+    """Write ``text`` to ``relative_path`` under ``worktree``, returning the
+    worktree-relative path written (D-04).
+
+    Resolves through the same containment guard :func:`_repo_read` uses
+    (threat T-06-09). ``repo.write`` and ``repo.write_tests`` are registered
+    against this identical implementation -- they differ only in the
+    *grant* a role needs to reach it, never in mechanism.
+    :func:`~dark_factory.git.scope.enforce_write_scope` (Phase 5, ROLE-05)
+    still decides *where* a granted write may land, enforced post-hoc by
+    ``orchestrator/runner.py`` after the worker call returns -- this
+    implementation neither consults nor duplicates that check.
+    """
+    path = resolve_under_run_root(worktree, relative_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return str(path.relative_to(worktree.resolve()))
+
+
+def _shell_execute_not_yet_implemented(**_kwargs: object) -> object:
+    """A registered-but-inert placeholder, mirroring the
+    ``_NotYetImplementedWorker`` precedent in ``workers/registry.py``: its
+    name resolves so ``load_effective_config`` validates the shipped
+    QA/DEVELOPMENT roles' ``shell.execute`` entry, but calling it always
+    raises. ``shell.execute``'s real body cannot exist without the
+    credential-boundary env builder (D-11) -- plan 06-02 replaces this
+    placeholder with the real implementation.
+    """
+    raise NotImplementedError("shell.execute capability lands in plan 06-02")
+
+
 default_registry = ToolRegistry()
 # TOOL-02 extension seam: a new capability is added with one
 # ``default_registry.register(name, fn)`` call here -- zero change to the
 # orchestrator, the pipeline, or any role executor.
-#
-# ``repo.read`` / ``repo.search`` / ``repo.write`` / ``repo.write_tests`` and
-# ``shell.execute`` are deliberately NOT registered by this task (plan
-# 06-01, Task 1): ``shell.execute``'s body cannot exist without the
-# credential-boundary builder (D-11), and the ``repo.*`` implementations are
-# kept out so this tracer plan stays thin. Plan 06-01 Task 2 registers all
-# five.
 default_registry.register("artifacts.read", _artifacts_read)
 default_registry.register("artifacts.write", _artifacts_write)
+default_registry.register("repo.read", _repo_read)
+default_registry.register("repo.search", _repo_search)
+default_registry.register("repo.write", _repo_write)
+default_registry.register("repo.write_tests", _repo_write)
+# ``shell.execute`` resolves for config-load validation (the shipped
+# QA/DEVELOPMENT roles both name it) but is not yet callable -- see
+# ``_shell_execute_not_yet_implemented``'s docstring. Plan 06-02 replaces
+# this registration together with ``build_worker_env`` (D-11).
+default_registry.register("shell.execute", _shell_execute_not_yet_implemented)

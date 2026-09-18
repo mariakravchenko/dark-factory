@@ -4,8 +4,9 @@ name: ARCHITECTURE
 worker: fake
 instructions: ../instructions/architecture.md
 
-# tools are stored in the snapshot this phase, not enforced (tool grants ->
-# Phase 6 TOOL-03).
+# tools (TOOL-03) are enforced on every invocation by
+# ToolRegistry.invoke() (Phase 6, plan 06-01) -- a capability this role
+# tries to use that is not in the list below is denied before it runs.
 tools: [repo.read, repo.search, artifacts.read, artifacts.write]
 # write_scope (Phase 5, ROLE-05) is now enforced. This empty list is the
 # INTENDED zero-tolerance value for a read-only role (D-14), not a

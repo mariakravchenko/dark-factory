@@ -15,7 +15,10 @@ Security posture (03-RESEARCH § "Security Domain"):
   repo-controlled file is an RCE class).
 * ``worker`` and before/after ``action`` names are validated by *membership* on
   the 03-01 allowlist registries (``name in registry``), never ``registry.get``
-  / ``getattr`` / ``importlib``.
+  / ``getattr`` / ``importlib``. Capability names in a role's ``tools:`` list
+  (Phase 6, TOOL-01/TOOL-03) are validated the identical way, against the
+  ``ToolRegistry`` -- a repo-controlled name must never become an arbitrary
+  lookup surface, for the same reason.
 * A role's ``instructions`` path is resolved relative to its role YAML's own
   directory, confirmed to be a file *under the repo root* (no ``..`` escape), and
   its inlined text is capped at 64 KiB so the snapshot row stays small.
@@ -36,6 +39,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from dark_factory.actions import default_registry as _action_default_registry
 from dark_factory.config.repo_config import RepoConfig
 from dark_factory.git.scope import DEFAULT_WRITE_SCOPE, validate_write_scope_patterns
+from dark_factory.tools.registry import default_registry as _tool_default_registry
 from dark_factory.workers.registry import default_registry as _worker_default_registry
 
 if TYPE_CHECKING:
@@ -113,10 +117,17 @@ def load_effective_config(
     *,
     worker_registry: Container[str] = _worker_default_registry,
     action_registry: Container[str] = _action_default_registry,
+    tool_registry: Container[str] = _tool_default_registry,
 ) -> dict[str, Any]:
     """Read + validate the repo config under ``root`` into a snapshot ``dict``.
 
     Raises :class:`ConfigError` on any problem; opens no ``Session``.
+
+    ``tool_registry`` (Phase 6, TOOL-01/TOOL-03) defaults to
+    :data:`~dark_factory.tools.default_registry`, mirroring
+    ``worker_registry`` / ``action_registry``: every name in a role's
+    ``tools:`` list must resolve on it, checked by membership
+    (``name in tool_registry``), never by invocation.
     """
     root = root.resolve()
     repo_raw = _safe_load_mapping(root / ".dark-factory.yaml")
@@ -142,6 +153,9 @@ def load_effective_config(
         for hook in (*rd.before, *rd.after):
             if hook not in action_registry:
                 raise ConfigError(f"{role_path}: unknown action {hook!r}")
+        for capability in rd.tools:
+            if capability not in tool_registry:
+                raise ConfigError(f"{role_path}: unknown capability {capability!r}")
         try:
             validate_write_scope_patterns(
                 rd.permissions.write_scope, source=str(role_path)
