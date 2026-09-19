@@ -48,9 +48,9 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Tools & Permissions
 
-- [ ] **TOOL-01**: A `ToolRegistry` provides the capability layer (`repo.read/search/write/write_tests`, `shell.execute`, `git.status/diff/history`, `github.issue.read`, `github.comments.read`, `artifacts.read/write`)
-- [ ] **TOOL-02**: New tools can be added to the registry without modifying every role executor
-- [ ] **TOOL-03**: Each role receives only its explicitly configured tools; grants are deny-by-default (BA/Architect read-only on code; Developer write + shell; QA write_tests + shell, no publish)
+- [x] **TOOL-01**: A `ToolRegistry` provides the capability layer (`repo.read/search/write/write_tests`, `shell.execute`, `git.status/diff/history`, `github.issue.read`, `github.comments.read`, `artifacts.read/write`)
+- [x] **TOOL-02**: New tools can be added to the registry without modifying every role executor
+- [x] **TOOL-03**: Each role receives only its explicitly configured tools; grants are deny-by-default (BA/Architect read-only on code; Developer write + shell; QA write_tests + shell, no publish)
 - [ ] **TOOL-04**: A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker
 - [ ] **TOOL-05**: MCP is supported as one optional transport adapter for exposing tools to compatible workers; the orchestrator has no internal dependency on MCP
 
@@ -213,9 +213,9 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | WORK-08 | Phase 1 | Complete |
 | WORK-09 | Phase 8 | Pending |
 | WORK-10 | Phase 1 | Complete |
-| TOOL-01 | Phase 6 | Pending |
-| TOOL-02 | Phase 6 | Pending |
-| TOOL-03 | Phase 6 | Pending |
+| TOOL-01 | Phase 6 | Complete |
+| TOOL-02 | Phase 6 | Complete |
+| TOOL-03 | Phase 6 | Complete |
 | TOOL-04 | Phase 6 | Pending |
 | TOOL-05 | Phase 6 | Pending |
 | CTX-01 | Phase 4 | Complete |
