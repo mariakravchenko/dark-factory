@@ -25,11 +25,11 @@ import pytest
 
 pytest.importorskip("mcp")
 
-from mcp import Client  # noqa: E402
+from mcp import Client
 
-from dark_factory.tools import CapabilityDeniedError  # noqa: E402
-from dark_factory.tools.mcp_transport import build_mcp_server  # noqa: E402
-from dark_factory.tools.registry import ToolRegistry, default_registry  # noqa: E402
+from dark_factory.tools import CapabilityDeniedError
+from dark_factory.tools.mcp_transport import build_mcp_server
+from dark_factory.tools.registry import ToolRegistry, default_registry
 
 pytestmark = pytest.mark.unit
 
