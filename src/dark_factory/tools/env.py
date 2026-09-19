@@ -20,6 +20,7 @@ check cannot prove what a genuinely separate process actually receives.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess
@@ -214,7 +215,9 @@ def shell_execute(
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        # already exited between the timeout and the kill -> nothing to do
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         stdout, stderr = proc.communicate()
         return ShellResult(
             exit_code=None, stdout=stdout, stderr=stderr, timed_out=True

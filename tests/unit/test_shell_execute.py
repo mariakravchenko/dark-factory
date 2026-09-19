@@ -14,6 +14,7 @@ from pydantic import SecretStr
 
 from dark_factory.config.loader import load_effective_config
 from dark_factory.tools import CapabilityDeniedError
+from dark_factory.tools import env as env_module
 from dark_factory.tools.env import InvalidShellCommandError, ShellResult, shell_execute
 from dark_factory.tools.registry import default_registry
 
@@ -121,6 +122,36 @@ def test_a_sleeping_command_exceeding_the_timeout_times_out_and_is_reaped(
     assert result.timed_out is True
     assert result.exit_code is None
     assert elapsed < 10
+
+
+def test_timeout_kill_race_where_the_child_already_exited_does_not_raise(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """WR-01: if the child (or its process group) exits on its own in the
+    window between ``TimeoutExpired`` and ``os.killpg``, ``os.killpg`` raises
+    ``ProcessLookupError`` -- ``shell_execute`` must treat that as
+    "already exited" and still return a typed ``timed_out=True`` result,
+    never let the bare ``ProcessLookupError`` propagate.
+
+    ``os.killpg`` is stubbed to raise (simulating the race) rather than
+    actually kill the child, so the child is given a short-lived command
+    (``sleep 2`` past a ``timeout=1``) that exits on its own shortly after,
+    keeping the test process-clean without needing the real pgid."""
+
+    def _raise_process_lookup_error(pgid: int, sig: int) -> None:
+        raise ProcessLookupError("no such process")
+
+    monkeypatch.setattr(env_module.os, "killpg", _raise_process_lookup_error)
+
+    result = shell_execute(
+        command=[sys.executable, "-c", "import time; time.sleep(2)"],
+        cwd=tmp_path,
+        role="DEVELOPMENT",
+        timeout=1,
+    )
+
+    assert result.timed_out is True
+    assert result.exit_code is None
 
 
 def test_denied_by_default_through_the_registry_for_ba_and_granted_for_development(
