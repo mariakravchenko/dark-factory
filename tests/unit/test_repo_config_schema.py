@@ -14,7 +14,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from dark_factory.config.loader import RoleDefinition, _safe_load_mapping
+from dark_factory.config.loader import (
+    ConfigError,
+    RoleDefinition,
+    _safe_load_mapping,
+    load_effective_config,
+)
 from dark_factory.config.repo_config import RepoConfig
 
 pytestmark = pytest.mark.unit
@@ -91,6 +96,69 @@ def _string_constants(tree: ast.AST) -> set[str]:
         for node in ast.walk(tree)
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
+
+
+_MINIMAL_ROLE_YAML = (
+    "name: BA\n"
+    "worker: fake\n"
+    "instructions: ba.md\n"
+    "tools: []\n"
+    "permissions:\n  write_scope: []\n"
+    "before: []\n"
+    "after: []\n"
+    "inputs: []\n"
+    "outputs: []\n"
+    "examples: []\n"
+)
+
+
+def _minimal_repo_yaml(roles_dir: str) -> str:
+    return (
+        "version: 1\n"
+        "repository:\n  base_branch: main\n"
+        "workflow:\n  roles: [BA]\n"
+        f"roles_dir: {roles_dir}\n"
+        "quality_gate:\n  commands: []\n"
+        "retry:\n"
+        "  qa_developer_max_iterations: 3\n"
+        "  quality_gate_max_iterations: 2\n"
+        "publishing:\n  create_pr: true\n"
+    )
+
+
+def test_roles_dir_escaping_the_repo_root_is_rejected(tmp_path: Path) -> None:
+    """CR-01: a ``roles_dir`` that resolves outside ``root`` must raise
+    ``ConfigError`` before any role YAML outside the repo is ever read --
+    mirroring the containment check already applied to ``instructions:``."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "BA.yaml").write_text(_MINIMAL_ROLE_YAML, encoding="utf-8")
+    (outside / "ba.md").write_text("# BA\n", encoding="utf-8")
+    (root / ".dark-factory.yaml").write_text(
+        _minimal_repo_yaml("../outside"), encoding="utf-8"
+    )
+
+    with pytest.raises(ConfigError, match="roles_dir escapes the repo root"):
+        load_effective_config(root)
+
+
+def test_roles_dir_within_the_repo_root_still_loads(tmp_path: Path) -> None:
+    """Sanity check: a well-behaved ``roles_dir`` under the repo root is
+    unaffected by the CR-01 containment check."""
+    root = tmp_path / "repo"
+    roles_dir = root / ".dark-factory/roles"
+    roles_dir.mkdir(parents=True)
+    (roles_dir / "BA.yaml").write_text(_MINIMAL_ROLE_YAML, encoding="utf-8")
+    (roles_dir / "ba.md").write_text("# BA\n", encoding="utf-8")
+    (root / ".dark-factory.yaml").write_text(
+        _minimal_repo_yaml(".dark-factory/roles"), encoding="utf-8"
+    )
+
+    snapshot = load_effective_config(root)
+
+    assert snapshot["roles"][0]["name"] == "BA"
 
 
 def test_loader_only_ever_calls_yaml_safe_load() -> None:

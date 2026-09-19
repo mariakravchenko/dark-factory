@@ -136,10 +136,18 @@ def load_effective_config(
     except ValidationError as exc:
         raise ConfigError(f".dark-factory.yaml: {exc}") from exc
 
-    roles_dir = root / repo.roles_dir
+    roles_dir = (root / repo.roles_dir).resolve()
+    if not roles_dir.is_relative_to(root):
+        raise ConfigError(
+            f".dark-factory.yaml: roles_dir escapes the repo root: {repo.roles_dir!r}"
+        )
     resolved_roles: list[dict[str, Any]] = []
     for role_name in repo.workflow.roles:
-        role_path = roles_dir / f"{role_name}.yaml"
+        role_path = (roles_dir / f"{role_name}.yaml").resolve()
+        if not role_path.is_relative_to(root):
+            raise ConfigError(
+                f"role path escapes the repo root: {role_path} (role {role_name!r})"
+            )
         try:
             rd = RoleDefinition.model_validate(_safe_load_mapping(role_path))
         except ValidationError as exc:
