@@ -34,6 +34,7 @@ from pathlib import Path
 from dark_factory.artifacts.paths import resolve_under_run_root
 from dark_factory.artifacts.store import read_artifact_text, write_artifact_text
 from dark_factory.tools import CapabilityDeniedError, UnknownCapabilityError
+from dark_factory.tools.env import shell_execute
 
 __all__ = ["ToolRegistry", "default_registry"]
 
@@ -178,18 +179,6 @@ def _repo_write(*, worktree: Path, relative_path: str, text: str) -> str:
     return str(path.relative_to(worktree.resolve()))
 
 
-def _shell_execute_not_yet_implemented(**_kwargs: object) -> object:
-    """A registered-but-inert placeholder, mirroring the
-    ``_NotYetImplementedWorker`` precedent in ``workers/registry.py``: its
-    name resolves so ``load_effective_config`` validates the shipped
-    QA/DEVELOPMENT roles' ``shell.execute`` entry, but calling it always
-    raises. ``shell.execute``'s real body cannot exist without the
-    credential-boundary env builder (D-11) -- plan 06-02 replaces this
-    placeholder with the real implementation.
-    """
-    raise NotImplementedError("shell.execute capability lands in plan 06-02")
-
-
 default_registry = ToolRegistry()
 # TOOL-02 extension seam: a new capability is added with one
 # ``default_registry.register(name, fn)`` call here -- zero change to the
@@ -200,8 +189,10 @@ default_registry.register("repo.read", _repo_read)
 default_registry.register("repo.search", _repo_search)
 default_registry.register("repo.write", _repo_write)
 default_registry.register("repo.write_tests", _repo_write)
-# ``shell.execute`` resolves for config-load validation (the shipped
-# QA/DEVELOPMENT roles both name it) but is not yet callable -- see
-# ``_shell_execute_not_yet_implemented``'s docstring. Plan 06-02 replaces
-# this registration together with ``build_worker_env`` (D-11).
-default_registry.register("shell.execute", _shell_execute_not_yet_implemented)
+# ``shell.execute`` is now real (Phase 6, plan 06-02, D-11): it spawns its
+# command through ``build_worker_env``'s credential-bounded environment. No
+# shipped pipeline role invokes it yet -- DEVELOPMENT and QA are still
+# backed by ``FakeWorker`` -- so today it is exercised only by direct tests
+# (``tests/unit/test_shell_execute.py``) and, once wired, by the MCP
+# transport (plan 06-03).
+default_registry.register("shell.execute", shell_execute)

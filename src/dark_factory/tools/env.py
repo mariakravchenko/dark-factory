@@ -21,12 +21,23 @@ check cannot prove what a genuinely separate process actually receives.
 from __future__ import annotations
 
 import os
+import signal
+import subprocess
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import BaseModel, ConfigDict, SecretStr
 
-__all__ = ["WORKER_ENV_ALLOWLIST", "build_worker_env"]
+from dark_factory.tools import ToolError
+
+__all__ = [
+    "WORKER_ENV_ALLOWLIST",
+    "InvalidShellCommandError",
+    "ShellResult",
+    "build_worker_env",
+    "shell_execute",
+]
 
 # The names a worker subprocess genuinely needs to find its binary, resolve
 # TLS roots, and use a temp directory -- and nothing else. Derived from
@@ -105,3 +116,109 @@ def build_worker_env(
         env[env_var_name] = value.get_secret_value()
 
     return env
+
+
+class InvalidShellCommandError(ToolError, TypeError):
+    """Raised by :func:`shell_execute` when ``command`` is a bare string (or
+    any non-sequence, or an empty sequence, or a sequence containing a
+    non-``str`` element) rather than a non-empty sequence of ``str``.
+
+    A bare string would have to be split or handed to a shell to run at
+    all -- accepting one here would silently reopen exactly the
+    command-injection surface (threat T-06-02) this capability exists to
+    close. Raised before anything is spawned.
+    """
+
+
+class ShellResult(BaseModel):
+    """The frozen return shape of a :func:`shell_execute` invocation (D-11).
+
+    ``exit_code`` is ``None`` exactly when ``timed_out`` is true -- a
+    command that never finished has no exit code to report. A non-zero
+    ``exit_code`` is never raised as an exception: a failing command is a
+    *result* a caller inspects, the same distinction
+    ``dark_factory.git.client.run_git(check=False)`` already draws.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    exit_code: int | None
+    stdout: str
+    stderr: str
+    timed_out: bool
+
+
+def shell_execute(
+    *,
+    command: Sequence[str],
+    cwd: Path,
+    role: str,
+    timeout: int = 120,
+    env_var_name: str | None = None,
+    value: SecretStr | None = None,
+) -> ShellResult:
+    """Run ``command`` inside ``cwd`` with :func:`build_worker_env`'s
+    credential-bounded environment and an enforced ``timeout`` (D-11).
+
+    ``command`` crosses to :class:`subprocess.Popen` as an explicit
+    argument sequence (``list(command)``), never joined into a string and
+    never run through a shell -- a single argument containing a pipe, a
+    semicolon or a redirection character reaches the child as inert data,
+    not as shell syntax. A bare string, an empty sequence, or a sequence
+    with a non-``str`` element raises :class:`InvalidShellCommandError`
+    before anything is spawned, rather than being split or interpreted.
+
+    ``cwd`` is always an explicit :class:`~pathlib.Path` supplied by the
+    caller; this function never derives a working directory from
+    ``Path.cwd()``.
+
+    This function performs no permission decision of its own. The single
+    place a role's ``tools:`` entry is checked is
+    ``ToolRegistry.invoke()`` (threat T-06-14) -- a second check here would
+    make it ambiguous which one is authoritative, so this function must
+    never add one; invoking it directly, bypassing the registry, simply
+    runs the command.
+
+    The child is spawned with ``start_new_session=True`` so it heads its
+    own process group; on :class:`subprocess.TimeoutExpired` the whole
+    group is terminated via ``os.killpg(os.getpgid(proc.pid),
+    signal.SIGKILL)`` rather than only the immediate child, so a
+    timed-out command cannot leave a grandchild running (threat T-06-12).
+    The result in that case carries ``timed_out=True``, ``exit_code=None``,
+    and whatever partial output had already been captured -- never an
+    unbounded wait and never a swallowed timeout.
+    """
+    if isinstance(command, str) or not isinstance(command, Sequence):
+        raise InvalidShellCommandError(
+            f"command must be a non-empty sequence of str, not "
+            f"{type(command).__name__!r} (never a bare string -- it would "
+            f"have to be split or shell-interpreted to run at all)"
+        )
+    command_list = list(command)
+    if not command_list or not all(isinstance(part, str) for part in command_list):
+        raise InvalidShellCommandError(
+            "command must be a non-empty sequence of str"
+        )
+
+    env = build_worker_env(role, env_var_name=env_var_name, value=value)
+    proc = subprocess.Popen(
+        command_list,
+        cwd=str(cwd),
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        stdout, stderr = proc.communicate()
+        return ShellResult(
+            exit_code=None, stdout=stdout, stderr=stderr, timed_out=True
+        )
+    return ShellResult(
+        exit_code=proc.returncode, stdout=stdout, stderr=stderr, timed_out=False
+    )

@@ -26,6 +26,10 @@ Error hierarchy, in the ``ConfigError`` / ``UnknownWorkerError`` register:
   :class:`~dark_factory.workers.registry.UnknownWorkerError` /
   :class:`~dark_factory.actions.registry.UnknownActionError` precedent for a
   lookup miss.
+* :class:`InvalidShellCommandError` -- raised by
+  :func:`~dark_factory.tools.env.shell_execute` (Phase 6, plan 06-02, D-11)
+  when ``command`` is not a non-empty sequence of ``str`` -- a bare string
+  would have to be split or shell-interpreted to run at all.
 
 Declaring the whole hierarchy in one place, before importing the submodule
 that raises it, keeps this package's error surface legible from the start
@@ -41,12 +45,15 @@ __all__ = [
     "NATIVE_TOOL_CONTRACT",
     "WORKER_ENV_ALLOWLIST",
     "CapabilityDeniedError",
+    "InvalidShellCommandError",
     "NativeToolGrant",
+    "ShellResult",
     "ToolError",
     "ToolRegistry",
     "UnknownCapabilityError",
     "build_worker_env",
     "default_registry",
+    "shell_execute",
 ]
 
 
@@ -89,6 +96,12 @@ class UnknownCapabilityError(ToolError, KeyError):
 # module's already-populated namespace (see the module docstring). ``env``
 # is imported before ``registry`` because ``registry`` (plan 06-02, D-11)
 # binds ``shell.execute`` to ``env.shell_execute``.
-from dark_factory.tools.env import WORKER_ENV_ALLOWLIST, build_worker_env
+from dark_factory.tools.env import (
+    WORKER_ENV_ALLOWLIST,
+    InvalidShellCommandError,
+    ShellResult,
+    build_worker_env,
+    shell_execute,
+)
 from dark_factory.tools.native import NATIVE_TOOL_CONTRACT, NativeToolGrant
 from dark_factory.tools.registry import ToolRegistry, default_registry
