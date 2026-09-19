@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 06
 current_phase_name: Tools, Permissions & the Credential Boundary
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-19T04:12:15.710Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-19T04:26:37.167Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 06 execution started
-state_head: 96a7913790c1846aed4f15dd1a13cb6a6d119ea0
+state_head: 09a61d605f19d3abd6b654f57c3552d2f24513d6
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 35
-  completed_plans: 32
+  completed_plans: 33
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-16)
 ## Current Position
 
 Phase: 06 (Tools, Permissions & the Credential Boundary) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 06 execution started
 
@@ -90,6 +90,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05 P05 | 20min | 2 tasks | 1 files |
 | Phase 05 P06 | 35min | 3 tasks | 3 files |
 | Phase 06 P01 | 13min task-commits + ~57min db-tier verification | 3 tasks | 28 files |
+| Phase 06 P02 | 55min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -174,6 +175,8 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05]: 05-04: write-scope enforcement wired into runner.py after the D-09/D-16 artifact validate/commit/push sequence and before transition(); a violation clears artifact_writes and reuses the existing ROLE_FAILED/RUN_FAILED shape
 - [Phase 05]: [Phase 05]: 05-05: G-05-1 closed as a test-defect fix -- test_an_in_scope_edit_completes_with_no_revert now reads the in-scope edit through read_committed(root, working_branch_name(run_id), ...) instead of the work_dir filesystem D-04 deletes on COMPLETED, plus a companion work_dir-gone assertion; zero production changes, all six SC4 scenarios pass against real PostgreSQL 17
 - [Phase 05]: [Phase 05]: 05-06: G-05-2 closed — CR-02 revert_paths escape-ordering fix now has 7 unit-tier DB-free regression tests (revert_paths direct + enforce_write_scope's own sort), registered under SC4/ROLE-05; Phase 5 acceptance gate green (12 passed) against real PostgreSQL 17
+- [Phase 06]: build_worker_env mirrors git_env(): additive dict comprehension over WORKER_ENV_ALLOWLIST (derived from GIT_ENV_ALLOWLIST + XDG_* entries), never a parent-environment copy/spread/exclusion-filter (D-09, TOOL-04)
+- [Phase 06]: shell.execute (D-11) spawns an explicit argv sequence via subprocess.Popen with build_worker_env()'s environment, start_new_session=True, and process-group kill on timeout; performs no permission check of its own -- ToolRegistry.invoke() stays the single enforcement point
 
 ### Pending Todos
 
@@ -199,6 +202,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T04:12:15.650Z
-Stopped at: Completed 06-01-PLAN.md
+Last session: 2026-09-19T04:26:37.115Z
+Stopped at: Completed 06-02-PLAN.md
 Resume file: None

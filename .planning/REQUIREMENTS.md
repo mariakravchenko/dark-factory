@@ -51,7 +51,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **TOOL-01**: A `ToolRegistry` provides the capability layer (`repo.read/search/write/write_tests`, `shell.execute`, `git.status/diff/history`, `github.issue.read`, `github.comments.read`, `artifacts.read/write`)
 - [x] **TOOL-02**: New tools can be added to the registry without modifying every role executor
 - [x] **TOOL-03**: Each role receives only its explicitly configured tools; grants are deny-by-default (BA/Architect read-only on code; Developer write + shell; QA write_tests + shell, no publish)
-- [ ] **TOOL-04**: A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker
+- [x] **TOOL-04**: A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker
 - [ ] **TOOL-05**: MCP is supported as one optional transport adapter for exposing tools to compatible workers; the orchestrator has no internal dependency on MCP
 
 ### Context Preparation
@@ -138,7 +138,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [ ] **SEC-01**: `DATABASE_URL`, GitHub credentials, and worker credentials never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or test reports
 - [x] **SEC-02**: Secret redaction is applied to persisted event payloads and logs from the first persistence code, not retrofitted
-- [ ] **SEC-03**: A worker subprocess does not inherit the full Dark Factory process environment; it receives only the minimum required for its role
+- [x] **SEC-03**: A worker subprocess does not inherit the full Dark Factory process environment; it receives only the minimum required for its role
 
 ### Quality & Testing
 
@@ -216,7 +216,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | TOOL-01 | Phase 6 | Complete |
 | TOOL-02 | Phase 6 | Complete |
 | TOOL-03 | Phase 6 | Complete |
-| TOOL-04 | Phase 6 | Pending |
+| TOOL-04 | Phase 6 | Complete |
 | TOOL-05 | Phase 6 | Pending |
 | CTX-01 | Phase 4 | Complete |
 | CTX-02 | Phase 4 | Complete |
@@ -270,7 +270,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | OBS-03 | Phase 12 | Pending |
 | SEC-01 | Phase 6 | Pending |
 | SEC-02 | Phase 1 | Complete |
-| SEC-03 | Phase 6 | Pending |
+| SEC-03 | Phase 6 | Complete |
 | QUAL-01 | Phase 11 | Pending |
 | QUAL-02 | Phase 7 | Pending |
 | QUAL-03 | Phase 8 | Pending |
