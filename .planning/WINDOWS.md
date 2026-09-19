@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 0
 fixed_count: 1
-total_count: 6
-last_updated: 2026-09-12T16:09:22.663Z
+total_count: 7
+last_updated: 2026-09-19T05:18:35.949Z
 ---
 
 # Broken Windows Ledger
@@ -21,6 +21,7 @@ last_updated: 2026-09-12T16:09:22.663Z
 | 4 | 02 | deviation | tests/integration/test_heartbeat_slow_step.py |  | SC5 heartbeat proof injects 6s TTL / 2s heartbeat instead of the plan's illustrative 2s / 1s: one renewal round-trip against the remote Neon endpoint is ~1.5s, so 2s/1s leaves no margin; Open Decision 2's TTL/3 ratio (the transferable part) is preserved | open |  | 2026-09-10T06:55:24.115Z |  |
 | 5 | 02 | deviation | tests/integration/test_no_txn_across_worker.py |  | HITL-08 asserts no dark-factory transaction older than 3s (pg_stat_activity xact_start age) rather than a zero raw idle-in-transaction count: a sub-second heartbeat commit round-trip is transiently visible on the high-latency endpoint; the threat is a held-open transaction | open |  | 2026-09-10T06:55:24.225Z |  |
 | 6 | 02 | deviation | tests/db/test_pause_mechanism_generic.py |  | Multi-node pipelines reuse the first node's role_executions row (_run_current_role inserts no RUNNING row for nodes after the first); surfaced building the two-node pause proof, out of scope for 02-06, belongs in Phase 3's config-driven pipeline | fixed |  | 2026-09-10T08:05:27.468Z | 2026-09-12T16:09:22.663Z |
+| 7 | 06 | unrun-verify | tests/unit/test_no_mcp_import_in_core.py |  | Task 3's final <verify> item (full 'pytest -q' with .env sourced) was not run by the executor -- session's secret-read-guard hook blocks sourcing .env. All non-db checks (mypy --strict, ruff, uv lock --check, pytest -m unit -q: 437 passed) were run and are clean. User should run the full suite with .env sourced to confirm no db/integration regressions. | open |  | 2026-09-19T05:18:35.949Z |  |
 
 ````json
 [
@@ -95,6 +96,18 @@ last_updated: 2026-09-12T16:09:22.663Z
     "reason": "",
     "recorded_at": "2026-09-10T08:05:27.468Z",
     "resolved_at": "2026-09-12T16:09:22.663Z"
+  },
+  {
+    "id": 7,
+    "kind": "unrun-verify",
+    "phase": "06",
+    "file": "tests/unit/test_no_mcp_import_in_core.py",
+    "line": null,
+    "description": "Task 3's final <verify> item (full 'pytest -q' with .env sourced) was not run by the executor -- session's secret-read-guard hook blocks sourcing .env. All non-db checks (mypy --strict, ruff, uv lock --check, pytest -m unit -q: 437 passed) were run and are clean. User should run the full suite with .env sourced to confirm no db/integration regressions.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-19T05:18:35.949Z",
+    "resolved_at": null
   }
 ]
 ````
