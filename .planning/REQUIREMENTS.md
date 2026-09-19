@@ -136,7 +136,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Secrets
 
-- [ ] **SEC-01**: `DATABASE_URL`, GitHub credentials, and worker credentials never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or test reports
+- [x] **SEC-01**: `DATABASE_URL`, GitHub credentials, and worker credentials never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or test reports
 - [x] **SEC-02**: Secret redaction is applied to persisted event payloads and logs from the first persistence code, not retrofitted
 - [x] **SEC-03**: A worker subprocess does not inherit the full Dark Factory process environment; it receives only the minimum required for its role
 
@@ -268,7 +268,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | OBS-01 | Phase 12 | Pending |
 | OBS-02 | Phase 12 | Pending |
 | OBS-03 | Phase 12 | Pending |
-| SEC-01 | Phase 6 | Pending |
+| SEC-01 | Phase 6 | Complete |
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 6 | Complete |
 | QUAL-01 | Phase 11 | Pending |

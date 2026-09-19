@@ -282,7 +282,7 @@ Plans:
   4. Grepping every role artifact, worker prompt, event payload, log and report for the known secret values returns zero occurrences.
   5. Tools are exposed to a compatible worker over the optional MCP transport, and removing MCP entirely leaves the orchestrator fully functional — core code imports nothing from MCP.
 
-**Plans**: 3/4 plans executed
+**Plans**: 4/4 plans executed
 
 Plans:
 **Wave 1**
@@ -296,7 +296,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 06-04-PLAN.md — SEC-01 secret sweep across the denial path and the Phase 6 acceptance gate (wave 3)
+- [x] 06-04-PLAN.md — SEC-01 secret sweep across the denial path and the Phase 6 acceptance gate (wave 3)
 
 **Invariants**: worker environments are built up from an empty dict, never from `os.environ`; permission checks happen on every invocation and are never delegated to the worker.
 
@@ -409,7 +409,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
-| 6. Tools, Permissions & the Credential Boundary | 3/4 | In Progress|  |
+| 6. Tools, Permissions & the Credential Boundary | 4/4 | In Progress|  |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
 | 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |
