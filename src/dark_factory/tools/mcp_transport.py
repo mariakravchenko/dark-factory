@@ -5,8 +5,10 @@ This is a minimal skeleton MCP adapter, not a full-featured server: enough
 for a client -- in this phase, a test/fake in-memory client -- to list and
 call a role's granted capabilities and observe the same deny-by-default
 behaviour a direct :meth:`~dark_factory.tools.registry.ToolRegistry.invoke`
-caller already gets. No session, no auth negotiation, no real Claude Code /
-Copilot / Hermes wiring lands this phase (Phase 7+).
+caller already gets. No session, no auth negotiation, and no real external
+agent-runtime wiring lands this phase (Phase 7+) -- see
+``tests/unit/test_no_worker_name_leak.py`` (WORK-03) for why this module
+deliberately never names a specific runtime.
 
 **One enforcement point, two transports.** Every tool closure this module
 registers calls the exact same
