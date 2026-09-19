@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 06
 current_phase_name: Tools, Permissions & the Credential Boundary
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-19T04:26:37.167Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-19T05:36:38.263Z"
 last_activity: 2026-09-17
 last_activity_desc: Phase 06 execution started
-state_head: 09a61d605f19d3abd6b654f57c3552d2f24513d6
+state_head: b08244e55528551ea3e7c142340699d9a12ffcae
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-16)
 ## Current Position
 
 Phase: 06 (Tools, Permissions & the Credential Boundary) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-17 — Phase 06 execution started
 
@@ -91,6 +91,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 05 P06 | 35min | 3 tasks | 3 files |
 | Phase 06 P01 | 13min task-commits + ~57min db-tier verification | 3 tasks | 28 files |
 | Phase 06 P02 | 55min | 2 tasks | 7 files |
+| Phase 06 P03 | 135min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -177,6 +178,7 @@ Recent decisions affecting current work:
 - [Phase 05]: [Phase 05]: 05-06: G-05-2 closed — CR-02 revert_paths escape-ordering fix now has 7 unit-tier DB-free regression tests (revert_paths direct + enforce_write_scope's own sort), registered under SC4/ROLE-05; Phase 5 acceptance gate green (12 passed) against real PostgreSQL 17
 - [Phase 06]: build_worker_env mirrors git_env(): additive dict comprehension over WORKER_ENV_ALLOWLIST (derived from GIT_ENV_ALLOWLIST + XDG_* entries), never a parent-environment copy/spread/exclusion-filter (D-09, TOOL-04)
 - [Phase 06]: shell.execute (D-11) spawns an explicit argv sequence via subprocess.Popen with build_worker_env()'s environment, start_new_session=True, and process-group kill on timeout; performs no permission check of its own -- ToolRegistry.invoke() stays the single enforcement point
+- [Phase 06]: MCP transport: build_mcp_server registers per-role closures that all funnel through ToolRegistry.invoke() -- advertised list is never the enforcement boundary; two SDK bugs in RESEARCH's own code sketch (leading-underscore param rejection, **kwargs schema mishandling) plus a JSON/Path argument marshalling gap were discovered and fixed empirically
 
 ### Pending Todos
 
@@ -202,6 +204,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T04:26:37.115Z
-Stopped at: Completed 06-02-PLAN.md
+Last session: 2026-09-19T05:36:38.210Z
+Stopped at: Completed 06-03-PLAN.md
 Resume file: None

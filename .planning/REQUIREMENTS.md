@@ -52,7 +52,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **TOOL-02**: New tools can be added to the registry without modifying every role executor
 - [x] **TOOL-03**: Each role receives only its explicitly configured tools; grants are deny-by-default (BA/Architect read-only on code; Developer write + shell; QA write_tests + shell, no publish)
 - [x] **TOOL-04**: A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker
-- [ ] **TOOL-05**: MCP is supported as one optional transport adapter for exposing tools to compatible workers; the orchestrator has no internal dependency on MCP
+- [x] **TOOL-05**: MCP is supported as one optional transport adapter for exposing tools to compatible workers; the orchestrator has no internal dependency on MCP
 
 ### Context Preparation
 
@@ -217,7 +217,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | TOOL-02 | Phase 6 | Complete |
 | TOOL-03 | Phase 6 | Complete |
 | TOOL-04 | Phase 6 | Complete |
-| TOOL-05 | Phase 6 | Pending |
+| TOOL-05 | Phase 6 | Complete |
 | CTX-01 | Phase 4 | Complete |
 | CTX-02 | Phase 4 | Complete |
 | CTX-03 | Phase 4 | Complete |
