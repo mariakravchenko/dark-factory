@@ -22,6 +22,15 @@ dependencies = [
 [project.scripts]
 dark-factory = "dark_factory.cli:app"
 
+# The orchestrator must never import `mcp` on a core path (TOOL-05, D-13):
+# uninstalling this extra must leave the core fully functional, not merely
+# import-graph-clean. `tests/unit/test_no_mcp_import_in_core.py` is the
+# structural proof that no module reachable from the core roots imports it.
+[project.optional-dependencies]
+mcp = [
+    "mcp>=2.2,<3",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=9,<10",
