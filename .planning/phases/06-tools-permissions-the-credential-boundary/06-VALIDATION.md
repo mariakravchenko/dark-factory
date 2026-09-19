@@ -79,3 +79,17 @@ The db/integration-tier runs this session's secret-read guard blocked (`test_cap
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved — 2026-09-19, plan 06-04 close-out. All four plans (06-01 through 06-04) executed; unit-tier suite green throughout (437 passed by plan 06-03); db/integration-tier confirmation for plans 06-01/06-02 was performed by the user directly (06-01: 694 passed / 3 pre-existing unrelated failures) or remains an open, non-blocking deferred item (06-02's `test_worker_env_boundary.py`, 06-04's new db-tier tests) tracked in `.planning/WINDOWS.md`.
+
+---
+
+## Validation Audit 2026-09-19
+
+Independent re-audit at `/gsd-execute-phase 6`'s post-execution gate (`workflow.nyquist_validation`), before phase completion. Verified every test file referenced in the Per-Task Verification Map exists on disk, and cross-checked all seven phase-6 requirements (TOOL-01 through TOOL-05, SEC-01, SEC-03) against `.planning/REQUIREMENTS.md` — all marked `Complete`.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+No auditor spawn needed — all requirements already COVERED per the existing map.
