@@ -39,11 +39,13 @@ from __future__ import annotations
 
 __all__ = [
     "NATIVE_TOOL_CONTRACT",
+    "WORKER_ENV_ALLOWLIST",
     "CapabilityDeniedError",
     "NativeToolGrant",
     "ToolError",
     "ToolRegistry",
     "UnknownCapabilityError",
+    "build_worker_env",
     "default_registry",
 ]
 
@@ -84,6 +86,9 @@ class UnknownCapabilityError(ToolError, KeyError):
 
 # Import the submodules after the error hierarchy is declared, so their own
 # ``from dark_factory.tools import <ErrorClass>`` succeeds against this
-# module's already-populated namespace (see the module docstring).
+# module's already-populated namespace (see the module docstring). ``env``
+# is imported before ``registry`` because ``registry`` (plan 06-02, D-11)
+# binds ``shell.execute`` to ``env.shell_execute``.
+from dark_factory.tools.env import WORKER_ENV_ALLOWLIST, build_worker_env
 from dark_factory.tools.native import NATIVE_TOOL_CONTRACT, NativeToolGrant
 from dark_factory.tools.registry import ToolRegistry, default_registry
