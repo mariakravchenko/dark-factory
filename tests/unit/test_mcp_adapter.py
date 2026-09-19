@@ -27,7 +27,7 @@ pytest.importorskip("mcp")
 
 from mcp import Client
 
-from dark_factory.tools import CapabilityDeniedError
+from dark_factory.tools import CapabilityDeniedError, UnknownCapabilityError
 from dark_factory.tools.mcp_transport import build_mcp_server
 from dark_factory.tools.registry import ToolRegistry, default_registry
 
@@ -160,6 +160,44 @@ def test_capability_denied_error_message_shape_matches_the_mcp_surface() -> None
         default_registry.invoke("QA", "repo.write", [])
     assert "QA" in str(excinfo.value)
     assert "repo.write" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# WR-02: a granted-but-unregistered capability is a config bug, not a
+# denial -- it must get the same legible-message reshaping CapabilityDeniedError
+# already gets, never the SDK's opaque "Error executing tool <name>".
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.anyio
+async def test_granted_but_unregistered_capability_is_reshaped_not_opaque(
+    recording: _RecordingRegistry,
+) -> None:
+    granted = ["test.missing"]  # advertised/granted, never registered
+    server = build_mcp_server("DEVELOPMENT", granted, recording.registry)
+
+    async with Client(server, raise_exceptions=True) as client:
+        result = await client.call_tool("test.missing", {"arguments": {}})
+
+    assert result.is_error is True
+    message = result.content[0].text
+    assert "test.missing" in message
+    # Before this fix the SDK's own crash-handling produced exactly
+    # "Error executing tool test.missing" with no reason at all (verified
+    # against this exact scenario without the WR-02 fix). The reshaping
+    # this fix adds surfaces UnknownCapabilityError's own message as well,
+    # so the opaque form (bare name, no trailing reason) must not recur.
+    assert message != "Error executing tool test.missing"
+
+
+def test_unknown_capability_error_message_shape_matches_the_mcp_surface() -> None:
+    """Sanity check on the exact exception this transport now also catches
+    and re-raises: :class:`UnknownCapabilityError`'s message names the
+    unregistered capability -- this transport adds no redaction and no
+    extra formatting, it forwards ``str(exc)`` verbatim."""
+    with pytest.raises(UnknownCapabilityError) as excinfo:
+        ToolRegistry().invoke("DEVELOPMENT", "test.missing", ["test.missing"])
+    assert "test.missing" in str(excinfo.value)
 
 
 # --------------------------------------------------------------------------- #

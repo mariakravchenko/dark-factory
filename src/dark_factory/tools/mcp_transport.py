@@ -39,7 +39,7 @@ from pathlib import Path
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from dark_factory.tools import CapabilityDeniedError
+from dark_factory.tools import CapabilityDeniedError, UnknownCapabilityError
 from dark_factory.tools.registry import ToolRegistry
 
 __all__ = ["MCP_SERVER_NAME_PREFIX", "build_mcp_server"]
@@ -148,8 +148,17 @@ def build_mcp_server(
     letting it fall through uncaught would surface to an MCP client as an
     opaque ``Error executing tool <name>`` with no reason, discarding
     exactly the "who tried what and was denied why" audit answer the
-    denial exists to provide (threat T-06-17). No other exception is caught
-    or reshaped.
+    denial exists to provide (threat T-06-17).
+
+    A :class:`~dark_factory.tools.UnknownCapabilityError` -- a *granted*
+    capability name with no registered implementation, a configuration bug
+    rather than an authorization decision -- gets the identical reshaping,
+    so a misconfigured role/registry mismatch is just as diagnosable over
+    this transport as a denial is; leaving it uncaught would surface the
+    same opaque ``Error executing tool <name>`` the denial-reshaping exists
+    to avoid, for the one failure class this package's own error-hierarchy
+    docstring says must never be confused with a denial. No other exception
+    is caught or reshaped.
     """
     server = MCPServer(name=f"{MCP_SERVER_NAME_PREFIX}{role}")
     for capability in granted_tools:
@@ -163,7 +172,7 @@ def build_mcp_server(
                         granted_tools,
                         **_coerce_path_arguments(arguments or {}),
                     )
-                except CapabilityDeniedError as exc:
+                except (CapabilityDeniedError, UnknownCapabilityError) as exc:
                     raise ToolError(str(exc)) from exc
 
             return _tool
