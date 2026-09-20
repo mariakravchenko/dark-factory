@@ -314,13 +314,13 @@ Plans:
   4. A CI check fails the build when a worker name appears outside the adapter modules.
   5. A hung or over-long agent subprocess is killed by timeout with its process group, its output is streamed to the run's log files rather than buffered, and the role failure is persisted with the captured output.
 
-**Plans**: 1/4 plans executed
+**Plans**: 2/4 plans executed
 
 Plans:
 **Wave 1**
 
 - [x] 07-01-PLAN.md — Tracer: one role runs end to end through the real `claude` CLI; every failure path becomes a persisted FAILED result; the captured transcript is redacted before it can reach the PR branch (wave 1)
-- [ ] 07-02-PLAN.md — The repo's first CI pipeline, with the worker-name leak guard as a build gate (wave 1)
+- [x] 07-02-PLAN.md — The repo's first CI pipeline, with the worker-name leak guard as a build gate (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -425,7 +425,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
-| 7. Claude Code — the First Real Worker | 1/4 | In Progress|  |
+| 7. Claude Code — the First Real Worker | 2/4 | In Progress|  |
 | 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |

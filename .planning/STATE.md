@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 07
 current_phase_name: Claude Code — the First Real Worker
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-09-20T18:06:44.787Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-09-20T18:13:31.112Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 07 execution started
-state_head: 8c170696c510d859ffc8bf3ff6fef87ce4a34bbb
+state_head: 77c2a9a1f428d3d3bd1f9e3e7d8f44d77df02b35
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 39
-  completed_plans: 36
+  completed_plans: 37
   percent: 8
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 ## Current Position
 
 Phase: 07 (Claude Code — the First Real Worker) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-09-20 — Phase 07 execution started
 
@@ -95,6 +95,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 06 P03 | 135min | 3 tasks | 5 files |
 | Phase 06 P04 | 65min | 2 tasks | 4 files |
 | Phase 07 P01 | 9min | 3 tasks | 7 files |
+| Phase 07 P02 | 12min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,8 @@ Recent decisions affecting current work:
 - [Phase 06]: All 4 deferred human-verification items (db/integration-tier tests needing real PostgreSQL 17) closed 2026-09-20 — user ran the full suite against real Postgres 17: 763 passed, 0 failed. Phase 6 VERIFICATION.md re-verified passed (was human_needed).
 - [Phase 06]: 3 long-standing "pre-existing, unrelated" test failures (tests/db/test_artifact_commit_per_role.py x2, tests/integration/test_pr_diff_excludes_artifacts.py x1), carried since 06-01-SUMMARY.md, were a stale test-fixture defect — write_scope: [] (D-14 zero-tolerance) combined with the test's own worker planting a non-artifact file. Fixed test-only (commit ffc333f), zero production changes. Root cause: .planning/debug/resolved/phase4-artifact-commit-bugs.md. Phase 6 complete.
 - [Phase 07]: 07-01: ClaudeCodeWorker is a real CodingWorker adapter -- stream-to-file subprocess (never PIPE), Settings.anthropic_api_key/worker_timeout_seconds (D-02/D-03), redact-before-return closes the SEC-01 gap in the force-committed run tree; resume()/capabilities() deliberately stubbed pending 07-03 (WINDOWS.md #10)
+- [Phase 07]: [Phase 07]: 07-02: Quoted "on": in ci.yml (not bare on:) -- PyYAML/YAML 1.1 parses a bare `on` key as boolean True, breaking document['on'] lookups in both the plan's verify command and the Task 2 structural guard; quoting is the standard GitHub Actions workaround with zero effect on GitHub's own parser
+- [Phase 07]: [Phase 07]: 07-02: TDD RED anchor for the guard-on-the-guard test was the self-detection sanity test, not the main assertion -- a stub _offenders() returning [] trivially passes "no offenders" on an already-compliant workflow, so RED had to target test_the_guard_detects_its_own_subject instead
 
 ### Pending Todos
 
@@ -211,6 +214,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T18:06:44.716Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-09-20T18:13:20.012Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
