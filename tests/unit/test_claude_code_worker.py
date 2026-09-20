@@ -161,3 +161,150 @@ def test_claude_code_worker_is_constructible_with_zero_arguments() -> None:
     from dark_factory.workers.claude_code import ClaudeCodeWorker
 
     assert ClaudeCodeWorker() is not None
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: every failure path becomes a persisted FAILED result, and a hung
+# child dies with its process group.
+# --------------------------------------------------------------------------- #
+
+
+def test_timeout_kills_process_group_and_persists_output(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import time
+
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    grandchild_pid_file = tmp_path / "grandchild.pid"
+    directory = fake_dir
+    directory.mkdir(parents=True, exist_ok=True)
+    script_path = directory / "claude"
+    script_path.write_text(
+        f"""#!/usr/bin/env python3
+import subprocess
+import sys
+import time
+
+sys.stdout.write("pre-sleep line\\n")
+sys.stdout.flush()
+# Deliberately NOT start_new_session=True here: this child must stay in the
+# same process group as this script (which _run_streamed already spawned
+# with start_new_session=True) so that killpg() on that group reaches it too
+# -- proving os.killpg(...) kills descendants, not only the direct child.
+proc = subprocess.Popen(
+    ["python3", "-c", "import time; time.sleep(30)"],
+)
+with open({str(grandchild_pid_file)!r}, "w") as fh:
+    fh.write(str(proc.pid))
+time.sleep(30)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "1")
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        start = time.monotonic()
+        result = ClaudeCodeWorker().execute(_context())
+        elapsed = time.monotonic() - start
+        get_settings.cache_clear()
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert elapsed < 55  # fires at ~1s, not the 1800s default
+    assert "1" in (result.error or "")
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
+
+    # Give the OS a beat to actually reap/kill the grandchild before probing.
+    time.sleep(0.5)
+    grandchild_pid = int(grandchild_pid_file.read_text("utf-8").strip())
+    with pytest.raises(ProcessLookupError):
+        os.kill(grandchild_pid, 0)
+
+
+def test_non_zero_exit_returns_failed_with_exit_code_and_stderr(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir, stdout_payload="", exit_code=2, stderr_text="boom"
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert "2" in (result.error or "")
+    assert "boom" in (result.error or "")
+
+
+def test_non_json_stdout_returns_failed_without_raising(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(fake_dir, stdout_payload="not json at all")
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert "json" in (result.error or "").lower()
+
+
+def test_missing_claude_binary_returns_failed_without_raising(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    empty_dir = tmp_path / "empty-bin"
+    empty_dir.mkdir()
+    with fake_claude_env(monkeypatch, empty_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.FAILED
+
+
+def test_missing_credential_returns_failed_and_spawns_nothing(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        result = ClaudeCodeWorker().execute(_context())
+        get_settings.cache_clear()
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert "ANTHROPIC_API_KEY" in (result.error or "")
+    assert not argv_log.exists()
+
+
+def test_missing_worker_credential_error_is_importable_and_a_runtime_error() -> None:
+    from dark_factory.workers.claude_code import MissingWorkerCredentialError
+
+    assert issubclass(MissingWorkerCredentialError, RuntimeError)

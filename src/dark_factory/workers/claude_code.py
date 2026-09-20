@@ -50,6 +50,11 @@ CLAUDE_CREDENTIAL_ENV_VAR = "ANTHROPIC_API_KEY"
 CLAUDE_BINARY = "claude"
 PERMISSION_MODE = "dontAsk"
 
+# The cap on a stderr/stdout excerpt folded into a WorkerResult.error, so a
+# runaway transcript cannot bloat the JSONB `result`/`error` column the
+# orchestrator persists (Task 2).
+_MAX_ERROR_EXCERPT = 2000
+
 # Metadata keys copied verbatim from the CLI's ResultMessage object when
 # present -- never a hardcoded superset, so an absent field is simply absent
 # from metadata rather than appearing as a fabricated None.
@@ -248,11 +253,7 @@ class ClaudeCodeWorker(CodingWorker):
         argv = [*_base_argv(context), "-p", _build_prompt(context)]
         stdout_path, stderr_path = attempt_log_paths(root, role, attempt)
 
-        # Task 2 (07-01) adds explicit timed_out / non-zero-exit_code
-        # handling; for the happy path proved by this task, a killed or
-        # non-zero run simply falls through to the JSON parse below and is
-        # caught by the outer try/except as a generic FAILED result.
-        _exit_code, _timed_out = _run_streamed(
+        exit_code, timed_out = _run_streamed(
             argv,
             cwd=work_dir,
             env=env,
@@ -261,21 +262,61 @@ class ClaudeCodeWorker(CodingWorker):
             timeout=settings.worker_timeout_seconds,
         )
 
+        if timed_out:
+            return WorkerResult(
+                status=WorkerResultStatus.FAILED,
+                summary="claude-code worker timed out",
+                error=(
+                    "claude subprocess killed with its process group after "
+                    f"{settings.worker_timeout_seconds} seconds"
+                ),
+                metadata={"timed_out": True, "exit_code": None},
+            )
+
+        if exit_code != 0:
+            stderr_text = stderr_path.read_text("utf-8", errors="replace")
+            return WorkerResult(
+                status=WorkerResultStatus.FAILED,
+                summary="claude-code worker exited non-zero",
+                error=(
+                    f"claude exited {exit_code}: "
+                    f"{stderr_text[:_MAX_ERROR_EXCERPT]}"
+                ),
+                metadata={"timed_out": False, "exit_code": exit_code},
+            )
+
         stdout_text = stdout_path.read_text("utf-8", errors="replace")
-        parsed = json.loads(stdout_text.strip())
+        try:
+            parsed: object = json.loads(stdout_text.strip())
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, dict):
+            return WorkerResult(
+                status=WorkerResultStatus.FAILED,
+                summary="claude-code worker returned unparseable output",
+                error=(
+                    "claude's stdout was not the single JSON object "
+                    "--output-format json promises: "
+                    f"{stdout_text[:_MAX_ERROR_EXCERPT]!r}"
+                ),
+            )
+
+        if parsed.get("is_error"):
+            return WorkerResult(
+                status=WorkerResultStatus.FAILED,
+                summary="claude reported an error",
+                error=str(parsed.get("result", "")),
+                worker_session_id=parsed.get("session_id"),
+            )
 
         metadata = {
             key: parsed[key] for key in _RESULT_METADATA_KEYS if key in parsed
         }
-        is_error = bool(parsed.get("is_error"))
-        status = WorkerResultStatus.FAILED if is_error else WorkerResultStatus.COMPLETED
-        summary = str(parsed.get("result", ""))
         return WorkerResult(
-            status=status,
-            summary=summary,
+            status=WorkerResultStatus.COMPLETED,
+            summary=str(parsed.get("result", "")),
             worker_session_id=parsed.get("session_id"),
             metadata=metadata,
-            error=summary if is_error else None,
         )
 
     def _resolve_dirs(self, run_id: object) -> tuple[Path, Path]:
