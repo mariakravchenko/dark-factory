@@ -41,6 +41,7 @@ def _context(
     role: str = "DEVELOPMENT",
     run_id: str = _RUN_ID,
     attempt: int = 1,
+    tools: list[str] | None = None,
 ) -> RoleContext:
     return RoleContext(
         run_id=run_id,
@@ -54,7 +55,7 @@ def _context(
         baseline_docs={},
         examples=[],
         constraints={},
-        tools=[],
+        tools=tools or [],
         permissions={},
         outputs=[],
         artifacts_dir=f"artifacts/{role}",
@@ -861,3 +862,170 @@ def test_default_registry_claude_code_is_not_the_not_yet_implemented_worker() ->
     worker = default_registry.get("claude-code")
     assert isinstance(worker, ClaudeCodeWorker)
     assert type(worker).__name__ != "_NotYetImplementedWorker"
+
+
+# --------------------------------------------------------------------------- #
+# 07-04 Task 1: the spawned agent gets exactly the native tools the role was
+# granted -- `--allowedTools` derived from `context.tools` through
+# `NATIVE_TOOL_CONTRACT`, deny by omission (WORK-04).
+# --------------------------------------------------------------------------- #
+
+
+def test_allowed_tools_for_repo_read_and_search_union_sorted_deduped() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"repo.read", "repo.search"}, None) == [
+        "Glob",
+        "Grep",
+        "Read",
+    ]
+
+
+def test_allowed_tools_for_shell_execute() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"shell.execute"}, None) == ["Bash"]
+
+
+def test_allowed_tools_for_repo_write() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"repo.write"}, None) == ["Edit", "Write"]
+
+
+def test_allowed_tools_for_repo_write_tests() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"repo.write_tests"}, None) == ["Edit", "Write"]
+
+
+def test_allowed_tools_for_artifacts_read() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"artifacts.read"}, None) == ["Read"]
+
+
+def test_allowed_tools_for_artifacts_write_is_path_scoped_not_bare() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    result = allowed_tools_for(
+        {"artifacts.write"}, ".dark-factory/runs/R/artifacts/DEVELOPMENT"
+    )
+
+    assert result == ["Edit(.dark-factory/runs/R/artifacts/DEVELOPMENT/**)"]
+
+
+def test_allowed_tools_for_artifacts_write_with_no_glob_yields_nothing() -> None:
+    """A context-free call has no run_id/artifacts_dir to build a glob from
+    -- the specifier must be skipped, never fabricated."""
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for({"artifacts.write"}, None) == []
+
+
+def test_allowed_tools_for_empty_grant_yields_empty_list() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    assert allowed_tools_for(set(), None) == []
+
+
+def test_allowed_tools_for_is_deterministic_across_calls() -> None:
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    granted = {"repo.write", "shell.execute", "repo.read"}
+    first = allowed_tools_for(granted, None)
+    second = allowed_tools_for(granted, None)
+
+    assert first == second
+
+
+def test_tool_names_cover_every_native_contract_capability() -> None:
+    """T-07-18: a capability added to ``NATIVE_TOOL_CONTRACT`` with no
+    translation must fail this test, not silently grant nothing."""
+    from dark_factory.tools.native import NATIVE_TOOL_CONTRACT
+    from dark_factory.workers.claude_code import _TOOL_NAMES
+
+    assert set(_TOOL_NAMES) | {"artifacts.write"} == set(NATIVE_TOOL_CONTRACT)
+
+
+def test_ungranted_capability_contributes_no_tool_name() -> None:
+    """Deny by omission (`NativeToolGrant.absent_behaviour`): a role denied
+    `shell.execute` gets no `Bash` in its `--allowedTools` value at all."""
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    result = allowed_tools_for({"repo.read"}, None)
+
+    assert "Bash" not in result
+
+
+def test_allowed_tools_flag_present_in_execute_argv_for_granted_role(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().execute(_context(tools=["repo.read", "repo.search"]))
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert "--allowedTools" in argv
+    assert argv[argv.index("--allowedTools") + 1] == "Glob,Grep,Read"
+
+
+def test_allowed_tools_flag_present_in_resume_argv_for_granted_role(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    context = _context(tools=["shell.execute"])
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().resume(
+            context, _paused_with_session_id("sess-abc"), "answer"
+        )
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert "--allowedTools" in argv
+    assert argv[argv.index("--allowedTools") + 1] == "Bash"
+
+
+def test_no_tools_granted_produces_no_allowed_tools_flag(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context(tools=[]))
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert "--allowedTools" not in argv
+    assert result.status.value == "COMPLETED"
+
+
+def test_artifacts_write_grant_produces_path_scoped_edit_in_execute_argv(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().execute(
+            _context(role="DEVELOPMENT", tools=["artifacts.write"])
+        )
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    value = argv[argv.index("--allowedTools") + 1]
+    assert value == f"Edit(.dark-factory/runs/{_RUN_ID}/artifacts/DEVELOPMENT/**)"
