@@ -79,7 +79,24 @@ def _write_two_role_tree(config_root_factory: Callable[..., Path]) -> Path:
         # BA.yaml grant set -- artifact reads are now capability-gated
         # (D-03), so a declared `outputs:` entry needs `artifacts.read`.
         "tools: [repo.read, repo.search, artifacts.read, artifacts.write]\n"
-        "permissions:\n  write_scope: []\n"
+        # Phase 5 (plan 05-04, ROLE-05, D-14): an empty `write_scope` is ZERO
+        # TOLERANCE, not "unrestricted" -- a path matches none of zero
+        # patterns, so every changed path is a violation (see
+        # src/dark_factory/git/scope.py's module docstring, which forbids
+        # ever inverting that polarity). This test deliberately has BA's own
+        # `execute()` write the stray `feature.py` source change so it stays
+        # dirty across the role boundary and is recovered by DEVELOPMENT's
+        # before-hook -- the interleaving the D-10 proof needs. BA must
+        # therefore authorize exactly that one file: with the empty list,
+        # BA's post-completion `enforce_write_scope` reverts `feature.py`
+        # and fails the role, so the run never reaches DEVELOPMENT and none
+        # of the three-dot/two-dot diff assertions below are ever reached.
+        # DEVELOPMENT keeps the zero-tolerance empty list below: by the time
+        # its own enforcement runs, its before-hook has already WIP-committed
+        # `feature.py` and everything it writes itself lives under the
+        # excluded `.dark-factory/runs` tree, so it has no changed path left
+        # to authorize.
+        "permissions:\n  write_scope: [feature.py]\n"
         "before: [ensure_clean_worktree]\n"
         "after: []\n"
         "inputs: []\n"

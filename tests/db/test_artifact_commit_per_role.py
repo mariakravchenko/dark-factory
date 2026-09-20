@@ -199,13 +199,40 @@ def _write_four_role_tree(config_root_factory: Callable[..., Path]) -> Path:
             "artifacts.read, artifacts.write]"
         ),
     }
+    # Phase 5 (plan 05-04, ROLE-05, D-14): an empty `write_scope` is ZERO
+    # TOLERANCE, not "unrestricted" -- `is_out_of_scope` matches a path
+    # against none of zero patterns, so EVERY changed path is a violation
+    # (see src/dark_factory/git/scope.py's module docstring, which forbids
+    # ever inverting that polarity). This fixture's own test stages
+    # `source_edit.txt` in the worktree index between roles to prove T-05-17
+    # (a pathspec-limited artifact commit never sweeps up a worker's staged
+    # source change), so every role that is still running while that file
+    # sits uncommitted MUST authorize it -- otherwise that role's
+    # post-completion `enforce_write_scope` reverts the very file the test
+    # exists to prove survives, and the run fails instead of completing.
+    #
+    # `commit_run_artifacts` commits with a trailing pathspec, so
+    # `source_edit.txt` stays staged (never swept into an artifact commit)
+    # and is therefore visible to `attempt_changed_paths`
+    # (`git diff --name-only HEAD` reports a staged-new file) for
+    # ARCHITECTURE, DEVELOPMENT *and* QA -- not just the role it was staged
+    # in front of. BA deliberately keeps the zero-tolerance empty list: it
+    # runs before the file exists, so widening it would slacken the default
+    # for no reason. Each entry names exactly the one file this test plants
+    # and nothing broader.
+    write_scope = {
+        "BA": "[]",
+        "ARCHITECTURE": "[source_edit.txt]",
+        "DEVELOPMENT": "[source_edit.txt]",
+        "QA": "[source_edit.txt]",
+    }
     for role, (inputs, outputs) in definitions.items():
         (root / f".dark-factory/roles/{role}.yaml").write_text(
             f"name: {role}\n"
             "worker: fake\n"
             f"instructions: ../instructions/{role.lower()}.md\n"
             f"tools: {tools[role]}\n"
-            "permissions:\n  write_scope: []\n"
+            f"permissions:\n  write_scope: {write_scope[role]}\n"
             "before: [prepare_role_context]\n"
             "after: [store_role_artifacts]\n"
             f"inputs: {inputs}\n"
@@ -359,6 +386,35 @@ def test_completed_run_with_a_trailing_edit_gets_a_recovery_commit_then_loses_it
     cleanup_runs: list[Any],
 ) -> None:
     root = config_root_factory(roles=("BA",))
+
+    # Phase 5 (plan 05-04, ROLE-05, D-14): `config_root_factory` gives BA the
+    # deliberate zero-tolerance `write_scope: []` -- an empty list means EVERY
+    # changed path is a violation, not "unrestricted" (see
+    # src/dark_factory/git/scope.py's module docstring). `_TrailingEditWorker`
+    # below writes `trailing_edit.txt` from inside BA's own `execute()`, so
+    # without this override BA's post-completion `enforce_write_scope` reverts
+    # the trailing edit and fails the role -- the run reaches FAILED, never
+    # COMPLETED, and the D-04 recover-then-remove arm this test exists to
+    # prove is never exercised at all.
+    #
+    # Patched in place (a targeted replacement of the single `write_scope`
+    # line) rather than by widening the shared `config_root_factory` default:
+    # the two sibling tests below (`test_failed_run_keeps_its_worktree`,
+    # `test_waiting_human_run_keeps_its_worktree`) ride on that same default
+    # and must keep the zero-tolerance empty list. The pattern names exactly
+    # the one file this test's own worker writes and nothing broader, and the
+    # assertion makes a conftest reformat fail loudly here instead of
+    # silently reintroducing the original failure.
+    ba_yaml = root / ".dark-factory/roles/BA.yaml"
+    original = ba_yaml.read_text(encoding="utf-8")
+    patched = original.replace(
+        "  write_scope: []\n", "  write_scope: [trailing_edit.txt]\n"
+    )
+    assert patched != original, (
+        "config_root_factory no longer writes BA's write_scope as '  write_scope: []'"
+    )
+    ba_yaml.write_text(patched, encoding="utf-8")
+
     snapshot = load_effective_config(root)
 
     run_id = start_run(
