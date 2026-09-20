@@ -314,7 +314,14 @@ Plans:
   4. A CI check fails the build when a worker name appears outside the adapter modules.
   5. A hung or over-long agent subprocess is killed by timeout with its process group, its output is streamed to the run's log files rather than buffered, and the role failure is persisted with the captured output.
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Tracer: one role runs end to end through the real `claude` CLI; every failure path becomes a persisted FAILED result; the captured transcript is redacted before it can reach the PR branch (wave 1)
+- [ ] 07-02-PLAN.md — The repo's first CI pipeline, with the worker-name leak guard as a build gate (wave 1)
+- [ ] 07-03-PLAN.md — `NEEDS_INPUT` marker, native-session resume vs. context reconstruction, and the shared contract suite run against both adapters (wave 2)
+- [ ] 07-04-PLAN.md — Native `--allowedTools` restriction from the role's grants, and the contract table corrected + its guard narrowed (wave 3)
+
 **Invariants**: the native-resume vs. context-reconstruction branch lives inside the adapter; adapters never import orchestrator, workflow or persistence code.
 
 ### Phase 8: Copilot & Hermes — Worker Independence Proven
