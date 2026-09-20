@@ -45,6 +45,7 @@ __all__ = [
     "NEEDS_INPUT_MARKER",
     "NEEDS_INPUT_PROTOCOL",
     "PERMISSION_MODE",
+    "RESUME_CONTINUATION_PROMPT",
     "ClaudeCodeWorker",
     "MissingWorkerCredentialError",
     "attempt_log_paths",
@@ -78,6 +79,15 @@ Never emit this token for any other purpose."""
 # captured, truncating a multi-line question.
 _NEEDS_INPUT_RE = re.compile(
     rf"^{re.escape(NEEDS_INPUT_MARKER)}[ \t]*(.*)\Z", re.MULTILINE | re.DOTALL
+)
+
+# D-03/Task 2: the fixed -p value used on the native --resume branch when no
+# human answer is available (a resume triggered by something other than a
+# human reply is a legitimate call shape the contract suite pins). The CLI
+# must never be invoked with an empty prompt argument.
+RESUME_CONTINUATION_PROMPT = (
+    "Continue the previous attempt from where it paused. No new human "
+    "answer was supplied for this resume."
 )
 
 # The cap on a stderr/stdout excerpt folded into a WorkerResult.error, so a
@@ -151,11 +161,18 @@ def attempt_log_paths(root: Path, role: str, attempt: int) -> tuple[Path, Path]:
     )
 
 
-def _build_prompt(context: object) -> str:
-    """Assemble the plain-text ``-p`` prompt from ``context`` (a
-    :class:`~dark_factory.context.builder.RoleContext`, read defensively via
-    ``getattr`` so a bare test double still degrades cleanly). A section
-    whose source field is empty is skipped entirely."""
+def _context_prompt_sections(context: object) -> list[str]:
+    """The ``## Instructions`` / ``## Task`` / ... sections built from
+    ``context`` alone (a :class:`~dark_factory.context.builder.RoleContext`,
+    read defensively via ``getattr`` so a bare test double still degrades
+    cleanly). A section whose source field is empty is skipped entirely.
+
+    Shared by :func:`_build_prompt` (the fresh-attempt prompt) and
+    :func:`_build_resume_prompt` (the context-reconstruction resume prompt)
+    so both start from the identical task/instructions/inputs material --
+    neither the clarification protocol nor any resume-specific section is
+    included here.
+    """
     sections: list[str] = []
 
     instructions = getattr(context, "instructions", None)
@@ -202,12 +219,44 @@ def _build_prompt(context: object) -> str:
         )
         sections.append(f"## Expected outputs\n{bullets}")
 
-    # D-01: the clarification protocol always comes last, so a reconstructed
-    # resume prompt (`_build_resume_prompt`) can append its own sections
-    # ahead of it and the agent still sees the convention as its final
-    # instruction.
-    sections.append(NEEDS_INPUT_PROTOCOL)
+    return sections
 
+
+def _build_prompt(context: object) -> str:
+    """Assemble the plain-text ``-p`` prompt for a fresh attempt: the
+    ``context``-derived sections, then the clarification protocol last, so
+    the agent sees D-01's convention as its final instruction."""
+    sections = _context_prompt_sections(context)
+    sections.append(NEEDS_INPUT_PROTOCOL)
+    return "\n\n".join(sections)
+
+
+def _build_resume_prompt(
+    context: object, previous: WorkerResult, answer: str | None
+) -> str:
+    """Assemble the ``-p`` prompt for the context-reconstruction resume
+    branch (HITL-05: taken when ``previous.worker_session_id`` is absent).
+
+    Starts from the same ``context``-derived sections a fresh attempt uses,
+    then appends the previous attempt's own account of itself -- its
+    summary, its outstanding questions, and the human's answer (or a note
+    that none was supplied) -- so the agent can pick up where it paused. The
+    clarification protocol is appended last, exactly as in
+    :func:`_build_prompt`, so a reconstructed attempt can pause again.
+    """
+    sections = _context_prompt_sections(context)
+
+    sections.append(f"## Previous attempt\n{previous.summary}")
+
+    if previous.questions:
+        bullets = "\n".join(f"- {question}" for question in previous.questions)
+    else:
+        bullets = "(none recorded)"
+    sections.append(f"## Outstanding questions\n{bullets}")
+
+    sections.append(f"## Human answer\n{answer or '(no answer was supplied)'}")
+
+    sections.append(NEEDS_INPUT_PROTOCOL)
     return "\n\n".join(sections)
 
 
@@ -315,6 +364,17 @@ class ClaudeCodeWorker(CodingWorker):
             )
 
     def _execute(self, context: object) -> WorkerResult:
+        argv = [*_base_argv(context), "-p", _build_prompt(context)]
+        return self._spawn_and_parse(argv, context)
+
+    def _spawn_and_parse(self, argv: list[str], context: object) -> WorkerResult:
+        """The shared spawn/timeout/redact/parse pipeline (Task 2): both
+        ``execute()`` and ``resume()`` fully assemble their own argv (the
+        only thing that differs between them) and hand it here. Factoring
+        this out -- rather than duplicating it -- is what keeps the
+        redaction ``finally`` block and the never-raise wrapper from
+        drifting between the two entry points.
+        """
         settings = get_settings()
         if settings.anthropic_api_key is None:
             raise MissingWorkerCredentialError()
@@ -329,7 +389,6 @@ class ClaudeCodeWorker(CodingWorker):
             env_var_name=CLAUDE_CREDENTIAL_ENV_VAR,
             value=settings.anthropic_api_key,
         )
-        argv = [*_base_argv(context), "-p", _build_prompt(context)]
         stdout_path, stderr_path = attempt_log_paths(root, role, attempt)
 
         # Task 3 (T-07-01): _scrub_log_in_place runs in `finally`, immediately
@@ -456,25 +515,65 @@ class ClaudeCodeWorker(CodingWorker):
     def resume(
         self, context: object, previous: WorkerResult, answer: str | None
     ) -> WorkerResult:
-        """Continue a paused role attempt.
+        """Continue a paused role attempt (HITL-04/HITL-05, Plan 07-03).
 
-        Not implemented by this plan: 07-01 proves ``execute()`` end to end;
-        plan 07-03 adds the native ``--resume <session_id>`` argv branch and
-        the ``NEEDS_INPUT`` marker parsing this method routes on. Raising
-        here (rather than silently delegating to ``execute()``) makes the
-        gap explicit instead of returning a plausible-looking but wrong
-        ``WorkerResult``.
+        The call site is ``orchestrator/runner.py:825-829``:
+        ``result = worker.resume(context, previous, state.pending_answer)`` --
+        identical for every adapter, with no worker-name conditional. Both
+        branches below return through that same shape, which is the whole of
+        HITL-05: the orchestrator cannot tell which branch ran.
+
+        See the module docstring for why this method never raises: the
+        orchestrator call site has no surrounding ``try/except``.
         """
-        raise NotImplementedError("ClaudeCodeWorker.resume() lands in plan 07-03")
+        try:
+            return self._resume(context, previous, answer)
+        except Exception as exc:  # see module docstring for why this is intentional
+            return WorkerResult(
+                status=WorkerResultStatus.FAILED,
+                summary="claude-code worker failed",
+                error=str(exc),
+            )
+
+    def _resume(
+        self, context: object, previous: WorkerResult, answer: str | None
+    ) -> WorkerResult:
+        session_id = getattr(previous, "worker_session_id", None)
+        if session_id:
+            # HITL-04: the native branch. The id crosses as a single opaque
+            # argv element after --resume -- never parsed, split, validated
+            # or reformatted. Neither this adapter nor the orchestrator
+            # interprets another system's session handle as structured data.
+            argv = [
+                *_base_argv(context),
+                "--resume",
+                session_id,
+                "-p",
+                answer or RESUME_CONTINUATION_PROMPT,
+            ]
+        else:
+            # HITL-05: the context-reconstruction branch -- no --resume
+            # element at all.
+            argv = [
+                *_base_argv(context),
+                "-p",
+                _build_resume_prompt(context, previous, answer),
+            ]
+        return self._spawn_and_parse(argv, context)
 
     def capabilities(self) -> WorkerCapabilities:
-        """Plan 07-03 lands the final capability declaration
-        (``native_resume=True``, matching the confirmed ``--resume
-        <session_id>`` flag). Until then this reports only what this plan
-        implements."""
+        """The final capability declaration (Plan 07-03).
+
+        ``native_resume=True`` is justified by the CLI's real
+        ``--resume <session-id>`` flag (HITL-04). ``emits_changed_files=False``
+        is deliberate -- ``git/diff.py::collect_diff`` computes the
+        authoritative diff from git after the worker returns, so this adapter
+        must not invent its own changed-file list.
+        """
         return WorkerCapabilities(
-            native_resume=False,
+            native_resume=True,
             session_id=True,
             structured_output=True,
             non_interactive=True,
+            emits_changed_files=False,
         )

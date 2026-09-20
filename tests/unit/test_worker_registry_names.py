@@ -1,14 +1,13 @@
 """Unit coverage for WorkerRegistry membership + the placeholder worker names
-(Plan 03-01 Task 2, WORK-02; ``claude-code`` updated by Plan 07-01).
+(Plan 03-01 Task 2, WORK-02; ``claude-code`` updated by Plans 07-01/07-03).
 
 Membership must work without constructing a worker. ``copilot``/``hermes``
 invocations still raise ``NotImplementedError`` naming the phase their real
 adapter lands in (Phase 8). ``claude-code`` is no longer a placeholder as of
 Plan 07-01 -- it resolves to a real :class:`~dark_factory.workers.
-claude_code.ClaudeCodeWorker` whose ``execute()`` never raises (see
-``tests/unit/test_claude_code_worker.py`` for its own coverage); only
-``resume()`` still raises ``NotImplementedError``, naming plan 07-03, which
-lands it.
+claude_code.ClaudeCodeWorker` whose ``execute()`` and (as of Plan 07-03)
+``resume()`` both never raise (see ``tests/unit/test_claude_code_worker.py``
+for the full behavior suite).
 """
 
 import pytest
@@ -45,9 +44,12 @@ def test_claude_code_resolves_to_a_real_adapter_not_a_placeholder() -> None:
     result = worker.execute({})
     assert result.status is WorkerResultStatus.FAILED
 
-    # resume() is not implemented by this plan -- 07-03 lands it.
-    with pytest.raises(NotImplementedError, match="07-03"):
-        worker.resume({}, None, None)  # type: ignore[arg-type]
+    # resume() is fully implemented as of Plan 07-03 -- it never raises, even
+    # given this test's deliberately bare `None` previous result and no
+    # ANTHROPIC_API_KEY configured (see test_claude_code_worker.py for the
+    # full resume() behavior suite).
+    resume_result = worker.resume({}, None, None)  # type: ignore[arg-type]
+    assert resume_result.status is WorkerResultStatus.FAILED
 
     # capabilities() is implemented (not a placeholder); does not raise.
     assert worker.capabilities().non_interactive is True

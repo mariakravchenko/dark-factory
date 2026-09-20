@@ -654,7 +654,7 @@ def test_capabilities_reports_native_resume_and_all_expected_flags() -> None:
     assert caps.emits_changed_files is False
 
 
-def _paused_with_session_id(session_id: str | None) -> "object":
+def _paused_with_session_id(session_id: str | None) -> object:
     from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 
     return WorkerResult(
