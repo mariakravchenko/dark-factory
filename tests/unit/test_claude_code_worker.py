@@ -809,3 +809,55 @@ def test_resume_missing_credential_returns_failed_without_raising(
 
     assert result.status is WorkerResultStatus.FAILED
     assert not argv_log.exists()
+
+
+# --------------------------------------------------------------------------- #
+# 07-03 Task 3 (QUAL-02): registering a worker name twice leaves exactly one
+# bound factory -- the last registration wins.
+# --------------------------------------------------------------------------- #
+
+
+def test_duplicate_registration_binds_exactly_one_factory() -> None:
+    from dark_factory.domain.worker import WorkerCapabilities, WorkerResult
+    from dark_factory.workers.base import CodingWorker
+    from dark_factory.workers.registry import WorkerRegistry
+
+    class _First(CodingWorker):
+        def execute(self, context: object) -> WorkerResult:
+            raise NotImplementedError
+
+        def resume(
+            self, context: object, previous: WorkerResult, answer: str | None
+        ) -> WorkerResult:
+            raise NotImplementedError
+
+        def capabilities(self) -> WorkerCapabilities:
+            raise NotImplementedError
+
+    class _Second(CodingWorker):
+        def execute(self, context: object) -> WorkerResult:
+            raise NotImplementedError
+
+        def resume(
+            self, context: object, previous: WorkerResult, answer: str | None
+        ) -> WorkerResult:
+            raise NotImplementedError
+
+        def capabilities(self) -> WorkerCapabilities:
+            raise NotImplementedError
+
+    registry = WorkerRegistry()
+    registry.register("claude-code", _First)
+    registry.register("claude-code", _Second)
+
+    assert "claude-code" in registry
+    assert isinstance(registry.get("claude-code"), _Second)
+
+
+def test_default_registry_claude_code_is_not_the_not_yet_implemented_worker() -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+    from dark_factory.workers.registry import default_registry
+
+    worker = default_registry.get("claude-code")
+    assert isinstance(worker, ClaudeCodeWorker)
+    assert type(worker).__name__ != "_NotYetImplementedWorker"
