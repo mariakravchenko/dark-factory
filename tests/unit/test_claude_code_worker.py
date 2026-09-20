@@ -633,3 +633,179 @@ def test_prompt_argument_contains_the_needs_input_marker_token(
     argv = json.loads(argv_log.read_text("utf-8"))
     prompt = argv[argv.index("-p") + 1]
     assert NEEDS_INPUT_MARKER in prompt
+
+
+# --------------------------------------------------------------------------- #
+# 07-03 Task 2: a paused role resumes -- natively by session id, or by
+# context reconstruction -- both behind the identical worker.resume(...)
+# call (HITL-04, HITL-05).
+# --------------------------------------------------------------------------- #
+
+
+def test_capabilities_reports_native_resume_and_all_expected_flags() -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    caps = ClaudeCodeWorker().capabilities()
+
+    assert caps.native_resume is True
+    assert caps.session_id is True
+    assert caps.structured_output is True
+    assert caps.non_interactive is True
+    assert caps.emits_changed_files is False
+
+
+def _paused_with_session_id(session_id: str | None) -> "object":
+    from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
+
+    return WorkerResult(
+        status=WorkerResultStatus.NEEDS_INPUT,
+        summary="need a decision about clusters",
+        questions=["which cluster should I target?"],
+        worker_session_id=session_id,
+    )
+
+
+def test_resume_uses_native_session_id(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    previous = _paused_with_session_id("sess-abc")
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().resume(_context(), previous, "the primary cluster")
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert argv[argv.index("--resume") + 1] == "sess-abc"
+    assert argv[argv.index("-p") + 1] == "the primary cluster"
+
+
+def test_resume_without_session_id_reconstructs_context(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    previous = _paused_with_session_id(None)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().resume(_context(), previous, "the primary cluster")
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert "--resume" not in argv
+    prompt = argv[argv.index("-p") + 1]
+    assert "need a decision about clusters" in prompt
+    assert "which cluster should I target?" in prompt
+    assert "the primary cluster" in prompt
+
+
+def test_resume_with_null_answer_yields_non_empty_prompt_on_both_branches(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().resume(_context(), _paused_with_session_id("sess-abc"), None)
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert argv[argv.index("-p") + 1]
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().resume(_context(), _paused_with_session_id(None), None)
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert argv[argv.index("-p") + 1]
+
+
+def test_resume_timeout_returns_failed_and_persists_partial_log(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    script_path = fake_dir / "claude"
+    script_path.write_text(
+        """#!/usr/bin/env python3
+import sys
+import time
+
+sys.stdout.write("pre-sleep line\\n")
+sys.stdout.flush()
+time.sleep(30)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "1")
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        result = ClaudeCodeWorker().resume(
+            _context(), _paused_with_session_id("sess-abc"), "answer"
+        )
+        get_settings.cache_clear()
+
+    assert result.status is WorkerResultStatus.FAILED
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
+
+
+def test_resume_redacts_captured_transcript(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(fake_dir, stdout_payload=_payload_leaking(_FAKE_SECRET))
+
+    with fake_claude_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET):
+        ClaudeCodeWorker().resume(
+            _context(), _paused_with_session_id("sess-abc"), "answer"
+        )
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:anthropic_api_key]" in log_text
+    assert _FAKE_SECRET not in log_text
+
+
+def test_resume_missing_credential_returns_failed_without_raising(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        result = ClaudeCodeWorker().resume(
+            _context(), _paused_with_session_id("sess-abc"), "answer"
+        )
+        get_settings.cache_clear()
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert not argv_log.exists()
