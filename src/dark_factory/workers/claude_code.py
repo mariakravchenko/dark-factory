@@ -158,33 +158,40 @@ def _extract_needs_input(result_text: str) -> str | None:
 
 # The per-capability native tool name(s), keyed by the same `tools:` grant
 # vocabulary `ToolRegistry` enforces (`dark_factory.tools.registry.default_
-# registry.names()`). "artifacts.write" is deliberately absent -- the whole
-# point of that grant is a scope narrower than repo.write, so a bare tool
-# name here would silently widen it to the entire worktree. It is handled
-# separately in `allowed_tools_for()` as a path-scoped specifier instead.
+# registry.names()`). "artifacts.write" and "artifacts.read" are deliberately
+# absent -- the whole point of either grant is a scope narrower than
+# repo.read/repo.write (write: the role's own artifacts/<role>/ subtree;
+# read: the run's whole artifacts/ tree, still short of the full worktree
+# repo.read would give), so a bare tool name here would silently widen both.
+# They are handled separately in `allowed_tools_for()` as path-scoped
+# specifiers instead (CR-01: artifacts.read previously leaked in as a bare
+# `Read` grant here -- fixed by removing it from this table).
 _TOOL_NAMES: Mapping[str, tuple[str, ...]] = {
     "repo.read": ("Read", "Glob"),
     "repo.search": ("Grep", "Glob"),
     "repo.write": ("Write", "Edit"),
     "repo.write_tests": ("Write", "Edit"),
     "shell.execute": ("Bash",),
-    "artifacts.read": ("Read",),
 }
 
 
 def _tool_names_cover_native_contract() -> bool:
     """``True`` iff every capability in ``NATIVE_TOOL_CONTRACT`` has a
-    translation here (``artifacts.write`` counted via its path-scoped
-    handling in :func:`allowed_tools_for` rather than a ``_TOOL_NAMES``
-    entry). A plain function -- not an import-time assertion -- so a future
-    capability added to the contract without a translation fails a unit
-    test rather than silently granting nothing (Task 1 acceptance
-    criterion, T-07-18)."""
-    return set(_TOOL_NAMES) | {"artifacts.write"} == set(NATIVE_TOOL_CONTRACT)
+    translation here (``artifacts.write`` and ``artifacts.read`` counted via
+    their path-scoped handling in :func:`allowed_tools_for` rather than a
+    ``_TOOL_NAMES`` entry). A plain function -- not an import-time
+    assertion -- so a future capability added to the contract without a
+    translation fails a unit test rather than silently granting nothing
+    (Task 1 acceptance criterion, T-07-18)."""
+    return set(_TOOL_NAMES) | {"artifacts.write", "artifacts.read"} == set(
+        NATIVE_TOOL_CONTRACT
+    )
 
 
 def allowed_tools_for(
-    granted: Collection[str], artifacts_glob: str | None
+    granted: Collection[str],
+    artifacts_glob: str | None,
+    artifacts_read_glob: str | None = None,
 ) -> list[str]:
     """The ``--allowedTools`` element's value for a role holding ``granted``
     capabilities: a sorted, de-duplicated list of native tool names.
@@ -195,7 +202,11 @@ def allowed_tools_for(
     is translated to a single path-scoped ``Edit(<artifacts_glob>/**)``
     specifier -- never a bare ``Write`` -- when it is held and
     ``artifacts_glob`` is not ``None`` (a context-free call passes
-    ``None``, and the specifier is skipped).
+    ``None``, and the specifier is skipped). ``artifacts.read`` gets the
+    same treatment via ``Read(<artifacts_read_glob>/**)``, scoped to the
+    run's whole ``artifacts/`` tree rather than one role's subtree -- a
+    worker legitimately reads a *prior* role's artifact output, so its
+    read scope is deliberately broader than its own write scope (CR-01).
 
     Sorting is not cosmetic: it makes the returned list a deterministic
     function of ``granted``, so two spawns with the same grant set produce
@@ -206,6 +217,8 @@ def allowed_tools_for(
         names.update(_TOOL_NAMES.get(capability, ()))
     if "artifacts.write" in granted and artifacts_glob is not None:
         names.add(f"Edit({artifacts_glob}/**)")
+    if "artifacts.read" in granted and artifacts_read_glob is not None:
+        names.add(f"Read({artifacts_read_glob}/**)")
     return sorted(names)
 
 
@@ -346,6 +359,10 @@ def _base_argv(context: object) -> list[str]:
         if run_id and artifacts_dir
         else None
     )
+    # Run-scoped (not role-scoped) -- a worker legitimately reads a prior
+    # role's artifact output, so read spans the whole run's artifacts/ tree
+    # rather than being narrowed to this role's own subtree like write is.
+    artifacts_read_glob = f".dark-factory/runs/{run_id}/artifacts" if run_id else None
     argv = [
         CLAUDE_BINARY,
         "--output-format",
@@ -353,7 +370,7 @@ def _base_argv(context: object) -> list[str]:
         "--permission-mode",
         PERMISSION_MODE,
     ]
-    names = allowed_tools_for(granted, artifacts_glob)
+    names = allowed_tools_for(granted, artifacts_glob, artifacts_read_glob)
     if names:
         argv.extend(["--allowedTools", ",".join(names)])
     return argv
