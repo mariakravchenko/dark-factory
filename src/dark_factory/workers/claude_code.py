@@ -25,6 +25,7 @@ import re
 import signal
 import subprocess
 import tempfile
+from collections.abc import Collection, Mapping
 from pathlib import Path
 from uuid import UUID
 
@@ -37,6 +38,12 @@ from dark_factory.domain.worker import (
 )
 from dark_factory.events.redaction import redact
 from dark_factory.tools.env import build_worker_env
+
+# 06-CONTEXT.md D-02: NATIVE_TOOL_CONTRACT is the design contract Phase 7
+# adapters implement from -- this import is that contract's first real
+# (non-inert) runtime consumer (07-04, Task 1). Guarded, not un-guarded, by
+# tests/unit/test_native_tool_contract.py's narrowed reference allowlist.
+from dark_factory.tools.native import NATIVE_TOOL_CONTRACT
 from dark_factory.workers.base import CodingWorker
 
 __all__ = [
@@ -48,6 +55,7 @@ __all__ = [
     "RESUME_CONTINUATION_PROMPT",
     "ClaudeCodeWorker",
     "MissingWorkerCredentialError",
+    "allowed_tools_for",
     "attempt_log_paths",
 ]
 
@@ -146,6 +154,59 @@ def _extract_needs_input(result_text: str) -> str | None:
         return None
     question = match.group(1).strip()
     return question or None
+
+
+# The per-capability native tool name(s), keyed by the same `tools:` grant
+# vocabulary `ToolRegistry` enforces (`dark_factory.tools.registry.default_
+# registry.names()`). "artifacts.write" is deliberately absent -- the whole
+# point of that grant is a scope narrower than repo.write, so a bare tool
+# name here would silently widen it to the entire worktree. It is handled
+# separately in `allowed_tools_for()` as a path-scoped specifier instead.
+_TOOL_NAMES: Mapping[str, tuple[str, ...]] = {
+    "repo.read": ("Read", "Glob"),
+    "repo.search": ("Grep", "Glob"),
+    "repo.write": ("Write", "Edit"),
+    "repo.write_tests": ("Write", "Edit"),
+    "shell.execute": ("Bash",),
+    "artifacts.read": ("Read",),
+}
+
+
+def _tool_names_cover_native_contract() -> bool:
+    """``True`` iff every capability in ``NATIVE_TOOL_CONTRACT`` has a
+    translation here (``artifacts.write`` counted via its path-scoped
+    handling in :func:`allowed_tools_for` rather than a ``_TOOL_NAMES``
+    entry). A plain function -- not an import-time assertion -- so a future
+    capability added to the contract without a translation fails a unit
+    test rather than silently granting nothing (Task 1 acceptance
+    criterion, T-07-18)."""
+    return set(_TOOL_NAMES) | {"artifacts.write"} == set(NATIVE_TOOL_CONTRACT)
+
+
+def allowed_tools_for(
+    granted: Collection[str], artifacts_glob: str | None
+) -> list[str]:
+    """The ``--allowedTools`` element's value for a role holding ``granted``
+    capabilities: a sorted, de-duplicated list of native tool names.
+
+    Deny by omission (the documented ``NativeToolGrant.absent_behaviour``):
+    a capability with no ``_TOOL_NAMES`` entry contributes nothing, so the
+    CLI itself refuses a tool that is not in the list. ``artifacts.write``
+    is translated to a single path-scoped ``Edit(<artifacts_glob>/**)``
+    specifier -- never a bare ``Write`` -- when it is held and
+    ``artifacts_glob`` is not ``None`` (a context-free call passes
+    ``None``, and the specifier is skipped).
+
+    Sorting is not cosmetic: it makes the returned list a deterministic
+    function of ``granted``, so two spawns with the same grant set produce
+    byte-identical argv and a diff between them is meaningful.
+    """
+    names: set[str] = set()
+    for capability in granted:
+        names.update(_TOOL_NAMES.get(capability, ()))
+    if "artifacts.write" in granted and artifacts_glob is not None:
+        names.add(f"Edit({artifacts_glob}/**)")
+    return sorted(names)
 
 
 def attempt_log_paths(root: Path, role: str, attempt: int) -> tuple[Path, Path]:
@@ -263,17 +324,39 @@ def _build_resume_prompt(
 def _base_argv(context: object) -> list[str]:
     """The fixed argv prefix shared by every invocation. An explicit
     ``list[str]`` -- never joined into a string, never run with
-    ``shell=True``. ``--allowedTools`` is deliberately absent; plan 07-04
-    adds it. No ``--permission-mode`` value scopes file access to a
+    ``shell=True``. No ``--permission-mode`` value scopes file access to a
     directory -- worktree confinement comes from ``cwd=work_dir`` at spawn
-    (07-RESEARCH.md Summary finding 1 / Pitfall 3)."""
-    return [
+    (07-RESEARCH.md Summary finding 1 / Pitfall 3).
+
+    ``--allowedTools`` (07-04, Task 1) is derived from ``context.tools`` --
+    the same grant list ``ToolRegistry.invoke`` enforces for Dark-Factory-
+    initiated calls -- translated through :func:`allowed_tools_for`. Because
+    both :meth:`ClaudeCodeWorker._execute` and
+    :meth:`ClaudeCodeWorker._resume` build their argv from this function,
+    the restriction applies identically to both entry points with no
+    special-casing. An empty grant list produces no ``--allowedTools``
+    element at all -- an ``--allowedTools`` flag with an empty value is not
+    the same as no flag, and only the omission expresses "grants nothing".
+    """
+    granted = getattr(context, "tools", None) or []
+    run_id = getattr(context, "run_id", None)
+    artifacts_dir = getattr(context, "artifacts_dir", None)
+    artifacts_glob = (
+        f".dark-factory/runs/{run_id}/{artifacts_dir}"
+        if run_id and artifacts_dir
+        else None
+    )
+    argv = [
         CLAUDE_BINARY,
         "--output-format",
         "json",
         "--permission-mode",
         PERMISSION_MODE,
     ]
+    names = allowed_tools_for(granted, artifacts_glob)
+    if names:
+        argv.extend(["--allowedTools", ",".join(names)])
+    return argv
 
 
 def _scrub_log_in_place(path: Path) -> None:
