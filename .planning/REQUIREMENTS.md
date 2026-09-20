@@ -41,7 +41,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [ ] **WORK-04**: `ClaudeCodeWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-05**: `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [ ] **WORK-06**: `HermesWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
-- [ ] **WORK-07**: `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
+- [x] **WORK-07**: `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
 - [x] **WORK-08**: Every adapter normalizes its output to one `WorkerResult` (status COMPLETED | NEEDS_INPUT | FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
 - [ ] **WORK-09**: Any role can be assigned to any supported worker via configuration with no change to workflow code
 - [x] **WORK-10**: A `FakeWorker` returns a scripted sequence of `WorkerResult`s for orchestration tests with no external AI call
@@ -84,8 +84,8 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **HITL-01**: Any role can ask the human for clarification through one identical mechanism
 - [x] **HITL-02**: On a worker `NEEDS_INPUT` result the orchestrator stores the result and worker session, creates a human interaction, persists `WAITING_HUMAN`, and releases the execution so the process can terminate safely
 - [x] **HITL-03**: Operator can resume a paused run locally — `dark-factory resume <run-id> --answer "..."` — from a brand-new process with no in-memory state from the original run
-- [ ] **HITL-04**: When a worker adapter supports native sessions, resume uses the opaque `worker_session_id`; the orchestrator does not interpret it
-- [ ] **HITL-05**: When native resume is unavailable, the adapter resumes by reconstructing context; the orchestrator sees the same `worker.resume(...)` call either way
+- [x] **HITL-04**: When a worker adapter supports native sessions, resume uses the opaque `worker_session_id`; the orchestrator does not interpret it
+- [x] **HITL-05**: When native resume is unavailable, the adapter resumes by reconstructing context; the orchestrator sees the same `worker.resume(...)` call either way
 - [ ] **HITL-06**: A run can be resumed on a different machine or process than the one that started it (local → CI, webhook, delayed human answer)
 - [x] **HITL-07**: Two processes cannot execute the same run simultaneously; single-owner execution is enforced with PostgreSQL transactions / row locking / conditional updates and no separate distributed-lock service
 - [x] **HITL-08**: A database transaction is never held open across a worker subprocess call; ownership is held by a lease with database-clock expiry
@@ -143,7 +143,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Quality & Testing
 
 - [ ] **QUAL-01**: Orchestration behavior is tested end-to-end with `FakeWorker` — role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing — with no external AI calls
-- [ ] **QUAL-02**: A shared `CodingWorker` contract-test suite runs against every adapter (including `FakeWorker`) so `FakeWorker` cannot diverge from real adapter behavior
+- [x] **QUAL-02**: A shared `CodingWorker` contract-test suite runs against every adapter (including `FakeWorker`) so `FakeWorker` cannot diverge from real adapter behavior
 - [ ] **QUAL-03**: Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent
 - [x] **QUAL-04**: A CI check fails the build if worker-name branching leaks outside the adapters
 
@@ -209,7 +209,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | WORK-04 | Phase 7 | Pending |
 | WORK-05 | Phase 8 | Pending |
 | WORK-06 | Phase 8 | Pending |
-| WORK-07 | Phase 7 | Pending |
+| WORK-07 | Phase 7 | Complete |
 | WORK-08 | Phase 1 | Complete |
 | WORK-09 | Phase 8 | Pending |
 | WORK-10 | Phase 1 | Complete |
@@ -237,8 +237,8 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | HITL-01 | Phase 2 | Complete |
 | HITL-02 | Phase 2 | Complete |
 | HITL-03 | Phase 2 | Complete |
-| HITL-04 | Phase 7 | Pending |
-| HITL-05 | Phase 7 | Pending |
+| HITL-04 | Phase 7 | Complete |
+| HITL-05 | Phase 7 | Complete |
 | HITL-06 | Phase 11 | Pending |
 | HITL-07 | Phase 2 | Complete |
 | HITL-08 | Phase 2 | Complete |
@@ -272,7 +272,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 6 | Complete |
 | QUAL-01 | Phase 11 | Pending |
-| QUAL-02 | Phase 7 | Pending |
+| QUAL-02 | Phase 7 | Complete |
 | QUAL-03 | Phase 8 | Pending |
 | QUAL-04 | Phase 7 | Complete |
 

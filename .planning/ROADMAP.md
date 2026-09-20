@@ -314,7 +314,7 @@ Plans:
   4. A CI check fails the build when a worker name appears outside the adapter modules.
   5. A hung or over-long agent subprocess is killed by timeout with its process group, its output is streamed to the run's log files rather than buffered, and the role failure is persisted with the captured output.
 
-**Plans**: 2/4 plans executed
+**Plans**: 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -324,7 +324,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 07-03-PLAN.md — `NEEDS_INPUT` marker, native-session resume vs. context reconstruction, and the shared contract suite run against both adapters (wave 2)
+- [x] 07-03-PLAN.md — `NEEDS_INPUT` marker, native-session resume vs. context reconstruction, and the shared contract suite run against both adapters (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -425,7 +425,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
-| 7. Claude Code — the First Real Worker | 2/4 | In Progress|  |
+| 7. Claude Code — the First Real Worker | 3/4 | In Progress|  |
 | 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |

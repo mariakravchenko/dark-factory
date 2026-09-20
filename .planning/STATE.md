@@ -3,17 +3,17 @@ gsd_state_version: "1.0"
 current_phase: 07
 current_phase_name: Claude Code — the First Real Worker
 status: executing
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-09-20T18:13:31.112Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-09-20T18:33:08.983Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 07 execution started
-state_head: 77c2a9a1f428d3d3bd1f9e3e7d8f44d77df02b35
+state_head: c7617d86340ec14a17c82b44e70296668f4a8f6c
 progress:
   total_phases: 12
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 39
-  completed_plans: 37
-  percent: 8
+  completed_plans: 38
+  percent: 0
 ---
 
 # Project State
@@ -28,11 +28,11 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 ## Current Position
 
 Phase: 07 (Claude Code — the First Real Worker) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-09-20 — Phase 07 execution started
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -96,6 +96,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 06 P04 | 65min | 2 tasks | 4 files |
 | Phase 07 P01 | 9min | 3 tasks | 7 files |
 | Phase 07 P02 | 12min | 2 tasks | 2 files |
+| Phase 07 P03 | 12min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -189,6 +190,7 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-01: ClaudeCodeWorker is a real CodingWorker adapter -- stream-to-file subprocess (never PIPE), Settings.anthropic_api_key/worker_timeout_seconds (D-02/D-03), redact-before-return closes the SEC-01 gap in the force-committed run tree; resume()/capabilities() deliberately stubbed pending 07-03 (WINDOWS.md #10)
 - [Phase 07]: [Phase 07]: 07-02: Quoted "on": in ci.yml (not bare on:) -- PyYAML/YAML 1.1 parses a bare `on` key as boolean True, breaking document['on'] lookups in both the plan's verify command and the Task 2 structural guard; quoting is the standard GitHub Actions workaround with zero effect on GitHub's own parser
 - [Phase 07]: [Phase 07]: 07-02: TDD RED anchor for the guard-on-the-guard test was the self-detection sanity test, not the main assertion -- a stub _offenders() returning [] trivially passes "no offenders" on an already-compliant workflow, so RED had to target test_the_guard_detects_its_own_subject instead
+- [Phase 07]: [Phase 07]: 07-03: NEEDS_INPUT marker regex (MULTILINE anchors line-start; DOTALL+\Z captures multi-line question); resume() shares execute()'s entire spawn/timeout/redact/parse pipeline via _spawn_and_parse(argv, context) so the two entry points cannot drift; capabilities() now native_resume=True; contract suite runs ClaudeCodeWorker with a fake CLI on PATH and no live credential (QUAL-02)
 
 ### Pending Todos
 
@@ -214,6 +216,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T18:13:20.012Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-09-20T18:33:08.843Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
