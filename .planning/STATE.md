@@ -1,44 +1,44 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 06
-current_phase_name: Tools, Permissions & the Credential Boundary
-status: verifying
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-19T06:11:11.880Z"
-last_activity: 2026-09-17
-last_activity_desc: Phase 06 execution started
-state_head: c48d4280fdb98909591d27dc0a276850cb14cff5
+current_phase: 7
+current_phase_name: Claude Code — the First Real Worker
+status: planning
+stopped_at: Phase 06 complete, ready to plan Phase 7
+last_updated: "2026-09-20T09:49:02.152Z"
+last_activity: 2026-09-20
+last_activity_desc: Phase 06 complete, transitioned to Phase 7
+state_head: c5ffc5e90ac4855331f13c38d9b8f4e07e2a2ea9
 progress:
   total_phases: 12
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 35
   completed_plans: 35
-  percent: 0
+  percent: 8
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-16)
+See: .planning/PROJECT.md (updated 2026-09-20)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 06 — Tools, Permissions & the Credential Boundary
+**Current focus:** Phase 07 — Claude Code — the First Real Worker
 
 ## Current Position
 
-Phase: 06 (Tools, Permissions & the Credential Boundary) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-09-17 — Phase 06 execution started
+Phase: 7 — Claude Code — the First Real Worker
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-20 — Phase 06 complete, transitioned to Phase 7
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 8%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 31
+- Total plans completed: 35
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0%
 | 03 | 4 | - | - |
 | 04 | 5 | - | - |
 | 05 | 6 | - | - |
+| 06 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -180,7 +181,9 @@ Recent decisions affecting current work:
 - [Phase 06]: build_worker_env mirrors git_env(): additive dict comprehension over WORKER_ENV_ALLOWLIST (derived from GIT_ENV_ALLOWLIST + XDG_* entries), never a parent-environment copy/spread/exclusion-filter (D-09, TOOL-04)
 - [Phase 06]: shell.execute (D-11) spawns an explicit argv sequence via subprocess.Popen with build_worker_env()'s environment, start_new_session=True, and process-group kill on timeout; performs no permission check of its own -- ToolRegistry.invoke() stays the single enforcement point
 - [Phase 06]: MCP transport: build_mcp_server registers per-role closures that all funnel through ToolRegistry.invoke() -- advertised list is never the enforcement boundary; two SDK bugs in RESEARCH's own code sketch (leading-underscore param rejection, **kwargs schema mishandling) plus a JSON/Path argument marshalling gap were discovered and fixed empirically
-- [Phase 06]: [Phase 06]: 06-04: SEC-01 sweep of the capability-denial path (artifact tree, worker prompt, event payloads, role-execution columns, logs) plus the Phase 6 acceptance gate mapping all five SC/seven requirement ids to proof files; test_validation_strategy_and_gate_cannot_drift asserts bidirectional set equality against 06-VALIDATION.md. Phase 6 complete.
+- [Phase 06]: [Phase 06]: 06-04: SEC-01 sweep of the capability-denial path (artifact tree, worker prompt, event payloads, role-execution columns, logs) plus the Phase 6 acceptance gate mapping all five SC/seven requirement ids to proof files; test_validation_strategy_and_gate_cannot_drift asserts bidirectional set equality against 06-VALIDATION.md.
+- [Phase 06]: All 4 deferred human-verification items (db/integration-tier tests needing real PostgreSQL 17) closed 2026-09-20 — user ran the full suite against real Postgres 17: 763 passed, 0 failed. Phase 6 VERIFICATION.md re-verified passed (was human_needed).
+- [Phase 06]: 3 long-standing "pre-existing, unrelated" test failures (tests/db/test_artifact_commit_per_role.py x2, tests/integration/test_pr_diff_excludes_artifacts.py x1), carried since 06-01-SUMMARY.md, were a stale test-fixture defect — write_scope: [] (D-14 zero-tolerance) combined with the test's own worker planting a non-artifact file. Fixed test-only (commit ffc333f), zero production changes. Root cause: .planning/debug/resolved/phase4-artifact-commit-bugs.md. Phase 6 complete.
 
 ### Pending Todos
 
@@ -206,6 +209,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-19T06:11:11.817Z
-Stopped at: Completed 06-04-PLAN.md
+Last session: 2026-09-20T09:50:18.000Z
+Stopped at: Phase 06 complete, ready to plan Phase 7
 Resume file: None

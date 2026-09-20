@@ -56,7 +56,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Configuration-Driven Pipeline** - Pipeline shape and role behaviour come from YAML, snapshotted per run for deterministic resume (completed 2026-09-11)
 - [x] **Phase 4: The Four-Role Pipeline & Artifact Handoffs** - BA → Architect → Developer → QA hand off through durable artifacts with machine-readable verdicts (completed 2026-09-13)
 - [x] **Phase 5: Isolated Workspace & Git Lifecycle** - Every run owns a working branch and clean worktree, and its artifacts travel to another machine (completed 2026-09-16)
-- [ ] **Phase 6: Tools, Permissions & the Credential Boundary** - Roles get only granted capabilities; workers never see an infrastructure credential
+- [x] **Phase 6: Tools, Permissions & the Credential Boundary** - Roles get only granted capabilities; workers never see an infrastructure credential (completed 2026-09-20)
 - [ ] **Phase 7: Claude Code — the First Real Worker** - A real agent runtime performs a role and resumes, with the orchestrator runtime-agnostic
 - [ ] **Phase 8: Copilot & Hermes — Worker Independence Proven** - The same role runs unchanged on three genuinely different runtimes, chosen in config
 - [ ] **Phase 9: Independent Quality Gate & Bounded Feedback Loops** - The platform re-runs the repo's own commands and bounds every retry
@@ -409,7 +409,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 3. Configuration-Driven Pipeline | 4/4 | Complete    | 2026-09-11 |
 | 4. The Four-Role Pipeline & Artifact Handoffs | 5/5 | Complete    | 2026-09-13 |
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
-| 6. Tools, Permissions & the Credential Boundary | 4/4 | In Progress|  |
+| 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 0/TBD | Not started | - |
 | 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |

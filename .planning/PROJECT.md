@@ -53,6 +53,11 @@ resume it; durability and observability are the same requirement.
 - ✓ Dark Factory owns delivery actions (create branch, commit, push, create PR); agents never own commit/push/PR policy — Phase 5 (GIT-02)
 - ✓ Role-specific tool permissions enforced (write-scope authorization: a role's permitted file-write scope is enforced after execution against path rules from configuration) — Phase 5 (ROLE-05)
 - ✓ Artifact content is available to a resuming process on a different machine — commit-per-role onto the run's working branch, proven via cross-clone tests — Phase 5 (ART-04)
+- ✓ `ToolRegistry` capability layer with `invoke()` as the single deny-by-default enforcement point; extensible without touching every role executor — Phase 6 (TOOL-01/02, scoped to the 7 `repo.*`/`shell.execute`/`artifacts.*` capabilities; `git.*`/`github.*` deferred to Phase 9/10 per disclosed scope decision)
+- ✓ Each role receives only its explicitly configured tools; grants are deny-by-default (BA/Architect read-only on code; Developer write + shell; QA write_tests + shell, no publish) — Phase 6 (TOOL-03)
+- ✓ A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker — Phase 6 (TOOL-04, SEC-03)
+- ✓ MCP supported as one optional transport adapter for exposing tools to compatible workers; orchestrator has no internal dependency on MCP — Phase 6 (TOOL-05)
+- ✓ Credential/secret values never appear in role artifacts, worker prompts, Neon event payloads, logs, or reports — Phase 6 (SEC-01)
 
 ### Active
 
@@ -65,7 +70,7 @@ resume it; durability and observability are the same requirement.
 - [ ] Normalize every source to one internal `NormalizedTask` model
 
 **Role orchestration**
-- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement is Phase 6)
+- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement shipped Phase 6 (TOOL-01/02/03))
 
 **Worker (agent runtime) abstraction**
 - [ ] `CodingWorker` contract: `execute()`, `resume()`, `capabilities()`
@@ -78,9 +83,7 @@ resume it; durability and observability are the same requirement.
 - [ ] `FakeWorker` for orchestration tests (scripted `WorkerResult` sequence)
 
 **Tools, permissions, security boundary**
-- [ ] `ToolRegistry` capability layer: `repo.read/search/write/write_tests`, `shell.execute`, `git.status/diff/history`, `github.issue.read`, `github.comments.read`, `artifacts.read/write`; extensible without touching every role executor
-- [ ] Tool permission config is a security boundary: workers never receive `DATABASE_URL`, `GITHUB_TOKEN`, or other infrastructure credentials; only the minimum env required for the role
-- [ ] MCP supported as one optional transport adapter for exposing tools to compatible workers; orchestrator never depends on MCP internally
+- [ ] `git.status/diff/history`, `github.issue.read`, `github.comments.read` capabilities — deferred from Phase 6's `ToolRegistry` scope to Phase 9/10, where Git lifecycle and GitHub integration actually need them
 
 **Durable execution state (Neon PostgreSQL)**
 - [ ] Persistence stack: SQLAlchemy + Alembic + PostgreSQL (Neon); `DATABASE_URL` only; no provider-specific logic in orchestration code
@@ -187,6 +190,9 @@ resume it; durability and observability are the same requirement.
 | Zero-config artifact synthesis derives every downstream criterion id from the role's resolved `context.inputs` (structural validation, then a Markdown carrier-line regex) rather than any hardcoded literal — dispatch stays on content shape only, never `context.role` | UAT gap G-04-1: `FakeWorker`'s placeholder synthesis had two independent hardcoded ids that only coincidentally matched, so renaming one didn't move the other; regression tests now compare against the origin artifact's own emitted ids, never a fixed expectation, so a reintroduced hardcode fails the test the way the original defect would have | Shipped Phase 4 (plan 04-05) |
 | On COMPLETED, the run driver commits any trailing worktree content onto the run's working branch (via `wip_commit_if_dirty`, which stages untracked files) *before* deleting the worktree — the working branch, not the worktree filesystem, is the durable record D-04 guarantees | UAT gap G-05-1: the SC4 in-scope-edit test asserted against the worktree filesystem, a location D-04 deliberately deletes after COMPLETED — a test defect, not a product bug. Root cause: `.planning/debug/in-scope-edit-missing-after-completed.md` | Shipped Phase 5 (plan 05-05); zero production changes |
 | CR-02's `revert_paths` escape-ordering fix needed unit-tier coverage with no database — the scope module never touched Postgres, but its tests were partitioned "pure functions only" vs. "full pipeline behind a DB fixture," leaving no DB-free home and letting a Critical review fix ship with zero executed coverage | UAT gap G-05-2: `tests/unit/test_write_scope_revert.py` added as a new DB-free unit-tier home (mirroring `test_git_lifecycle.py`'s real-git-on-`tmp_path` pattern), proving escape-first/last/only/multiple cases directly against `revert_paths` and `enforce_write_scope`. Root cause: `.planning/debug/cr02-revert-ordering-test-gap.md` | Shipped Phase 5 (plan 05-06); zero production changes |
+| `ToolRegistry.invoke()` is the single deny-by-default enforcement point every capability call and every transport (MCP included) funnels through — never a second permission check at the transport layer | Spec's tool-permission-as-security-boundary requirement (TOOL-03); keeps the grant check in exactly one place so a new transport can't accidentally bypass it | Shipped Phase 6 |
+| `build_worker_env` is additive-from-empty-dict over an explicit allowlist, never `os.environ.copy()`/spread/exclusion-filter | CLAUDE.md's explicit "What NOT to Use" prohibition on `os.environ.copy()` when spawning workers — the credential boundary must be constructive, not subtractive | Shipped Phase 6 (TOOL-04, SEC-03) |
+| Three long-standing "pre-existing, unrelated" test failures (phase-4/5 git-worktree/artifact-commit mechanics) were a stale-fixture defect, not a product bug — each test declared its role's `write_scope: []` (D-14 zero-tolerance deny-all) while its own worker planted a non-artifact file in the worktree, and write-scope enforcement correctly reverted it | Root cause: `.planning/debug/resolved/phase4-artifact-commit-bugs.md`. The detection gate (db/integration tier) worked and reported it correctly for two phases; the response gate did not — it was triaged as pre-existing/unrelated and carried as an accepted baseline instead of investigated | Fixed at Phase 6 close-out (commit `ffc333f`); zero production changes |
 
 ## Evolution
 
@@ -206,4 +212,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-16 after Phase 5*
+*Last updated: 2026-09-20 after Phase 6*
