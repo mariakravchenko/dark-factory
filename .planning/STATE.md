@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 07
-current_phase_name: claude-code-the-first-real-worker
+current_phase_name: Claude Code — the First Real Worker
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-09-20T11:46:10.470Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-09-20T18:06:44.787Z"
 last_activity: 2026-09-20
-last_activity_desc: Phase 06 complete, transitioned to Phase 7
-state_head: a0a814936345be8fea9c4591f08aa809fad31f88
+last_activity_desc: Phase 07 execution started
+state_head: 8c170696c510d859ffc8bf3ff6fef87ce4a34bbb
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 39
-  completed_plans: 35
+  completed_plans: 36
   percent: 8
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 
 ## Current Position
 
-Phase: 07 (claude-code-the-first-real-worker) — READY TO EXECUTE
-Plan: Not started
+Phase: 07 (Claude Code — the First Real Worker) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-09-20 — Phase 06 complete, transitioned to Phase 7
+Last activity: 2026-09-20 — Phase 07 execution started
 
 Progress: [█░░░░░░░░░] 8%
 
@@ -94,6 +94,7 @@ Progress: [█░░░░░░░░░] 8%
 | Phase 06 P02 | 55min | 2 tasks | 7 files |
 | Phase 06 P03 | 135min | 3 tasks | 5 files |
 | Phase 06 P04 | 65min | 2 tasks | 4 files |
+| Phase 07 P01 | 9min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -184,6 +185,7 @@ Recent decisions affecting current work:
 - [Phase 06]: [Phase 06]: 06-04: SEC-01 sweep of the capability-denial path (artifact tree, worker prompt, event payloads, role-execution columns, logs) plus the Phase 6 acceptance gate mapping all five SC/seven requirement ids to proof files; test_validation_strategy_and_gate_cannot_drift asserts bidirectional set equality against 06-VALIDATION.md.
 - [Phase 06]: All 4 deferred human-verification items (db/integration-tier tests needing real PostgreSQL 17) closed 2026-09-20 — user ran the full suite against real Postgres 17: 763 passed, 0 failed. Phase 6 VERIFICATION.md re-verified passed (was human_needed).
 - [Phase 06]: 3 long-standing "pre-existing, unrelated" test failures (tests/db/test_artifact_commit_per_role.py x2, tests/integration/test_pr_diff_excludes_artifacts.py x1), carried since 06-01-SUMMARY.md, were a stale test-fixture defect — write_scope: [] (D-14 zero-tolerance) combined with the test's own worker planting a non-artifact file. Fixed test-only (commit ffc333f), zero production changes. Root cause: .planning/debug/resolved/phase4-artifact-commit-bugs.md. Phase 6 complete.
+- [Phase 07]: 07-01: ClaudeCodeWorker is a real CodingWorker adapter -- stream-to-file subprocess (never PIPE), Settings.anthropic_api_key/worker_timeout_seconds (D-02/D-03), redact-before-return closes the SEC-01 gap in the force-committed run tree; resume()/capabilities() deliberately stubbed pending 07-03 (WINDOWS.md #10)
 
 ### Pending Todos
 
@@ -209,6 +211,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T10:57:28.256Z
-Stopped at: Phase 7 context gathered
-Resume file: .planning/phases/07-claude-code-the-first-real-worker/07-CONTEXT.md
+Last session: 2026-09-20T18:06:44.716Z
+Stopped at: Completed 07-01-PLAN.md
+Resume file: None
