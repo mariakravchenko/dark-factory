@@ -46,7 +46,38 @@ def _offenders(document: dict[str, Any]) -> list[str]:
     document."""
     offenders: list[str] = []
 
-    # TODO(RED): triggers/continue-on-error/marker-selector checks land in GREEN.
+    triggers = document.get("on") or {}
+    if not isinstance(triggers, dict) or "push" not in triggers:
+        offenders.append("workflow is missing a 'push' trigger")
+    if not isinstance(triggers, dict) or "pull_request" not in triggers:
+        offenders.append("workflow is missing a 'pull_request' trigger")
+
+    steps = _quality_steps(document)
+
+    if not any(_LEAK_GUARD_PATH in step.get("run", "") for step in steps):
+        offenders.append(
+            f"no step in the quality job runs {_LEAK_GUARD_PATH!r}"
+        )
+
+    for index, step in enumerate(steps):
+        if step.get("continue-on-error"):
+            name = step.get("name", f"step[{index}]")
+            offenders.append(
+                f"step {name!r} sets continue-on-error to a truthy value"
+            )
+
+    for index, step in enumerate(steps):
+        run = step.get("run", "")
+        if "pytest" not in run or "-m" not in run:
+            continue
+        for marker in _EXCLUDED_MARKERS:
+            if marker in run:
+                name = step.get("name", f"step[{index}]")
+                offenders.append(
+                    f"step {name!r} pytest invocation selects excluded "
+                    f"marker {marker!r} ({run!r})"
+                )
+
     return offenders
 
 
