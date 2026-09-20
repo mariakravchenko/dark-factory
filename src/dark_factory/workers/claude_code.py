@@ -21,6 +21,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import signal
 import subprocess
 import tempfile
@@ -41,6 +42,8 @@ from dark_factory.workers.base import CodingWorker
 __all__ = [
     "CLAUDE_BINARY",
     "CLAUDE_CREDENTIAL_ENV_VAR",
+    "NEEDS_INPUT_MARKER",
+    "NEEDS_INPUT_PROTOCOL",
     "PERMISSION_MODE",
     "ClaudeCodeWorker",
     "MissingWorkerCredentialError",
@@ -50,6 +53,32 @@ __all__ = [
 CLAUDE_CREDENTIAL_ENV_VAR = "ANTHROPIC_API_KEY"
 CLAUDE_BINARY = "claude"
 PERMISSION_MODE = "dontAsk"
+
+# D-01: the fixed line-initial token that signals a clarifying question. The
+# CLI's own `result` text is the only channel the agent has to ask for a
+# human decision -- this constant is the two-sided contract's shared literal:
+# the prompt below states the rule and `_NEEDS_INPUT_RE` parses it back out.
+NEEDS_INPUT_MARKER = "NEEDS_INPUT:"
+
+NEEDS_INPUT_PROTOCOL = f"""## Clarification protocol
+If you cannot proceed without a human decision, end your final message with a
+single line that begins with the exact token "{NEEDS_INPUT_MARKER}" followed
+by the one question the human must answer. Write nothing after that line.
+Never emit this token for any other purpose."""
+
+# D-01: MULTILINE anchors the marker to the start of a line (`^`), so an
+# ordinary sentence that merely mentions the token mid-line never matches --
+# only a line that begins with it is treated as the signal. DOTALL makes `.`
+# match newlines too, and combined with the `\Z` end-of-string anchor, the
+# capture group grabs everything from right after the marker to the end of
+# the result text in one shot -- which is how a multi-line question is
+# extracted without a second delimiter marking where it ends. Both flags are
+# load-bearing: drop MULTILINE and a stray mention anywhere in prose would
+# trigger a pause; drop DOTALL/`\Z` and only the marker's own line would be
+# captured, truncating a multi-line question.
+_NEEDS_INPUT_RE = re.compile(
+    rf"^{re.escape(NEEDS_INPUT_MARKER)}[ \t]*(.*)\Z", re.MULTILINE | re.DOTALL
+)
 
 # The cap on a stderr/stdout excerpt folded into a WorkerResult.error, so a
 # runaway transcript cannot bloat the JSONB `result`/`error` column the
@@ -87,6 +116,26 @@ class MissingWorkerCredentialError(RuntimeError):
             "Settings.anthropic_api_key before running a role whose worker "
             "is 'claude-code'"
         )
+
+
+def _extract_needs_input(result_text: str) -> str | None:
+    """Return the clarification question if ``result_text`` ends with a
+    line-initial ``NEEDS_INPUT:`` marker, else ``None`` (D-01).
+
+    An empty capture -- a marker line followed only by whitespace -- degrades
+    to "no marker" rather than an empty-string question: returning an empty
+    string here would let a caller build
+    ``WorkerResult(status=NEEDS_INPUT, questions=[""])``, which
+    ``WorkerResult._require_question_for_needs_input`` rejects with a
+    ``ValidationError`` raised *inside* this adapter -- ``execute()``'s outer
+    ``except Exception`` would then downgrade that into a spurious ``FAILED``
+    instead of the ``COMPLETED`` this case should be.
+    """
+    match = _NEEDS_INPUT_RE.search(result_text)
+    if match is None:
+        return None
+    question = match.group(1).strip()
+    return question or None
 
 
 def attempt_log_paths(root: Path, role: str, attempt: int) -> tuple[Path, Path]:
@@ -153,8 +202,11 @@ def _build_prompt(context: object) -> str:
         )
         sections.append(f"## Expected outputs\n{bullets}")
 
-    # Seam for the 07-03 clarification protocol (NEEDS_INPUT marker
-    # instructions) -- intentionally left empty here.
+    # D-01: the clarification protocol always comes last, so a reconstructed
+    # resume prompt (`_build_resume_prompt`) can append its own sections
+    # ahead of it and the agent still sees the convention as its final
+    # instruction.
+    sections.append(NEEDS_INPUT_PROTOCOL)
 
     return "\n\n".join(sections)
 
@@ -349,10 +401,26 @@ class ClaudeCodeWorker(CodingWorker):
         metadata = {
             key: parsed[key] for key in _RESULT_METADATA_KEYS if key in parsed
         }
+        result_text = str(parsed.get("result", ""))
+        session_id = parsed.get("session_id")
+
+        # D-01: a non-error result may still be a pause request. Precedence
+        # is: is_error / non-zero exit (handled above) always wins; a
+        # NEEDS_INPUT marker wins over COMPLETED; otherwise COMPLETED.
+        question = _extract_needs_input(result_text)
+        if question is not None:
+            return WorkerResult(
+                status=WorkerResultStatus.NEEDS_INPUT,
+                summary=result_text,
+                questions=[question],
+                worker_session_id=session_id,
+                metadata=metadata,
+            )
+
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
-            summary=str(parsed.get("result", "")),
-            worker_session_id=parsed.get("session_id"),
+            summary=result_text,
+            worker_session_id=session_id,
             metadata=metadata,
         )
 
