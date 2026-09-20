@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     liveness *is* a freshly pushed expiry, and an owner proves it by renewing,
     not by anyone probing it. Both are ordinary integers (not credentials)
     overridable from the environment, so a test can inject a 2-second lease.
+
+    ``anthropic_api_key`` (Plan 07-01, D-02) is optional -- exactly like
+    ``github_token`` -- so nothing new is required at process startup for an
+    environment that only ever runs ``fake``-worker pipelines. Its absence
+    only surfaces when a role actually tries to invoke the ``claude-code``
+    worker (``ClaudeCodeWorker.execute()`` raises a typed
+    ``MissingWorkerCredentialError`` before spawning anything).
+    ``worker_timeout_seconds`` (D-03) is the single knob governing every
+    worker subprocess call; 1800s (30 minutes) is a deliberately generous
+    *estimate*, not a measured figure -- no authoritative "typical role
+    duration" exists to anchor it against (07-RESEARCH.md Open Question #1),
+    chosen so a DEVELOPMENT-role attempt that builds and iterates is not
+    truncated mid-flight.
     """
 
     model_config = SettingsConfigDict(
@@ -57,6 +70,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     lease_ttl_seconds: int = 900
     lease_heartbeat_seconds: int = 300
+    anthropic_api_key: SecretStr | None = None
+    worker_timeout_seconds: int = 1800
 
     @field_validator("log_level")
     @classmethod
@@ -92,6 +107,20 @@ class Settings(BaseSettings):
                 f"({self.lease_ttl_seconds!r}); a heartbeat that fires no more "
                 f"often than the lease expires guarantees the owner loses its "
                 f"own lease"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _worker_timeout_is_positive(self) -> Settings:
+        """A non-positive worker timeout would either fail every subprocess
+        call immediately (0) or be meaningless for ``Popen.wait(timeout=...)``
+        (negative) -- reject both loudly rather than let a typo'd
+        ``WORKER_TIMEOUT_SECONDS`` produce a mysteriously instant-FAILED role.
+        """
+        if self.worker_timeout_seconds <= 0:
+            raise ValueError(
+                f"worker_timeout_seconds must be strictly positive, got "
+                f"{self.worker_timeout_seconds!r}"
             )
         return self
 

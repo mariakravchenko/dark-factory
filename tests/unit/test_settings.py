@@ -259,6 +259,46 @@ def test_known_secret_values_never_contains_a_lease_field(
     assert "300" not in known
 
 
+def test_anthropic_api_key_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch)
+    assert Settings(_env_file=None).anthropic_api_key is None
+
+
+def test_worker_timeout_seconds_defaults_to_1800(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch)
+    assert Settings(_env_file=None).worker_timeout_seconds == 1800
+
+
+def test_worker_timeout_seconds_is_read_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, WORKER_TIMEOUT_SECONDS="1")
+    settings = Settings(_env_file=None)
+    assert settings.worker_timeout_seconds == 1
+    assert type(settings.worker_timeout_seconds) is int
+
+
+@pytest.mark.parametrize("bad_timeout", ["0", "-1"])
+def test_non_positive_worker_timeout_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, bad_timeout: str
+) -> None:
+    from pydantic import ValidationError
+
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch, WORKER_TIMEOUT_SECONDS=bad_timeout)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
 def test_get_settings_returns_a_cached_singleton(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

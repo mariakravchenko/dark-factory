@@ -9,14 +9,15 @@ class hands back a fresh instance every call, a factory bound to a single object
 hands back that same object every call. The choice is the registrant's, not the
 registry's -- the registry stays a plain name-to-callable map.
 
-``default_registry`` maps four names: ``"fake"`` (the real, working test worker)
-plus ``"claude-code"``, ``"copilot"`` and ``"hermes"``. The latter three resolve
-so config validation at run creation can accept a role that names them, but every
+``default_registry`` maps four names: ``"fake"`` (the real, working test worker),
+``"claude-code"`` (Plan 07-01: a real adapter that spawns the ``claude`` CLI),
+and ``"copilot"``/``"hermes"``, which still resolve to a placeholder so config
+validation at run creation can accept a role that names them -- every
 :class:`CodingWorker` entry point on their placeholder raises
-``NotImplementedError`` until the real adapters land in Phase 7 (claude-code) and
-Phase 8 (copilot / hermes). Config validation must therefore test membership with
-``name in registry`` (see :meth:`WorkerRegistry.__contains__`), never
-``registry.get(name)`` -- ``get`` invokes the factory.
+``NotImplementedError`` until their real adapters land in Phase 8. Config
+validation must therefore test membership with ``name in registry`` (see
+:meth:`WorkerRegistry.__contains__`), never ``registry.get(name)`` -- ``get``
+invokes the factory.
 
 **``default_registry``'s ``"fake"`` factory returns one long-lived
 :class:`FakeWorker`.** ``_run_current_role`` calls ``registry.get(node.worker)``
@@ -35,6 +36,7 @@ from typing import NoReturn
 
 from dark_factory.domain.worker import WorkerCapabilities, WorkerResult
 from dark_factory.workers.base import CodingWorker
+from dark_factory.workers.claude_code import ClaudeCodeWorker
 from dark_factory.workers.fake import FakeWorker
 
 __all__ = ["UnknownWorkerError", "WorkerRegistry", "default_registry"]
@@ -111,11 +113,13 @@ def _shared_fake_worker() -> CodingWorker:
 
 default_registry.register("fake", _shared_fake_worker)
 
-# The three real agent-runtime names. Registered so a role that names one passes
-# run-creation config validation; the placeholder raises NotImplementedError on
-# every entry point until its adapter lands (Phase 7 / Phase 8).
-default_registry.register(
-    "claude-code", lambda: _NotYetImplementedWorker("claude-code", "7")
-)
+# Plan 07-01: the real adapter, the class itself as the factory -- a fresh
+# instance per get(), with no shared-singleton treatment because the adapter
+# carries no cursor state (contrast the "fake" registration above).
+default_registry.register("claude-code", ClaudeCodeWorker)
+
+# The two remaining real agent-runtime names. Registered so a role that names
+# one passes run-creation config validation; the placeholder raises
+# NotImplementedError on every entry point until its adapter lands (Phase 8).
 default_registry.register("copilot", lambda: _NotYetImplementedWorker("copilot", "8"))
 default_registry.register("hermes", lambda: _NotYetImplementedWorker("hermes", "8"))

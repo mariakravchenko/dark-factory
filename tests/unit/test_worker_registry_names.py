@@ -1,8 +1,14 @@
-"""Unit coverage for WorkerRegistry membership + the three placeholder worker
-names (Plan 03-01 Task 2, WORK-02).
+"""Unit coverage for WorkerRegistry membership + the placeholder worker names
+(Plan 03-01 Task 2, WORK-02; ``claude-code`` updated by Plan 07-01).
 
-Membership must work without constructing a worker; a placeholder invocation must
-raise ``NotImplementedError`` naming the phase its real adapter lands in.
+Membership must work without constructing a worker. ``copilot``/``hermes``
+invocations still raise ``NotImplementedError`` naming the phase their real
+adapter lands in (Phase 8). ``claude-code`` is no longer a placeholder as of
+Plan 07-01 -- it resolves to a real :class:`~dark_factory.workers.
+claude_code.ClaudeCodeWorker` whose ``execute()`` never raises (see
+``tests/unit/test_claude_code_worker.py`` for its own coverage); only
+``resume()`` still raises ``NotImplementedError``, naming plan 07-03, which
+lands it.
 """
 
 import pytest
@@ -26,14 +32,25 @@ def test_get_on_an_unregistered_name_raises_unknown_worker_error() -> None:
         default_registry.get("bogus")
 
 
-def test_claude_code_placeholder_resolves_but_every_entry_point_names_phase_7() -> None:
-    worker = default_registry.get("claude-code")  # construction must not raise
-    with pytest.raises(NotImplementedError, match="Phase 7"):
-        worker.execute({})
-    with pytest.raises(NotImplementedError, match="Phase 7"):
+def test_claude_code_resolves_to_a_real_adapter_not_a_placeholder() -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    worker = default_registry.get("claude-code")
+    assert isinstance(worker, ClaudeCodeWorker)
+
+    # execute() never raises (WORK-04) -- with no ANTHROPIC_API_KEY configured
+    # in this test's environment, the credential gate returns FAILED, not an
+    # exception. See test_claude_code_worker.py for the full behavior suite.
+    result = worker.execute({})
+    assert result.status is WorkerResultStatus.FAILED
+
+    # resume() is not implemented by this plan -- 07-03 lands it.
+    with pytest.raises(NotImplementedError, match="07-03"):
         worker.resume({}, None, None)  # type: ignore[arg-type]
-    with pytest.raises(NotImplementedError, match="Phase 7"):
-        worker.capabilities()
+
+    # capabilities() is implemented (not a placeholder); does not raise.
+    assert worker.capabilities().non_interactive is True
 
 
 @pytest.mark.parametrize("name", ["copilot", "hermes"])
