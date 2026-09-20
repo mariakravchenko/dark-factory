@@ -3,11 +3,14 @@
 This module is the **design contract** D-02 promises -- concrete enough that
 Phase 7 (the ``claude-code`` adapter) and Phase 8 (``copilot`` / ``hermes``)
 implement the per-worker native-tool restriction *from* it, instead of
-re-deriving the mapping from first principles. It has **no runtime consumer
-this phase**: nothing under ``src/dark_factory/`` other than this module and
-:mod:`dark_factory.tools` (which re-exports it) reads
-:data:`NATIVE_TOOL_CONTRACT` -- ``tests/unit/test_native_tool_contract.py``
-proves that inertness structurally.
+re-deriving the mapping from first principles. As of Phase 7 (plan 07-04),
+:mod:`dark_factory.workers.claude_code` is its **first real runtime
+consumer**: ``ClaudeCodeWorker`` builds its ``--allowedTools`` argv element
+from :data:`NATIVE_TOOL_CONTRACT`'s capability vocabulary.
+``tests/unit/test_native_tool_contract.py`` no longer proves total
+inertness -- it guards an explicit consumer allowlist (``_ALLOWED_CONSUMERS``)
+instead, so a *new* consumer must still be added to that allowlist
+deliberately, never silently.
 
 The boundary D-02 draws, stated plainly: :class:`~dark_factory.tools.registry.ToolRegistry`
 governs Dark-Factory-initiated calls (``orchestrator/runner.py``'s own
@@ -24,11 +27,13 @@ or through the worker's own CLI (gated by whatever native flag the adapter
 passes at spawn time, translated from this table).
 
 Values are drawn from ``CLAUDE.md``'s "Invoking the agent CLIs" table: Claude
-Code restricts via ``--allowedTools`` with ``--permission-mode``; Copilot CLI
-via narrow, repeated ``--allow-tool`` values (never ``--allow-all-tools``);
-Hermes documents no per-tool native restriction flag at all, so its entries
-say that honestly rather than inventing one -- an adapter that cannot enforce
-a restriction natively must not claim that it can.
+Code restricts via ``--allowedTools`` (worktree confinement coming from the
+subprocess ``cwd``, not from ``--permission-mode`` -- see
+:data:`WORKTREE_CONFINEMENT_NOTE`); Copilot CLI via narrow, repeated
+``--allow-tool`` values (never ``--allow-all-tools``); Hermes documents no
+per-tool native restriction flag at all, so its entries say that honestly
+rather than inventing one -- an adapter that cannot enforce a restriction
+natively must not claim that it can.
 """
 
 from __future__ import annotations
@@ -37,7 +42,13 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, ConfigDict
 
-__all__ = ["NATIVE_TOOL_CONTRACT", "NativeToolGrant"]
+__all__ = ["NATIVE_TOOL_CONTRACT", "WORKTREE_CONFINEMENT_NOTE", "NativeToolGrant"]
+
+WORKTREE_CONFINEMENT_NOTE = (
+    "Worktree confinement is a property of the subprocess working directory "
+    "(cwd=<worktree>) the adapter sets at spawn -- not of any "
+    "approval-policy flag."
+)
 
 
 class NativeToolGrant(BaseModel):
@@ -63,10 +74,7 @@ class NativeToolGrant(BaseModel):
 NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     "repo.read": NativeToolGrant(
         capability="repo.read",
-        claude_code=(
-            "--allowedTools 'Read,Glob' with --permission-mode restricting "
-            "reads to the worktree"
-        ),
+        claude_code=f"--allowedTools 'Read,Glob'. {WORKTREE_CONFINEMENT_NOTE}",
         copilot="a narrow --allow-tool 'read' entry (never --allow-all-tools)",
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
@@ -83,7 +91,7 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     ),
     "repo.search": NativeToolGrant(
         capability="repo.search",
-        claude_code="--allowedTools 'Grep,Glob' with --permission-mode restricting to the worktree",
+        claude_code=f"--allowedTools 'Grep,Glob'. {WORKTREE_CONFINEMENT_NOTE}",
         copilot="a narrow --allow-tool 'read' entry covering search (Copilot has no separate search tool)",
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
@@ -98,7 +106,7 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     ),
     "repo.write": NativeToolGrant(
         capability="repo.write",
-        claude_code="--allowedTools 'Write,Edit' with --permission-mode restricting writes to the worktree",
+        claude_code=f"--allowedTools 'Write,Edit'. {WORKTREE_CONFINEMENT_NOTE}",
         copilot="a narrow --allow-tool 'write' entry (never --allow-all-tools)",
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
@@ -118,7 +126,7 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
             "repo.write -- Claude Code has no native path-scoped write "
             "flag, so the adapter must also pass a prompt-level instruction "
             "restricting edits to test paths; write_scope (ROLE-05) still "
-            "enforces the boundary post-hoc regardless"
+            f"enforces the boundary post-hoc regardless. {WORKTREE_CONFINEMENT_NOTE}"
         ),
         copilot=(
             "the identical narrow --allow-tool 'write' entry as repo.write "
@@ -137,7 +145,7 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     ),
     "shell.execute": NativeToolGrant(
         capability="shell.execute",
-        claude_code="--allowedTools 'Bash' with --permission-mode restricting execution to the worktree",
+        claude_code=f"--allowedTools 'Bash'. {WORKTREE_CONFINEMENT_NOTE}",
         copilot="a narrow --allow-tool 'shell(<command>)' entry per allowed command (never --allow-all-tools)",
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
@@ -154,10 +162,12 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     "artifacts.read": NativeToolGrant(
         capability="artifacts.read",
         claude_code=(
-            "--allowedTools 'Read' scoped to include the run's "
-            ".dark-factory/runs/<run_id>/artifacts/ subtree -- a real "
-            "worker reads a prior role's artifact content with its own "
-            "native read tool, not through Dark Factory"
+            "--allowedTools "
+            "'Read(.dark-factory/runs/<run_id>/artifacts/**)' -- a "
+            "path-scoped rule specifier over the run's artifacts subtree, "
+            "not a bare Read grant; a real worker reads a prior role's "
+            "artifact content with its own native read tool, not through "
+            f"Dark Factory. {WORKTREE_CONFINEMENT_NOTE}"
         ),
         copilot="a narrow --allow-tool 'read' entry, same scope as Claude Code",
         hermes=(
@@ -174,12 +184,14 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     "artifacts.write": NativeToolGrant(
         capability="artifacts.write",
         claude_code=(
-            "--allowedTools 'Write' scoped to include the run's "
-            "artifacts/<role>/ subtree -- a real worker writes its own "
-            "declared output files with its own native write tool, not "
-            "through Dark Factory; the orchestrator-mediated "
-            "ToolRegistry.invoke('artifacts.write', ...) path exists for a "
-            "future transport a worker calls back into Dark Factory over"
+            "--allowedTools 'Edit(.dark-factory/runs/<run_id>/"
+            "artifacts/<role>/**)' -- a path-scoped rule specifier over "
+            "the run's own artifacts/<role>/ subtree, not a bare Write/Edit "
+            "grant; a real worker writes its own declared output files "
+            "with its own native write tool, not through Dark Factory; the "
+            "orchestrator-mediated ToolRegistry.invoke('artifacts.write', "
+            "...) path exists for a future transport a worker calls back "
+            f"into Dark Factory over. {WORKTREE_CONFINEMENT_NOTE}"
         ),
         copilot="a narrow --allow-tool 'write' entry, same scope as Claude Code",
         hermes=(
