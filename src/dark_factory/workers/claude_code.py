@@ -34,6 +34,7 @@ from dark_factory.domain.worker import (
     WorkerResult,
     WorkerResultStatus,
 )
+from dark_factory.events.redaction import redact
 from dark_factory.tools.env import build_worker_env
 from dark_factory.workers.base import CodingWorker
 
@@ -174,6 +175,32 @@ def _base_argv(context: object) -> list[str]:
     ]
 
 
+def _scrub_log_in_place(path: Path) -> None:
+    """Rewrite ``path`` through the existing ``redact()`` pipeline using
+    ``Settings.known_secret_values()`` (Task 3, T-07-01).
+
+    A missing file is a no-op, not an error. Reads/writes as UTF-8 with
+    ``errors="replace"`` so a raw non-UTF-8 byte the subprocess wrote never
+    raises here -- it becomes a replacement character instead.
+
+    **Why this exists and must never be optimised away:**
+    ``git.diff.commit_run_artifacts`` (``src/dark_factory/git/diff.py``,
+    around the ``relative_path = f".dark-factory/runs/{run_id}"`` line) force-
+    adds and commits the *entire* ``.dark-factory/runs/<run_id>/`` tree --
+    not just ``artifacts/`` -- onto the run's working branch, which becomes
+    the PR branch. That commit step runs *after* this adapter returns, and
+    nothing downstream re-scrubs these files. This function is therefore the
+    only place a live credential value gets removed from the captured
+    ``claude`` transcript before it becomes part of a public PR diff.
+    """
+    if not path.exists():
+        return
+    settings = get_settings()
+    raw = path.read_text("utf-8", errors="replace")
+    scrubbed = redact(raw, known_secrets=settings.known_secret_values())
+    path.write_text(scrubbed, "utf-8")
+
+
 def _run_streamed(
     argv: list[str],
     *,
@@ -253,14 +280,24 @@ class ClaudeCodeWorker(CodingWorker):
         argv = [*_base_argv(context), "-p", _build_prompt(context)]
         stdout_path, stderr_path = attempt_log_paths(root, role, attempt)
 
-        exit_code, timed_out = _run_streamed(
-            argv,
-            cwd=work_dir,
-            env=env,
-            stdout_path=stdout_path,
-            stderr_path=stderr_path,
-            timeout=settings.worker_timeout_seconds,
-        )
+        # Task 3 (T-07-01): _scrub_log_in_place runs in `finally`, immediately
+        # after _run_streamed returns OR raises, so it executes on the
+        # success path, the non-zero-exit path and the timeout-kill path
+        # alike -- and, critically, before any code below reads these files
+        # again. See _scrub_log_in_place's own docstring for why this
+        # ordering is mandatory, not decorative.
+        try:
+            exit_code, timed_out = _run_streamed(
+                argv,
+                cwd=work_dir,
+                env=env,
+                stdout_path=stdout_path,
+                stderr_path=stderr_path,
+                timeout=settings.worker_timeout_seconds,
+            )
+        finally:
+            _scrub_log_in_place(stdout_path)
+            _scrub_log_in_place(stderr_path)
 
         if timed_out:
             return WorkerResult(

@@ -308,3 +308,180 @@ def test_missing_worker_credential_error_is_importable_and_a_runtime_error() -> 
     from dark_factory.workers.claude_code import MissingWorkerCredentialError
 
     assert issubclass(MissingWorkerCredentialError, RuntimeError)
+
+
+# --------------------------------------------------------------------------- #
+# Task 3 [BLOCKING]: redact the captured transcript before it can reach the
+# PR branch, on every exit path.
+# --------------------------------------------------------------------------- #
+
+_FAKE_SECRET = "sk-ant-fake0000000000000000000000000000"
+
+
+def _payload_leaking(secret: str) -> str:
+    return json.dumps(
+        {
+            "subtype": "success",
+            "duration_ms": 1,
+            "duration_api_ms": 1,
+            "is_error": False,
+            "num_turns": 1,
+            "session_id": "sess-secret",
+            "total_cost_usd": 0.0,
+            "usage": {},
+            "result": f"leaked credential: {secret}",
+            "structured_output": None,
+            "permission_denials": [],
+        }
+    )
+
+
+def test_captured_output_is_redacted(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(fake_dir, stdout_payload=_payload_leaking(_FAKE_SECRET))
+
+    with fake_claude_env(
+        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
+    ):
+        ClaudeCodeWorker().execute(_context())
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:anthropic_api_key]" in log_text
+    assert _FAKE_SECRET not in log_text
+
+
+def test_captured_stderr_is_redacted(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_SUCCESS_PAYLOAD,
+        stderr_text=f"debug: key is {_FAKE_SECRET}",
+    )
+
+    with fake_claude_env(
+        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
+    ):
+        ClaudeCodeWorker().execute(_context())
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:anthropic_api_key]" in log_text
+    assert _FAKE_SECRET not in log_text
+
+
+def test_redaction_applies_on_non_zero_exit_path(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload="",
+        exit_code=2,
+        stderr_text=f"boom: {_FAKE_SECRET}",
+    )
+
+    with fake_claude_env(
+        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
+    ):
+        result = ClaudeCodeWorker().execute(_context())
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:anthropic_api_key]" in log_text
+    assert _FAKE_SECRET not in log_text
+    assert _FAKE_SECRET not in (result.error or "")
+
+
+def test_redaction_applies_on_timeout_kill_path(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    # write_fake_claude() writes stdout_payload AFTER sleeping (it models a
+    # clean-exit result, not a partial pre-kill transcript), so this test
+    # writes its own script that writes the secret BEFORE sleeping -- the
+    # exact "partial output survives a kill" shape SC5/Task 2 already prove;
+    # this test only adds that the surviving partial output is scrubbed.
+    fake_dir = tmp_path / "fakebin"
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    script_path = fake_dir / "claude"
+    script_path.write_text(
+        f"""#!/usr/bin/env python3
+import sys
+import time
+
+sys.stdout.write({f"pre-sleep output: {_FAKE_SECRET}\\n"!r})
+sys.stdout.flush()
+time.sleep(30)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    with fake_claude_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET):
+        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "1")
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        ClaudeCodeWorker().execute(_context())
+        get_settings.cache_clear()
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:anthropic_api_key]" in log_text
+    assert _FAKE_SECRET not in log_text
+
+
+def test_pattern_only_secret_not_in_settings_is_still_redacted(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    github_token = "ghp_" + ("x" * 40)
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir, stdout_payload=_payload_leaking(github_token)
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().execute(_context())
+
+    log_path = (
+        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
+    )
+    log_text = log_path.read_text("utf-8")
+    assert github_token not in log_text
+
+
+def test_non_utf8_stdout_byte_does_not_raise(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResult
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(fake_dir, stdout_payload=b"\xff")
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert isinstance(result, WorkerResult)
