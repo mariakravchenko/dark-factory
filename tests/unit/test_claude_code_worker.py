@@ -899,10 +899,31 @@ def test_allowed_tools_for_repo_write_tests() -> None:
     assert allowed_tools_for({"repo.write_tests"}, None) == ["Edit", "Write"]
 
 
-def test_allowed_tools_for_artifacts_read() -> None:
+def test_allowed_tools_for_artifacts_read_with_no_glob_yields_nothing() -> None:
+    """A bare ``Read`` grant would give unrestricted worktree-wide native
+    read access -- deny by omission, exactly like ``artifacts.write`` when
+    it has no glob to scope to (CR-01)."""
     from dark_factory.workers.claude_code import allowed_tools_for
 
-    assert allowed_tools_for({"artifacts.read"}, None) == ["Read"]
+    assert allowed_tools_for({"artifacts.read"}, None) == []
+
+
+def test_allowed_tools_for_artifacts_read_is_path_scoped_not_bare() -> None:
+    """``artifacts.read`` must translate to a path-scoped ``Read(<glob>/**)``
+    specifier over the run's artifacts tree, never a bare ``Read`` grant
+    (CR-01) -- the sibling ``artifacts.write`` capability already gets this
+    treatment; read was the one capability left ungated."""
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    result = allowed_tools_for(
+        set(), None, artifacts_read_glob=".dark-factory/runs/R/artifacts"
+    )
+    assert result == []  # not granted -> still nothing, even with a glob
+
+    result = allowed_tools_for(
+        {"artifacts.read"}, None, artifacts_read_glob=".dark-factory/runs/R/artifacts"
+    )
+    assert result == ["Read(.dark-factory/runs/R/artifacts/**)"]
 
 
 def test_allowed_tools_for_artifacts_write_is_path_scoped_not_bare() -> None:
@@ -945,7 +966,9 @@ def test_tool_names_cover_every_native_contract_capability() -> None:
     from dark_factory.tools.native import NATIVE_TOOL_CONTRACT
     from dark_factory.workers.claude_code import _TOOL_NAMES
 
-    assert set(_TOOL_NAMES) | {"artifacts.write"} == set(NATIVE_TOOL_CONTRACT)
+    assert set(_TOOL_NAMES) | {"artifacts.write", "artifacts.read"} == set(
+        NATIVE_TOOL_CONTRACT
+    )
 
 
 def test_ungranted_capability_contributes_no_tool_name() -> None:
@@ -1029,3 +1052,26 @@ def test_artifacts_write_grant_produces_path_scoped_edit_in_execute_argv(
     argv = json.loads(argv_log.read_text("utf-8"))
     value = argv[argv.index("--allowedTools") + 1]
     assert value == f"Edit(.dark-factory/runs/{_RUN_ID}/artifacts/DEVELOPMENT/**)"
+
+
+def test_artifacts_read_grant_produces_path_scoped_read_in_execute_argv(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-01: ``artifacts.read`` must reach the spawned CLI as a path-scoped
+    ``Read(<run>/artifacts/**)`` specifier over the whole run's artifacts
+    tree (a worker legitimately reads a *prior* role's output), not a bare
+    ``Read`` that would grant unrestricted native filesystem access."""
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().execute(
+            _context(role="DEVELOPMENT", tools=["artifacts.read"])
+        )
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    value = argv[argv.index("--allowedTools") + 1]
+    assert value == f"Read(.dark-factory/runs/{_RUN_ID}/artifacts/**)"
