@@ -485,3 +485,151 @@ def test_non_utf8_stdout_byte_does_not_raise(
         result = ClaudeCodeWorker().execute(_context())
 
     assert isinstance(result, WorkerResult)
+
+
+# --------------------------------------------------------------------------- #
+# 07-03 Task 1 (D-01): a role can ask a human a question through the real
+# CLI, via a line-initial ``NEEDS_INPUT:`` marker in the CLI's own ``result``
+# text.
+# --------------------------------------------------------------------------- #
+
+
+def _payload_with_result(result_text: str, *, session_id: str = "sess-abc") -> str:
+    return json.dumps(
+        {
+            "subtype": "success",
+            "duration_ms": 1,
+            "duration_api_ms": 1,
+            "is_error": False,
+            "num_turns": 1,
+            "session_id": session_id,
+            "total_cost_usd": 0.0,
+            "usage": {},
+            "result": result_text,
+            "structured_output": None,
+            "permission_denials": [],
+        }
+    )
+
+
+def test_needs_input_marker_produces_needs_input_with_question(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_payload_with_result(
+            "I need a decision.\nNEEDS_INPUT: Which cluster should I target?"
+        ),
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.NEEDS_INPUT
+    assert result.questions == ["Which cluster should I target?"]
+
+
+def test_needs_input_marker_multiline_question_captured_whole(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_payload_with_result(
+            "NEEDS_INPUT: Which cluster?\nStaging or production?"
+        ),
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.NEEDS_INPUT
+    assert len(result.questions) == 1
+    assert "Which cluster?" in result.questions[0]
+    assert "Staging or production?" in result.questions[0]
+
+
+def test_needs_input_marker_mid_sentence_does_not_trigger(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_payload_with_result(
+            "This mentions NEEDS_INPUT: mid-sentence, not at line start."
+        ),
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.COMPLETED
+
+
+def test_needs_input_marker_followed_by_only_whitespace_degrades_to_completed(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_payload_with_result("Done.\nNEEDS_INPUT:   \n  "),
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        # Must not raise a pydantic ValidationError from inside the adapter.
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.COMPLETED
+
+
+def test_needs_input_result_carries_worker_session_id(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=_payload_with_result(
+            "NEEDS_INPUT: pick one", session_id="sess-needs-input"
+        ),
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.NEEDS_INPUT
+    assert result.worker_session_id == "sess-needs-input"
+
+
+def test_prompt_argument_contains_the_needs_input_marker_token(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import NEEDS_INPUT_MARKER, ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_claude(
+        fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log
+    )
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        ClaudeCodeWorker().execute(_context())
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    prompt = argv[argv.index("-p") + 1]
+    assert NEEDS_INPUT_MARKER in prompt
