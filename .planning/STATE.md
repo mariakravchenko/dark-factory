@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 07
 current_phase_name: Claude Code — the First Real Worker
-status: executing
-stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-09-20T18:33:08.983Z"
+status: verifying
+stopped_at: Completed 07-04-PLAN.md
+last_updated: "2026-09-20T18:49:34.363Z"
 last_activity: 2026-09-20
 last_activity_desc: Phase 07 execution started
-state_head: c7617d86340ec14a17c82b44e70296668f4a8f6c
+state_head: ce9bdbecb6ccfd8b9cb0f54c8309d0fba24d5161
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 39
-  completed_plans: 38
+  completed_plans: 39
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-20)
 
 Phase: 07 (Claude Code — the First Real Worker) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-20 — Phase 07 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -97,6 +97,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P01 | 9min | 3 tasks | 7 files |
 | Phase 07 P02 | 12min | 2 tasks | 2 files |
 | Phase 07 P03 | 12min | 3 tasks | 4 files |
+| Phase 07 P04 | 14min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -191,6 +192,7 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07]: 07-02: Quoted "on": in ci.yml (not bare on:) -- PyYAML/YAML 1.1 parses a bare `on` key as boolean True, breaking document['on'] lookups in both the plan's verify command and the Task 2 structural guard; quoting is the standard GitHub Actions workaround with zero effect on GitHub's own parser
 - [Phase 07]: [Phase 07]: 07-02: TDD RED anchor for the guard-on-the-guard test was the self-detection sanity test, not the main assertion -- a stub _offenders() returning [] trivially passes "no offenders" on an already-compliant workflow, so RED had to target test_the_guard_detects_its_own_subject instead
 - [Phase 07]: [Phase 07]: 07-03: NEEDS_INPUT marker regex (MULTILINE anchors line-start; DOTALL+\Z captures multi-line question); resume() shares execute()'s entire spawn/timeout/redact/parse pipeline via _spawn_and_parse(argv, context) so the two entry points cannot drift; capabilities() now native_resume=True; contract suite runs ClaudeCodeWorker with a fake CLI on PATH and no live credential (QUAL-02)
+- [Phase 07]: 07-04: --allowedTools derived from context.tools via NATIVE_TOOL_CONTRACT's first real consumer; artifacts.write kept out of the flat _TOOL_NAMES map and emitted as a path-scoped Edit(<glob>/**) specifier instead of a bare tool name; contract's claude_code prose corrected to name cwd=<worktree> (WORKTREE_CONFINEMENT_NOTE) as the real confinement mechanism, replacing a nonexistent --permission-mode claim; reference guard narrowed to a 3-path _ALLOWED_CONSUMERS allowlist, not deleted
 
 ### Pending Todos
 
@@ -216,6 +218,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T18:33:08.843Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-09-20T18:49:26.267Z
+Stopped at: Completed 07-04-PLAN.md
 Resume file: None
