@@ -21,7 +21,7 @@ created: "2026-09-17"
 | **Config file** | `pyproject.toml` `[tool.pytest.ini_options]` — `testpaths = ["tests"]`, markers `unit`/`db`/`integration`/`contract` |
 | **Quick run command** | `uv run pytest -m unit -q` |
 | **Full suite command** | `set -a; . .env; set +a; uv run pytest -q` (full suite needs DB creds via `.env` for `db`/`integration`-marked tests) |
-| **Estimated runtime** | Unit: measured 15.47s pre-phase baseline (373 passed); 437 passed by the end of plan 06-03. Full suite: not measured this session (`.env` sourcing blocked by the session's secret-read guard on every plan of this phase; deferred to the user each time — see plans 06-01/02/03/04's "Issues Encountered" sections). |
+| **Estimated runtime** | Unit: measured 15.47s pre-phase baseline (373 passed); 437 passed by the end of plan 06-03. Full suite: measured 2026-09-20 by the user with `.env` sourced against real PostgreSQL 17 — `763 passed in 4390.33s (1:13:10)`, 0 failed. |
 
 ---
 
@@ -41,10 +41,10 @@ created: "2026-09-17"
 | Task 1 | 06-01 | 1 | TOOL-01 | T-06-05 | `ToolRegistry.invoke()` denies an unlisted capability before dispatch (deny-by-default gate), and the denial persists as a `CAPABILITY_DENIED` event | unit + db | `uv run pytest tests/unit/test_tool_registry.py tests/db/test_capability_denied_fails_role.py -x` | ✓ | ✅ green (db-tier confirmed by the user: 694 passed / 3 pre-existing unrelated failures, see 06-01-SUMMARY.md) |
 | Task 3 | 06-01 | 1 | TOOL-02 | — | Synthetic capability addable and grantable with zero role-executor/pipeline/lifecycle edits; `NATIVE_TOOL_CONTRACT` completeness guard | unit | `uv run pytest tests/unit/test_tool_registry_extensibility.py tests/unit/test_native_tool_contract.py -x` | ✓ | ✅ green |
 | 06-01 Task 2 / 06-02 Task 2 | 06-01, 06-02 | 1, 2 | TOOL-03 | T-06-05 | Deny-by-default per role matches the shipped `tools:` grants, including QA's `repo.write_tests`/`shell.execute` expansion (D-16) | unit | `uv run pytest tests/unit/test_tool_registry.py tests/unit/test_shell_execute.py -x` | ✓ | ✅ green |
-| Task 1 | 06-02 | 2 | TOOL-04 | T-06-01 | `build_worker_env` builds the child environment additively over an explicit allowlist from an empty mapping — never a parent-environment copy, spread or exclusion-filter | unit + integration | `uv run pytest tests/unit/test_worker_env.py tests/unit/test_no_environ_copy.py tests/integration/test_worker_env_boundary.py -x` | ✓ | ⚠️ unit tier green (424 passed); integration tier (`test_worker_env_boundary.py`) deferred to the user — no Docker/initdb 17 and `.env` sourcing blocked (see 06-02-SUMMARY.md) |
+| Task 1 | 06-02 | 2 | TOOL-04 | T-06-01 | `build_worker_env` builds the child environment additively over an explicit allowlist from an empty mapping — never a parent-environment copy, spread or exclusion-filter | unit + integration | `uv run pytest tests/unit/test_worker_env.py tests/unit/test_no_environ_copy.py tests/integration/test_worker_env_boundary.py -x` | ✓ | ✅ green — unit tier green (424 passed); integration tier (`test_worker_env_boundary.py`) confirmed by the user 2026-09-20 as part of the 763-passed full-suite run against real PostgreSQL 17 |
 | Task 2 / Task 3 | 06-03 | 2 | TOOL-05 | T-06-03 | MCP transport proves list/call + deny-by-default (never the advertised tool list as the boundary); import-graph guard proves removability | unit | `uv run pytest tests/unit/test_no_mcp_import_in_core.py tests/unit/test_mcp_adapter.py -x` | ✓ | ✅ green (437 passed, unit tier) |
-| Task 1 | 06-04 | 3 | SEC-01 | T-06-04 | Grep every artifact, worker prompt, event payload, log and report for the known secret values across the capability-denial path — zero occurrences | integration | `uv run pytest tests/integration/test_capability_denial_no_secret_leak.py tests/integration/test_secret_redaction_e2e.py -x` | ✓ | ⚠️ written and logic-verified standalone (control arm, shell.execute arm, structural guard, config-tree round-trip); db-tier execution deferred to the user — no Docker/initdb 17 and `.env` sourcing blocked (see 06-04-SUMMARY.md) |
-| Task 1 / Task 2 | 06-02 | 2 | SEC-03 | T-06-01 | A worker subprocess spawned with `build_worker_env`'s output reports no `DATABASE_URL`/`GITHUB_TOKEN`/unrelated inherited key — only the allowlisted minimum plus a deliberately supplied credential | unit + integration | `uv run pytest tests/integration/test_worker_env_boundary.py tests/unit/test_shell_execute.py -x` | ✓ | ⚠️ unit tier green; integration tier (`test_worker_env_boundary.py`) deferred to the user (same constraint as TOOL-04, see 06-02-SUMMARY.md) |
+| Task 1 | 06-04 | 3 | SEC-01 | T-06-04 | Grep every artifact, worker prompt, event payload, log and report for the known secret values across the capability-denial path — zero occurrences | integration | `uv run pytest tests/integration/test_capability_denial_no_secret_leak.py tests/integration/test_secret_redaction_e2e.py -x` | ✓ | ✅ green — logic-verified standalone in-session (control arm, shell.execute arm, structural guard, config-tree round-trip); db-tier arms confirmed by the user 2026-09-20 as part of the 763-passed full-suite run |
+| Task 1 / Task 2 | 06-02 | 2 | SEC-03 | T-06-01 | A worker subprocess spawned with `build_worker_env`'s output reports no `DATABASE_URL`/`GITHUB_TOKEN`/unrelated inherited key — only the allowlisted minimum plus a deliberately supplied credential | unit + integration | `uv run pytest tests/integration/test_worker_env_boundary.py tests/unit/test_shell_execute.py -x` | ✓ | ✅ green — unit tier green; integration tier (`test_worker_env_boundary.py`) confirmed by the user 2026-09-20 (same full-suite run as TOOL-04) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky (here: unit tier green, db/integration tier deferred to the user under this session's `.env`-sourcing guard)*
 
@@ -65,7 +65,7 @@ created: "2026-09-17"
 
 *All phase behaviors have automated verification per 06-RESEARCH.md's Validation Architecture — no manual-only items identified.*
 
-The db/integration-tier runs this session's secret-read guard blocked (`test_capability_denied_fails_role.py`'s db arm in plan 06-01, `test_worker_env_boundary.py` in plan 06-02, and `test_capability_denial_no_secret_leak.py` in plan 06-04) are **automated tests that could not be executed in this sandboxed session**, not manual-only verifications — every one of them is a `pytest` command with no human judgment step, deferred to the user's own terminal with `.env` sourced per the convention 06-01-SUMMARY.md established. Recorded here for transparency rather than silently omitted.
+The db/integration-tier runs this session's secret-read guard blocked (`test_capability_denied_fails_role.py`'s db arm in plan 06-01, `test_worker_env_boundary.py` in plan 06-02, and `test_capability_denial_no_secret_leak.py` in plan 06-04) were **automated tests that could not be executed in the authoring sandboxed sessions**, not manual-only verifications — every one of them is a `pytest` command with no human judgment step. All were subsequently confirmed by the user directly (2026-09-20, full suite: 763 passed, 0 failed, against real PostgreSQL 17). Recorded here for transparency rather than silently omitted.
 
 ---
 
@@ -93,3 +93,17 @@ Independent re-audit at `/gsd-execute-phase 6`'s post-execution gate (`workflow.
 | Escalated | 0 |
 
 No auditor spawn needed — all requirements already COVERED per the existing map.
+
+---
+
+## Validation Audit 2026-09-20
+
+Re-audit at `/gsd-verify-work 06`'s `verify:post` gate (`workflow.nyquist_validation`), after UAT completion. The user ran the full test suite (`set -a; . .env; set +a; uv run pytest -q`) against a real PostgreSQL 17: `763 passed in 4390.33s (1:13:10)`, 0 failed — closing every previously-deferred db/integration-tier arm (TOOL-04, SEC-01, SEC-03 rows above) and confirming the 3 tests that were pre-existing-and-unrelated-failures (`tests/db/test_artifact_commit_per_role.py` x2, `tests/integration/test_pr_diff_excludes_artifacts.py` x1) are now also green, root-caused and fixed in `.planning/debug/resolved/phase4-artifact-commit-bugs.md` (commit `ffc333f`) prior to this run.
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+No auditor spawn needed — every requirement's Per-Task Verification Map row is now ✅ green with live-execution evidence, not merely code-reviewed.
