@@ -317,9 +317,17 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 07-01-PLAN.md — Tracer: one role runs end to end through the real `claude` CLI; every failure path becomes a persisted FAILED result; the captured transcript is redacted before it can reach the PR branch (wave 1)
 - [ ] 07-02-PLAN.md — The repo's first CI pipeline, with the worker-name leak guard as a build gate (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 07-03-PLAN.md — `NEEDS_INPUT` marker, native-session resume vs. context reconstruction, and the shared contract suite run against both adapters (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 07-04-PLAN.md — Native `--allowedTools` restriction from the role's grants, and the contract table corrected + its guard narrowed (wave 3)
 
 **Invariants**: the native-resume vs. context-reconstruction branch lives inside the adapter; adapters never import orchestrator, workflow or persistence code.
