@@ -31,6 +31,7 @@ from __future__ import annotations
 import re
 import stat
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 __all__ = ["EXPECTED_OUTPUTS_HEADING", "OUTPUT_BULLET_RE", "write_fake_cli"]
@@ -89,6 +90,32 @@ if declared_outputs:
                         _out_fh.write(_content)
 """
 
+# The run-root-writes step's own source, formatted into the generated
+# script only when `run_root_writes` is given (plan 08-05, Task 1) -- the
+# mechanism both the Hermes and Copilot negative proofs use to make a real
+# adapter's real subprocess write outside its own artifact subtree.
+# Deliberately self-contained (its own `glob` import) rather than sharing
+# state with `_DECLARED_OUTPUTS_STEP` above, since either step may run
+# without the other. Keys in `run_root_writes` are run-root-relative (the
+# run id is not knowable when the fake script is written); a missing run
+# root writes nothing and does not change the exit code, matching the
+# declared-outputs step's own failure posture -- a fake that cannot locate
+# its destination behaves like an agent that produced nothing, not like a
+# crash.
+_RUN_ROOT_WRITES_STEP = """\
+if run_root_writes:
+    import glob
+
+    _write_run_roots = sorted(glob.glob(os.path.join(".dark-factory", "runs", "*")))
+    if _write_run_roots:
+        _write_run_root = _write_run_roots[0]
+        for _write_rel_path, _write_content in run_root_writes.items():
+            _write_target = os.path.join(_write_run_root, _write_rel_path)
+            os.makedirs(os.path.dirname(_write_target), exist_ok=True)
+            with open(_write_target, "w", encoding="utf-8") as _write_fh:
+                _write_fh.write(_write_content)
+"""
+
 
 def write_fake_cli(
     directory: Path,
@@ -101,6 +128,7 @@ def write_fake_cli(
     argv_log: Path | None = None,
     env_log: Path | None = None,
     declared_outputs: bool = False,
+    run_root_writes: Mapping[str, str] | None = None,
 ) -> Path:
     """Write an executable ``binary_name`` script to ``directory``; return
     ``directory`` (the caller prepends it to ``PATH``).
@@ -112,11 +140,14 @@ def write_fake_cli(
     3. sleeps for ``sleep_seconds`` when non-zero;
     4. when ``declared_outputs`` is true, performs the declared-outputs step
        (see module docstring) -- before writing stdout;
-    5. writes ``stderr_text`` to stderr and flushes;
-    6. writes ``stdout_payload`` to stdout (as raw bytes when
+    5. when ``run_root_writes`` is given, performs the run-root-writes step
+       (plan 08-05, Task 1) -- after the declared-outputs step, before
+       writing stdout;
+    6. writes ``stderr_text`` to stderr and flushes;
+    7. writes ``stdout_payload`` to stdout (as raw bytes when
        ``stdout_payload`` is ``bytes`` -- how a test drives the non-UTF-8-byte
        case) and flushes;
-    7. exits with ``exit_code``.
+    8. exits with ``exit_code``.
 
     The declared-outputs step, when armed, scans ``sys.argv`` for the single
     element containing :data:`EXPECTED_OUTPUTS_HEADING` (that element is the
@@ -134,11 +165,24 @@ def write_fake_cli(
     which the artifact-validation gate then reports as a contract error,
     rather than crashing with a traceback that would be read as an adapter
     bug.
+
+    The run-root-writes step, when ``run_root_writes`` is a non-empty
+    mapping, discovers the run root by the same ``.dark-factory/runs/*``
+    glob the declared-outputs step already uses, and for each
+    ``{relative_path: content}`` entry creates the parent directory and
+    writes ``content`` to
+    ``<run_root>/<relative_path>`` -- keys are run-root-relative because the
+    run id is not knowable when the fake script is written. A missing run
+    root writes nothing and does not change the exit code, matching the
+    declared-outputs step's own failure posture. This is the mechanism both
+    the Hermes and Copilot CR-01 negative proofs use to make a real
+    adapter's real subprocess write into another role's artifact subtree.
     """
     directory.mkdir(parents=True, exist_ok=True)
     script_path = directory / binary_name
     interpreter = sys.executable
     declared_outputs_step = _DECLARED_OUTPUTS_STEP if declared_outputs else ""
+    run_root_writes_step = _RUN_ROOT_WRITES_STEP if run_root_writes else ""
     script = f"""#!{interpreter}
 import json
 import os
@@ -154,6 +198,7 @@ exit_code = {exit_code!r}
 declared_outputs = {declared_outputs!r}
 expected_outputs_heading = {EXPECTED_OUTPUTS_HEADING!r}
 output_bullet_pattern = {OUTPUT_BULLET_RE.pattern!r}
+run_root_writes = {dict(run_root_writes) if run_root_writes else None!r}
 
 if argv_log:
     with open(argv_log, "w", encoding="utf-8") as fh:
@@ -164,6 +209,7 @@ if env_log:
 if sleep_seconds:
     time.sleep(sleep_seconds)
 {declared_outputs_step}
+{run_root_writes_step}
 if stderr_text:
     sys.stderr.write(stderr_text)
     sys.stderr.flush()

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 import pytest
@@ -37,6 +37,7 @@ def write_fake_hermes(
     argv_log: Path | None = None,
     env_log: Path | None = None,
     declared_outputs: bool = False,
+    run_root_writes: Mapping[str, str] | None = None,
 ) -> Path:
     """Write an executable ``hermes`` script to ``directory``; return
     ``directory`` (the caller prepends it to ``PATH`` via
@@ -53,6 +54,7 @@ def write_fake_hermes(
         argv_log=argv_log,
         env_log=env_log,
         declared_outputs=declared_outputs,
+        run_root_writes=run_root_writes,
     )
 
 

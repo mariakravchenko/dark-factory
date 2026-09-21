@@ -24,6 +24,15 @@ Error hierarchy:
   :func:`~dark_factory.git.scope.enforce_write_scope` (plan 05-04, D-13) when
   a role's diff touches a path outside its configured ``write_scope``, after
   every violating path has already been reverted.
+* :class:`ArtifactScopeViolation` -- raised by
+  :func:`~dark_factory.git.scope.enforce_artifact_scope` (plan 08-05, CR-01)
+  when a role's attempt changes an artifact path under the run's
+  ``.dark-factory/runs/<run_id>/artifacts/`` tree outside its own
+  ``artifacts/<role>/`` subtree, after every violating path has already been
+  reverted. A sibling of :class:`WriteScopeViolation`, not a replacement for
+  it -- ``write_scope`` enforcement (``attempt_changed_paths``) deliberately
+  excludes the gitignored run tree (A-05-15); this exception covers exactly
+  that excluded subtree instead.
 * :class:`GitPushError` -- raised by :func:`~dark_factory.git.diff.push_working_branch`
   (plan 05-03, D-16) when every retry of ``git push origin <working_branch>``
   fails. A distinguishable subtype of :class:`GitError` (not of
@@ -52,6 +61,7 @@ __all__ = [
     "MAX_DIFF_BYTES",
     "WIP_COMMIT_SUBJECT_PREFIX",
     "WORKTREE_PARENT_DIRNAME",
+    "ArtifactScopeViolation",
     "DetachedHeadError",
     "GitCommandError",
     "GitError",
@@ -59,10 +69,12 @@ __all__ = [
     "WorktreePathError",
     "WriteScopeViolation",
     "assert_attached_head",
+    "attempt_changed_artifact_paths",
     "attempt_changed_paths",
     "collect_pr_diff",
     "commit_run_artifacts",
     "dirty_paths",
+    "enforce_artifact_scope",
     "enforce_write_scope",
     "ensure_worktree",
     "git_env",
@@ -140,6 +152,12 @@ class WriteScopeViolation(GitError):
     ``write_scope`` (plan 05-04)."""
 
 
+class ArtifactScopeViolation(GitError):
+    """Raised when a role's attempt changes an artifact path outside its own
+    ``artifacts/<role>/`` subtree of the run's
+    ``.dark-factory/runs/<run_id>/artifacts/`` tree (plan 08-05, CR-01)."""
+
+
 class GitPushError(GitError):
     """Raised by :func:`~dark_factory.git.diff.push_working_branch` (plan
     05-03, D-16) when every retry of ``git push origin <working_branch>``
@@ -179,7 +197,9 @@ from dark_factory.git.lifecycle import (
     wip_commit_if_dirty,
 )
 from dark_factory.git.scope import (
+    attempt_changed_artifact_paths,
     attempt_changed_paths,
+    enforce_artifact_scope,
     enforce_write_scope,
     is_out_of_scope,
     revert_paths,

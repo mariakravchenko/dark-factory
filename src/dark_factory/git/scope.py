@@ -28,12 +28,14 @@ nesting (see ``05-RESEARCH.md`` Pitfall 1).
 from __future__ import annotations
 
 import fnmatch
+import glob
 from collections.abc import Sequence
 from pathlib import Path
+from uuid import UUID
 
 import structlog
 
-from dark_factory.git import WriteScopeViolation
+from dark_factory.git import ArtifactScopeViolation, WriteScopeViolation
 from dark_factory.git.client import run_git
 from dark_factory.git.diff import ARTIFACT_EXCLUDE_PATHSPEC
 
@@ -57,9 +59,19 @@ _RM_CACHED_NOT_STAGED_MARKER = "did not match any files"
 # silently diverge between the two call sites.
 DEFAULT_WRITE_SCOPE: tuple[str, ...] = ()
 
+# The single source of the "artifacts.write" capability's spelling (plan
+# 08-05). ``enforce_artifact_scope`` reads this rather than a bare string
+# literal so the capability name cannot silently diverge from the
+# ``tools:`` grant vocabulary ``NATIVE_TOOL_CONTRACT`` and every role YAML
+# already use.
+ARTIFACTS_WRITE_CAPABILITY = "artifacts.write"
+
 __all__ = [
+    "ARTIFACTS_WRITE_CAPABILITY",
     "DEFAULT_WRITE_SCOPE",
+    "attempt_changed_artifact_paths",
     "attempt_changed_paths",
+    "enforce_artifact_scope",
     "enforce_write_scope",
     "is_out_of_scope",
     "revert_paths",
@@ -117,7 +129,10 @@ def attempt_changed_paths(worktree: Path) -> list[str]:
     before this check runs -- so nothing here was left by an earlier role
     or by Dark Factory's own bookkeeping. A gitignored file the role
     produced is deliberately absent: by construction it is not part of any
-    diff, so it is out of scope for enforcement (A-05-15).
+    diff, so it is out of scope for enforcement (A-05-15). The run's own
+    ``artifacts/`` subtree is not left unenforced by this exclusion, though
+    -- see :func:`attempt_changed_artifact_paths`, the sibling function
+    plan 08-05 added specifically to cover it (CR-01).
     """
     tracked = run_git(
         ["diff", "--name-only", "HEAD", "--", ".", ARTIFACT_EXCLUDE_PATHSPEC],
@@ -132,6 +147,62 @@ def attempt_changed_paths(worktree: Path) -> list[str]:
             ".",
             ARTIFACT_EXCLUDE_PATHSPEC,
         ],
+        cwd=worktree,
+    )
+    paths = {line.strip() for line in tracked.stdout.splitlines() if line.strip()}
+    paths.update(line.strip() for line in untracked.stdout.splitlines() if line.strip())
+    return sorted(paths)
+
+
+def attempt_changed_artifact_paths(worktree: Path, run_id: UUID) -> list[str]:
+    """The sorted, de-duplicated set of paths this attempt changed under the
+    run's own ``.dark-factory/runs/<run_id>/artifacts/`` tree (plan 08-05,
+    CR-01).
+
+    :func:`attempt_changed_paths` answers a different question --
+    "what repository *source* did this attempt change" -- and deliberately
+    excludes the whole gitignored run tree by pathspec (A-05-15) so that
+    question's answer stays silent about artifact content by design. This
+    function answers "what *artifact* content did this attempt change",
+    covers only the run's ``artifacts/`` subtree, and exists precisely
+    because the first question's answer never sees it.
+
+    Exactly two ``run_git`` invocations, both limited to the
+    ``.dark-factory/runs/<run_id>/artifacts`` pathspec (relative to
+    ``worktree`` -- git pathspecs are repository-relative, and an absolute
+    path here would work by accident rather than by contract, the same
+    reasoning :func:`~dark_factory.git.diff.commit_run_artifacts` already
+    records):
+
+    * ``git diff --name-only HEAD`` -- tracked modifications and deletions
+      of a prior role's already-committed artifact content;
+    * ``git ls-files --others --ignored --exclude-standard`` -- untracked
+      files, **including ignored ones**. This is the deliberate divergence
+      from :func:`attempt_changed_paths`'s sibling invocation (which passes
+      ``--exclude-standard`` with no ``--ignored`` and so never reports a
+      gitignored path): the entire run tree is gitignored, so a newly
+      created file inside another role's artifact subtree is, by
+      definition, an *ignored* untracked file, and only the
+      ignored-inclusive form of ``ls-files`` can see it at all.
+
+    Neither invocation walks a directory: no ``os.walk``, no ``rglob``, no
+    ``iterdir``, no ``glob`` module call anywhere in this function -- git is
+    the enumerator, exactly as it is for every other change set in this
+    project. A worktree whose run ``artifacts/`` directory does not exist at
+    all, or a run tree in which nothing under ``artifacts/`` changed, both
+    naturally return ``[]``: an unmatched pathspec is not an error to either
+    git subcommand, so no existence check is needed before issuing either
+    call.
+
+    This function never reports a path under the same run's
+    ``verification/``, ``logs/`` or ``input/`` directories, and never
+    reports a path outside the run tree -- the pathspec is scoped to
+    ``artifacts/`` alone, not the whole run root.
+    """
+    pathspec = f".dark-factory/runs/{run_id}/artifacts"
+    tracked = run_git(["diff", "--name-only", "HEAD", "--", pathspec], cwd=worktree)
+    untracked = run_git(
+        ["ls-files", "--others", "--ignored", "--exclude-standard", "--", pathspec],
         cwd=worktree,
     )
     paths = {line.strip() for line in tracked.stdout.splitlines() if line.strip()}
@@ -162,10 +233,31 @@ def _resolve_in_worktree(worktree: Path, relative_path: str) -> Path:
     return candidate
 
 
-def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
+def revert_paths(
+    worktree: Path, paths: Sequence[str], *, include_ignored: bool = False
+) -> None:
     """Revert exactly ``paths`` -- never a whole-tree reset, never an
     untargeted clean, never a checkout of the current directory (D-13,
     RESEARCH Pitfall 2).
+
+    ``include_ignored`` (plan 08-05, CR-01) governs only the absent-from-
+    ``HEAD`` branch's ``git clean`` invocation, adding ``-x`` when true. The
+    default (``False``) preserves :func:`enforce_write_scope`'s existing
+    behaviour byte-for-byte -- a role's ``write_scope`` violation lives
+    entirely under tracked source paths, never under the gitignored run
+    tree. The flag exists because :func:`enforce_artifact_scope` reverts
+    paths under ``.dark-factory/runs/<run_id>/artifacts/``, which
+    ``.gitignore`` excludes wholesale: a file a role created inside another
+    role's artifact subtree is therefore an *ignored* untracked file, and
+    a plain ``git clean --force`` silently leaves an ignored path on disk
+    while still exiting 0 -- appearing to have succeeded. Verified
+    empirically against a real repository: a single ``-x`` flag is
+    sufficient to remove a specific ignored file nested several directories
+    below an ignored parent when the path is passed as an explicit
+    pathspec (as it always is here) -- git does not additionally require
+    the recurse-into-untracked-directories flag (``-d``) for this shape,
+    because the pathspec names the file itself rather than the directory
+    containing it.
 
     Every path is containment-checked via :func:`_resolve_in_worktree`
     before anything acts on it. The revert mechanism then branches on
@@ -240,7 +332,11 @@ def revert_paths(worktree: Path, paths: Sequence[str]) -> None:
                     returncode=rm_cached.returncode,
                     stderr=rm_cached.stderr.strip(),
                 )
-            run_git(["clean", "--force", "--", path], cwd=worktree)
+            clean_args = ["clean", "--force"]
+            if include_ignored:
+                clean_args.append("-x")
+            clean_args += ["--", path]
+            run_git(clean_args, cwd=worktree)
     if escapes:
         raise WriteScopeViolation(
             f"write-scope paths escape worktree {worktree.resolve()}: {escapes!r}"
@@ -272,6 +368,74 @@ def enforce_write_scope(
     raise WriteScopeViolation(
         f"role {role} attempt {attempt} wrote outside its configured "
         f"write_scope {list(write_scope)!r}: {violations!r}"
+    )
+
+
+def enforce_artifact_scope(
+    worktree: Path,
+    run_id: UUID,
+    *,
+    role: str,
+    attempt: int,
+    granted: Sequence[str],
+) -> None:
+    """Enumerate this attempt's changes under the run's own ``artifacts/``
+    tree, revert every path outside ``role``'s own ``artifacts/<role>/``
+    subtree, and raise :class:`~dark_factory.git.ArtifactScopeViolation`
+    naming all of them (plan 08-05, CR-01).
+
+    Structurally mirrors :func:`enforce_write_scope`: enumerate, select
+    violations, revert every one of them, then raise naming the complete
+    set; return ``None`` with nothing reverted when the set is empty.
+
+    The allowed-pattern list is a single-element list holding the run's own
+    ``artifacts/<role>/**`` pattern when ``granted`` contains
+    :data:`ARTIFACTS_WRITE_CAPABILITY`, and the empty list otherwise -- then
+    handed straight to :func:`is_out_of_scope`. This is deliberate, not an
+    implementation shortcut: an empty pattern list already means zero
+    tolerance under D-14, so a role with no ``artifacts.write`` grant gets
+    deny-by-default over the *entire* run artifacts tree -- including its
+    own subtree -- for free, with no branch anywhere in this function ever
+    special-casing the empty list to mean the opposite.
+
+    ``role`` is passed through :func:`glob.escape` before being interpolated
+    into the allowed pattern: the pattern is consumed by
+    :func:`fnmatch.fnmatchcase`, so an unescaped metacharacter in a role
+    name would widen the boundary this function exists to narrow rather
+    than confine it to the literal role name. This is a targeted hardening
+    of *this* pattern's own construction only -- it is not WR-01's
+    repository-wide role-name path-traversal validation, which remains an
+    open, separate finding this plan does not attempt.
+
+    Every violating path is reverted (via :func:`revert_paths` with
+    ``include_ignored=True`` -- the run's ``artifacts/`` tree is gitignored,
+    so a role-created foreign file is an ignored untracked file) before the
+    exception is raised, exactly like :func:`enforce_write_scope`: the
+    caller must never be able to accept a failure that left an
+    out-of-role-subtree artifact change on disk. The raised message names
+    the role, the attempt, the complete violating path list, and -- when the
+    role holds no :data:`ARTIFACTS_WRITE_CAPABILITY` grant at all -- that
+    fact explicitly, so an operator reading the failure can tell which of
+    the two boundaries (narrowed-to-own-subtree vs. zero-tolerance) was
+    crossed.
+    """
+    changed = attempt_changed_artifact_paths(worktree, run_id)
+    if ARTIFACTS_WRITE_CAPABILITY in granted:
+        allowed = [f".dark-factory/runs/{run_id}/artifacts/{glob.escape(role)}/**"]
+    else:
+        allowed = []
+    violations = sorted(path for path in changed if is_out_of_scope(path, allowed))
+    if not violations:
+        return None
+    revert_paths(worktree, violations, include_ignored=True)
+    no_grant_note = (
+        ""
+        if ARTIFACTS_WRITE_CAPABILITY in granted
+        else f" (role holds no {ARTIFACTS_WRITE_CAPABILITY!r} grant)"
+    )
+    raise ArtifactScopeViolation(
+        f"role {role} attempt {attempt} wrote outside its own artifact "
+        f"subtree{no_grant_note}: {violations!r}"
     )
 
 

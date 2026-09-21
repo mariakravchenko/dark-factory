@@ -68,10 +68,19 @@ from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
-from dark_factory.git import DetachedHeadError, GitError, WriteScopeViolation
+from dark_factory.git import (
+    ArtifactScopeViolation,
+    DetachedHeadError,
+    GitError,
+    WriteScopeViolation,
+)
 from dark_factory.git.diff import commit_run_artifacts, push_working_branch
 from dark_factory.git.lifecycle import head_sha, wip_commit_if_dirty
-from dark_factory.git.scope import DEFAULT_WRITE_SCOPE, enforce_write_scope
+from dark_factory.git.scope import (
+    DEFAULT_WRITE_SCOPE,
+    enforce_artifact_scope,
+    enforce_write_scope,
+)
 from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
@@ -666,6 +675,26 @@ def _run_current_role(
     branch on which role it is, and an ``UnknownActionError`` here would be a bug
     (the loader validated every name at run creation) so it is left to propagate.
 
+    CR-01, plan 08-05: immediately after the worker call, and only when its
+    signal is ``ROLE_COMPLETED``,
+    :func:`~dark_factory.git.scope.enforce_artifact_scope` checks this
+    attempt's changes under the run's own
+    ``.dark-factory/runs/<run_id>/artifacts/`` tree against the role's own
+    ``artifacts/<role>/`` subtree and reverts anything outside it, folding a
+    violation into ``ROLE_FAILED`` exactly like every other post-worker
+    check here. This runs **first**, before artifact collection/commit/push
+    below, because D-09's schema check operates on artifact *content* the
+    worker already wrote to disk, not on the repository diff --
+    :func:`~dark_factory.git.scope.attempt_changed_paths` has nothing to
+    say about the run tree at all, since it is gitignored and deliberately
+    excluded by A-05-15 -- so nothing downstream of this check would
+    otherwise catch a role that read or overwrote another role's artifact
+    output. Once
+    ``commit_run_artifacts`` below commits, a tampered path is folded into
+    that commit and no longer visible to a ``HEAD`` diff; once
+    ``push_working_branch`` runs it has left the machine -- so this check
+    must come before both.
+
     After the worker call, and only when its signal is ``ROLE_COMPLETED``, every
     JSON artifact the role's ``outputs`` marks as a machine type is schema
     validated via :func:`~dark_factory.artifacts.validation.collect_role_artifacts`
@@ -734,17 +763,19 @@ def _run_current_role(
     is read once from the persisted snapshot as ``granted =
     list(role_def.get("tools", []))`` -- the ``.get`` with an empty-list
     default is deliberate, so a legacy snapshot entry carrying no ``tools``
-    key at all grants nothing (deny-by-default, never allow-by-omission). It
-    is threaded into
+    key at all grants nothing (deny-by-default, never allow-by-omission).
+    This read is now hoisted above the artifact-scope check above (plan
+    08-05), since that check also needs it. ``granted`` is threaded into
     :func:`~dark_factory.artifacts.validation.collect_role_artifacts`, whose
     every artifact read now goes through
     ``tool_registry.invoke(role, "artifacts.read", granted, ...)``. A denied
     read raises :class:`~dark_factory.tools.CapabilityDeniedError`, caught in
     its own arm placed *before* the ``ArtifactError`` catch below so the
     denial's structured facts (role, capability, reason) can be captured
-    separately: the overall ordering becomes **check the grant, then read,
-    then validate, then commit, then push, then enforce scope, then
-    transition**, and a denial reuses the identical ``FAILED`` shape every
+    separately: the overall ordering becomes **enforce artifact scope, then
+    check the grant, then read, then validate, then commit, then push, then
+    enforce write scope, then transition**, and a denial reuses the
+    identical ``FAILED`` shape every
     other post-worker check here already writes (D-05).
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
@@ -853,12 +884,41 @@ def _run_current_role(
     # CapabilityDeniedError -- carries the three payload keys the
     # CAPABILITY_DENIED event below writes verbatim.
     capability_denial: dict[str, str] | None = None
+    # D-01/D-06: read once from the persisted snapshot -- ``.get`` with an
+    # empty-list default means a legacy snapshot entry with no ``tools`` key
+    # at all grants nothing (deny-by-default, never allow-by-omission).
+    # Hoisted above both post-worker ROLE_COMPLETED blocks below (plan
+    # 08-05, CR-01): the new artifact-scope check immediately below needs
+    # this same grant list, and reading it once here keeps the two blocks
+    # from ever computing it differently.
+    granted = list(role_def.get("tools", []))
+
+    # CR-01, plan 08-05: enforce_artifact_scope is its own sibling
+    # ROLE_COMPLETED block -- not a branch nested inside the block below --
+    # the same shape enforce_write_scope already uses, placed BEFORE the
+    # artifact validate/commit/push sequence. This ordering is load-bearing:
+    # once commit_run_artifacts below commits this role's run-tree content,
+    # a tampered path from an earlier role is folded into that commit and no
+    # longer visible to a HEAD diff, and once push_working_branch runs it
+    # has left the machine entirely -- so a violating change must be caught
+    # and reverted before either of those can act on it. A violation reuses
+    # the exact ROLE_FAILED/RUN_FAILED shape every other post-worker check
+    # in this function already writes -- no new event type, no new
+    # role-execution status.
     if signal is Signal.ROLE_COMPLETED:
-        # D-01/D-06: read once from the persisted snapshot -- ``.get`` with
-        # an empty-list default means a legacy snapshot entry with no
-        # ``tools`` key at all grants nothing (deny-by-default, never
-        # allow-by-omission).
-        granted = list(role_def.get("tools", []))
+        try:
+            enforce_artifact_scope(
+                work_dir,
+                run_id,
+                role=node.name,
+                attempt=latest.attempt,
+                granted=granted,
+            )
+        except ArtifactScopeViolation as exc:
+            signal = Signal.ROLE_FAILED
+            outcome = {**outcome, "error": str(exc)}
+
+    if signal is Signal.ROLE_COMPLETED:
         try:
             artifact_writes = collect_role_artifacts(
                 run_dir,
