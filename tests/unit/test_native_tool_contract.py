@@ -29,6 +29,9 @@ _ALLOWED_CONSUMERS = {
     # import). A new consumer must be added here deliberately, never
     # silently -- that is the whole point of this allowlist.
     _SRC_ROOT / "workers" / "claude_code.py",
+    # Plan 08-01: dark_factory.workers.copilot is this contract's second
+    # real runtime consumer, mirroring what 07-04 did for claude_code.py.
+    _SRC_ROOT / "workers" / "copilot.py",
 }
 
 
