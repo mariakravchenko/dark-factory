@@ -92,8 +92,13 @@ class MissingWorkerCredentialError(RuntimeError):
 # 1. The CLI has no path-scoped read or write specifier, so the artifacts.*
 #    capabilities collapse onto the same unscoped `read`/`write` names as
 #    the repository capabilities -- broader than Claude Code's path-scoped
-#    equivalents. `enforce_write_scope` (ROLE-05) and the subprocess `cwd`
-#    remain the effective boundary (accepted, T-08-05).
+#    equivalents. The real posture (plan 08-05, CR-01/WR-02, correcting the
+#    prior claim here that `enforce_write_scope` (ROLE-05) and the
+#    subprocess `cwd` covered this path -- CR-01 disproved that for the
+#    gitignored run tree): for `artifacts.write`,
+#    `dark_factory.git.scope.enforce_artifact_scope` holds the role-subtree
+#    boundary after the fact instead; for `artifacts.read`, nothing does --
+#    reach equals `repo.read` (accepted, T-08-05).
 # 2. The contract describes a per-command shell specifier
 #    (`shell(<command>)`), but Dark Factory's own `shell.execute` grant
 #    carries no command list, so the unscoped `shell` name is the faithful

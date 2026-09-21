@@ -271,3 +271,68 @@ None - no external service configuration required. (A live `hermes` binary and a
 - `uv run mypy src/dark_factory`: 0 new errors (2 pre-existing errors in an untouched module, `tools/mcp_transport.py`).
 - `uv run ruff check .`: all checks passed.
 - Plan-level acceptance criteria (both tasks) and the `<verification>` block re-passed in full.
+
+## Addendum (plan 08-05, CR-01/WR-03): the granted-case finding this checkpoint did not examine
+
+*Appended 2026-09-21 by plan 08-05. Nothing above this heading is edited --
+the Option A decision record above stands exactly as written.*
+
+**What this checkpoint decided.** Option A resolved the *denied*-capability
+case only: for the two write capabilities (`repo.write`, `repo.write_tests`),
+Hermes may spawn a role denied one of them because `enforce_write_scope`
+(ROLE-05) independently compensates for the denial after the fact. For
+every other capability, denial still blocks the spawn entirely
+(`spawn_is_permitted`).
+
+**What it did not examine.** The checkpoint's whole analysis was framed in
+terms of denial -- it never asked what happens once a capability *is*
+granted. That question turned out to matter for exactly one capability pair:
+`artifacts.write`/`artifacts.read`. Unlike `repo.write`, a granted
+`artifacts.write` on Hermes (and, independently, on Copilot -- see below)
+had no native narrowing mechanism *and* no post-hoc one either:
+`enforce_write_scope`'s own `attempt_changed_paths` deliberately excludes
+the run's gitignored `.dark-factory/runs/<run_id>/artifacts/` tree from its
+diff (A-05-15), so a role holding `artifacts.write` could read or overwrite
+any other role's artifact output in the same run, completely undetected.
+
+**What 08-REVIEW.md CR-01 found as a consequence.** The shipped `QA` role
+now runs on Hermes holding `artifacts.write` + `artifacts.read` (this
+plan's own D-04 reassignment); the shipped `ARCHITECTURE` role now runs on
+Copilot holding the same pair with an empty `write_scope`. Both could
+rewrite `BA`'s `acceptance_criteria.json`, `ARCHITECTURE`'s `design.md` or
+`DEVELOPMENT`'s `implementation_summary.json` with zero technical
+restriction and zero post-hoc detection -- CR-01, rated BLOCKER. WR-02
+additionally found that `NATIVE_TOOL_CONTRACT`'s Copilot `artifacts.*`
+prose claimed scope equivalence with Claude Code's path-scoped specifiers,
+which `copilot.py`'s own `_TOOL_NAMES` table never implemented -- a
+documentation-correctness defect independent of, but caused by the same
+root gap as, CR-01. WR-03 found that neither this decision record nor
+`spawn_is_permitted`'s own docstring stated the granted-case boundary at
+all.
+
+**How plan 08-05 resolved it.** Option (a): a sibling post-hoc control,
+`dark_factory.git.scope.enforce_artifact_scope`, wired into
+`orchestrator/runner.py` ahead of the artifact collect/commit/push
+sequence. It diffs and reverts any change under the run's `artifacts/` tree
+outside a role's own `artifacts/<role>/` subtree (or outside *every* path,
+under D-14 zero tolerance, when the role holds no `artifacts.write` grant
+at all), for any of the four workers -- the control is orchestrator-side
+and reads no worker name. Option (b) -- extending `spawn_is_permitted`'s
+"no-compensating-control -> refuse to spawn" rule to the granted case --
+was rejected: it would have refused to spawn for both of this phase's
+locked reassignments (`QA` -> hermes, `ARCHITECTURE` -> copilot, D-04),
+unshipping the phase's headline SC2 proof to close a gap option (a) closes
+without touching it. The read half (`artifacts.read`) is not, and cannot
+be, closed by any post-hoc control -- no mechanism can undo a read -- and
+is instead a documentation-truth fix (WR-02/WR-03): the contract, both
+adapters' own prose, and this addendum now state plainly that a granted
+`artifacts.read` on Copilot or Hermes carries reach identical to
+`repo.read`, which is in fact the *intended* posture (Claude Code's own
+`artifacts.read` grant is run-scoped, not role-scoped, by design).
+
+**The resulting boundary, stated once for a future reader:** on every
+worker, `artifacts.write` once granted is confined to the role's own
+`artifacts/<role>/` subtree (natively on Claude Code, post-hoc via
+`enforce_artifact_scope` on Copilot and Hermes); `artifacts.read` once
+granted carries reach equal to `repo.read` on every worker and is narrowed
+by nothing beyond that.
