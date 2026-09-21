@@ -50,6 +50,7 @@ from dark_factory.workers.cli_runtime import (
     attempt_log_paths,
     build_prompt,
     build_resume_prompt,
+    collect_declared_artifacts,
     extract_needs_input,
     resolve_dirs,
     run_streamed,
@@ -349,10 +350,19 @@ class ClaudeCodeWorker(CodingWorker):
                 metadata=metadata,
             )
 
+        # Artifacts are reported only on the COMPLETED branch (08-01 Task 3):
+        # a paused or failed attempt has not satisfied its outputs contract,
+        # and collect_role_artifacts only runs after a completed signal.
+        # changed_files stays empty here (and for CopilotWorker) because
+        # git/diff.py::collect_diff computes the authoritative diff after
+        # the worker returns and emits_changed_files remains False --
+        # artifact reporting and changed-file reporting are different
+        # contracts and only the former moves through this shared helper.
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
             summary=result_text,
             worker_session_id=session_id,
+            artifacts=collect_declared_artifacts(root, context),
             metadata=metadata,
         )
 

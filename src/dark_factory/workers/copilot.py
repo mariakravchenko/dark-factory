@@ -44,6 +44,7 @@ from dark_factory.workers.cli_runtime import (
     attempt_log_paths,
     build_prompt,
     build_resume_prompt,
+    collect_declared_artifacts,
     extract_needs_input,
     resolve_dirs,
     run_streamed,
@@ -272,9 +273,13 @@ class CopilotWorker(CodingWorker):
                 metadata={"timed_out": False, "exit_code": exit_code},
             )
 
+        # Artifacts are reported only on the COMPLETED branch (Task 3): a
+        # paused or failed attempt has not satisfied its outputs contract,
+        # and collect_role_artifacts only runs after a completed signal.
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
             summary=result_text,
+            artifacts=collect_declared_artifacts(root, context),
             metadata={"timed_out": False, "exit_code": exit_code},
         )
 

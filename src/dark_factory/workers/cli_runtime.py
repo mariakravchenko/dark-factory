@@ -28,9 +28,10 @@ import tempfile
 from pathlib import Path
 from uuid import UUID
 
-from dark_factory.artifacts.paths import run_root
+from dark_factory.artifacts import ArtifactPathError, resolve_under_run_root
+from dark_factory.artifacts.paths import checksum, run_root
 from dark_factory.config.settings import get_settings
-from dark_factory.domain.worker import WorkerResult
+from dark_factory.domain.worker import ArtifactRef, WorkerResult
 from dark_factory.events.redaction import redact
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "attempt_log_paths",
     "build_prompt",
     "build_resume_prompt",
+    "collect_declared_artifacts",
     "context_prompt_sections",
     "extract_needs_input",
     "resolve_dirs",
@@ -318,3 +320,49 @@ def resolve_dirs(run_id: object) -> tuple[Path, Path]:
         work_dir = Path.cwd()
         root = Path(tempfile.mkdtemp(prefix="dark-factory-worker-log-"))
     return work_dir, root
+
+
+def collect_declared_artifacts(root: Path, context: object) -> list[ArtifactRef]:
+    """One :class:`~dark_factory.domain.worker.ArtifactRef` per filename in
+    ``context.outputs`` that a real CLI adapter's own CLI actually wrote
+    under ``root / context.artifacts_dir`` (08-01 Task 3).
+
+    ``outputs``/``artifacts_dir`` are read defensively via ``getattr``,
+    degrading to an empty list when either is missing or empty -- the
+    shared contract suite calls ``execute(None)``, so this must degrade
+    cleanly rather than raise. Every declared filename is resolved through
+    :func:`~dark_factory.artifacts.paths.resolve_under_run_root` so a
+    crafted filename cannot escape the run tree; a resolved path that is
+    not an existing file, or one that would escape the run root
+    (:class:`~dark_factory.artifacts.ArtifactPathError`), contributes no
+    ref -- this function never fabricates a ref for a file that does not
+    exist and never raises out of an adapter.
+
+    **Why the adapter reports rather than writes:** a real agent runtime
+    writes its own declared output files with its own native write tool
+    inside the worktree, and
+    :func:`~dark_factory.artifacts.validation.collect_role_artifacts` then
+    resolves each reported path and schema-validates it -- so reporting a
+    ref for a file that does not exist would convert a clean contract error
+    into a confusing read failure, and fabricating content would defeat the
+    D-09 gate entirely.
+    """
+    outputs = getattr(context, "outputs", None) or []
+    artifacts_dir = getattr(context, "artifacts_dir", None)
+    if not outputs or not artifacts_dir:
+        return []
+
+    refs: list[ArtifactRef] = []
+    for filename in outputs:
+        relative_path = f"{artifacts_dir}/{filename}"
+        try:
+            resolved = resolve_under_run_root(root, relative_path)
+        except ArtifactPathError:
+            continue
+        if not resolved.is_file():
+            continue
+        data = resolved.read_bytes()
+        refs.append(
+            ArtifactRef(type=filename, path=relative_path, checksum=checksum(data))
+        )
+    return refs
