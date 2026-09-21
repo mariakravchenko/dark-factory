@@ -222,3 +222,91 @@ def test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_
         assert restored.read_text("utf-8") == committed
     finally:
         _cleanup_run_dir(config_root, run_id)
+
+
+def test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and_fails(
+    pg_url: str, engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-01 end to end on Copilot: the shipped ``ARCHITECTURE`` role
+    (``worker: copilot``) overwriting ``BA``'s committed
+    ``acceptance_criteria.json`` leaves the run not ``COMPLETED``,
+    ``ARCHITECTURE``'s execution ``FAILED``, no later role (``DEVELOPMENT``,
+    ``QA``) reaching ``COMPLETED``, and ``BA``'s artifact restored to what
+    ``BA`` committed. The control, the failure shape and the revert are the
+    same on both runtimes (:func:`_drive_shipped_config` is the identical
+    harness the Hermes case above uses), because neither the control nor
+    the runner reads a worker name."""
+    result = _drive_shipped_config(
+        pg_url,
+        engine,
+        tmp_path,
+        monkeypatch,
+        label="copilot-tamper",
+        copilot_run_root_writes={
+            "artifacts/BA/acceptance_criteria.json": '{"criteria": []}'
+        },
+    )
+    run_id = result["run_id"]
+    config_root = result["config_root"]
+    assert isinstance(run_id, UUID)
+    assert isinstance(config_root, Path)
+
+    try:
+        assert result["status"] != "COMPLETED"
+        assert result["status_by_role"]["ARCHITECTURE"] == "FAILED"
+        for role in ("DEVELOPMENT", "QA"):
+            assert result["status_by_role"].get(role) != "COMPLETED", (
+                f"{role} reached COMPLETED after ARCHITECTURE FAILED -- the "
+                "pipeline must stop at the failed role rather than "
+                "continuing past it"
+            )
+
+        working_branch = working_branch_name(run_id)
+        committed = read_committed(
+            config_root,
+            working_branch,
+            f".dark-factory/runs/{run_id}/artifacts/BA/acceptance_criteria.json",
+        )
+        restored = (
+            worktree_path(config_root, run_id)
+            / ".dark-factory"
+            / "runs"
+            / str(run_id)
+            / "artifacts"
+            / "BA"
+            / "acceptance_criteria.json"
+        )
+        assert restored.exists()
+        assert restored.read_text("utf-8") == committed
+    finally:
+        _cleanup_run_dir(config_root, run_id)
+
+
+def test_the_identical_shipped_config_with_no_tampering_completes_with_all_artifacts(
+    pg_url: str, engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The positive control: without this test, every assertion in both
+    negative cases above would still pass if ``enforce_artifact_scope`` had
+    been wired to fail every role unconditionally -- exactly the failure
+    mode a security check added late is most likely to have. The identical
+    harness with no tampering entry at all must still reach ``COMPLETED``
+    with every role completed and every role's artifacts collected."""
+    result = _drive_shipped_config(
+        pg_url, engine, tmp_path, monkeypatch, label="no-tamper"
+    )
+    run_id = result["run_id"]
+    config_root = result["config_root"]
+    assert isinstance(run_id, UUID)
+    assert isinstance(config_root, Path)
+
+    try:
+        assert result["status"] == "COMPLETED"
+        assert result["completed_roles"] == ["BA", "ARCHITECTURE", "DEVELOPMENT", "QA"]
+        artifact_types_by_role = result["artifact_types_by_role"]
+        assert isinstance(artifact_types_by_role, dict)
+        for role in ("BA", "ARCHITECTURE", "DEVELOPMENT", "QA"):
+            assert artifact_types_by_role.get(role), (
+                f"{role} completed with no collected artifacts"
+            )
+    finally:
+        _cleanup_run_dir(config_root, run_id)
