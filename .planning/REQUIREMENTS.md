@@ -39,11 +39,11 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **WORK-02**: A `WorkerRegistry` maps `claude-code` / `copilot` / `hermes` to adapters; worker creation is centralized
 - [x] **WORK-03**: No worker-specific branching (`if worker == "claude-code"`) appears in the orchestrator or workflow code
 - [x] **WORK-04**: `ClaudeCodeWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
-- [ ] **WORK-05**: `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
-- [ ] **WORK-06**: `HermesWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
+- [x] **WORK-05**: `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
+- [x] **WORK-06**: `HermesWorker` is a functional adapter that runs a role non-interactively and returns a normalized result
 - [x] **WORK-07**: `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
 - [x] **WORK-08**: Every adapter normalizes its output to one `WorkerResult` (status COMPLETED | NEEDS_INPUT | FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
-- [ ] **WORK-09**: Any role can be assigned to any supported worker via configuration with no change to workflow code
+- [x] **WORK-09**: Any role can be assigned to any supported worker via configuration with no change to workflow code
 - [x] **WORK-10**: A `FakeWorker` returns a scripted sequence of `WorkerResult`s for orchestration tests with no external AI call
 
 ### Tools & Permissions
@@ -144,7 +144,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [ ] **QUAL-01**: Orchestration behavior is tested end-to-end with `FakeWorker` — role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing — with no external AI calls
 - [x] **QUAL-02**: A shared `CodingWorker` contract-test suite runs against every adapter (including `FakeWorker`) so `FakeWorker` cannot diverge from real adapter behavior
-- [ ] **QUAL-03**: Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent
+- [x] **QUAL-03**: Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent
 - [x] **QUAL-04**: A CI check fails the build if worker-name branching leaks outside the adapters
 
 ## v2 Requirements
@@ -207,11 +207,11 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | WORK-02 | Phase 3 | Complete |
 | WORK-03 | Phase 1 | Complete |
 | WORK-04 | Phase 7 | Complete |
-| WORK-05 | Phase 8 | Pending |
-| WORK-06 | Phase 8 | Pending |
+| WORK-05 | Phase 8 | Complete |
+| WORK-06 | Phase 8 | Complete |
 | WORK-07 | Phase 7 | Complete |
 | WORK-08 | Phase 1 | Complete |
-| WORK-09 | Phase 8 | Pending |
+| WORK-09 | Phase 8 | Complete |
 | WORK-10 | Phase 1 | Complete |
 | TOOL-01 | Phase 6 | Complete |
 | TOOL-02 | Phase 6 | Complete |
@@ -273,7 +273,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | SEC-03 | Phase 6 | Complete |
 | QUAL-01 | Phase 11 | Pending |
 | QUAL-02 | Phase 7 | Complete |
-| QUAL-03 | Phase 8 | Pending |
+| QUAL-03 | Phase 8 | Complete |
 | QUAL-04 | Phase 7 | Complete |
 
 **Coverage:**
