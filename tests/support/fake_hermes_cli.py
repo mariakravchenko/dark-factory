@@ -2,38 +2,29 @@
 live Hermes Agent CLI and no live credential (08-RESEARCH.md D-02 "CLI
 access & spike approach").
 
-Mirrors ``tests/support/fake_copilot_cli.py`` module-for-module:
-:func:`write_fake_hermes` writes a small, self-contained Python script named
-``hermes`` into a directory and marks it executable. Prepending that
-directory to ``PATH`` (via :func:`fake_hermes_env`) is enough for
+:func:`write_fake_hermes` is a thin wrapper over
+:func:`tests.support.fake_cli.write_fake_cli` (08-04 Task 2) -- the shared
+generator every fake-CLI module now delegates to, forwarding every keyword
+including ``declared_outputs``. Prepending the returned directory to ``PATH``
+(via :func:`fake_hermes_env`) is enough for
 :func:`~dark_factory.tools.env.build_worker_env` to resolve the bare command
 name ``"hermes"`` to the fake script -- ``build_worker_env`` copies ``PATH``
 from the parent process verbatim, and ``subprocess.Popen`` resolves a bare
 command name against the ``PATH`` it is given.
-
-Every configuration value (``stdout_payload``, ``exit_code``,
-``sleep_seconds``, ``stderr_text``, the log paths) is baked into the
-generated script source as a Python literal via ``repr()``. It is
-deliberately never read back from the child's own environment at run time,
-for the same reason ``fake_claude_cli.py``/``fake_copilot_cli.py`` do not: a
-``DARK_FACTORY_FAKE_*``-style env var would be stripped before the child
-process ever saw it, because :func:`~dark_factory.tools.env.build_worker_env`
-copies only ``WORKER_ENV_ALLOWLIST`` names.
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
-import stat
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-__all__ = ["fake_hermes_env", "write_fake_hermes"]
+from tests.support.fake_cli import write_fake_cli
 
-_EXEC_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+__all__ = ["fake_hermes_env", "write_fake_hermes"]
 
 
 def write_fake_hermes(
@@ -45,58 +36,24 @@ def write_fake_hermes(
     stderr_text: str = "",
     argv_log: Path | None = None,
     env_log: Path | None = None,
+    declared_outputs: bool = False,
 ) -> Path:
     """Write an executable ``hermes`` script to ``directory``; return
     ``directory`` (the caller prepends it to ``PATH`` via
-    :func:`fake_hermes_env`).
-
-    On invocation the generated script, in order:
-
-    1. writes ``json.dumps(sys.argv)`` to ``argv_log`` when given;
-    2. writes ``json.dumps(dict(os.environ))`` to ``env_log`` when given;
-    3. sleeps for ``sleep_seconds`` when non-zero;
-    4. writes ``stderr_text`` to stderr and flushes;
-    5. writes ``stdout_payload`` to stdout (as raw bytes when
-       ``stdout_payload`` is ``bytes``) and flushes;
-    6. exits with ``exit_code``.
+    :func:`fake_hermes_env`). See :func:`~tests.support.fake_cli.write_fake_cli`
+    for the generated script's exact behaviour.
     """
-    directory.mkdir(parents=True, exist_ok=True)
-    script_path = directory / "hermes"
-    script = f"""#!/usr/bin/env python3
-import json
-import os
-import sys
-import time
-
-argv_log = {(str(argv_log) if argv_log is not None else None)!r}
-env_log = {(str(env_log) if env_log is not None else None)!r}
-sleep_seconds = {sleep_seconds!r}
-stderr_text = {stderr_text!r}
-stdout_payload = {stdout_payload!r}
-exit_code = {exit_code!r}
-
-if argv_log:
-    with open(argv_log, "w", encoding="utf-8") as fh:
-        json.dump(sys.argv, fh)
-if env_log:
-    with open(env_log, "w", encoding="utf-8") as fh:
-        json.dump(dict(os.environ), fh)
-if sleep_seconds:
-    time.sleep(sleep_seconds)
-if stderr_text:
-    sys.stderr.write(stderr_text)
-    sys.stderr.flush()
-if isinstance(stdout_payload, bytes):
-    sys.stdout.buffer.write(stdout_payload)
-else:
-    sys.stdout.write(stdout_payload)
-sys.stdout.flush()
-sys.exit(exit_code)
-"""
-    script_path.write_text(script, encoding="utf-8")
-    mode = script_path.stat().st_mode
-    script_path.chmod(mode | _EXEC_BITS)
-    return directory
+    return write_fake_cli(
+        directory,
+        "hermes",
+        stdout_payload=stdout_payload,
+        exit_code=exit_code,
+        sleep_seconds=sleep_seconds,
+        stderr_text=stderr_text,
+        argv_log=argv_log,
+        env_log=env_log,
+        declared_outputs=declared_outputs,
+    )
 
 
 @contextlib.contextmanager
