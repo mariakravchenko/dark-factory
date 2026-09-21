@@ -37,14 +37,32 @@ expected id -- because a test that hardcodes the id would reproduce the
 exact defect it is guarding against (two coinciding literals, not a real
 handoff). This content dimension is what the pre-existing existence-only
 form of this test could never catch.
+
+**08-04 (Task 2):** after Task 3's reassignment, driving the shipped
+configuration set exercises three external agent runtimes (Copilot for
+ARCHITECTURE, Claude Code for DEVELOPMENT, Hermes for QA) rather than only
+``FakeWorker`` -- the test's own subject changes in exactly this one way,
+stated here rather than glossed over. The ``_external_runtime_fakes``
+fixture below installs all three fake CLI executables with
+``declared_outputs=True`` and both worker credentials into the environment
+``_run_cli_against_real_repo`` spawns the CLI subprocess from, so this test
+now proves the shipped configuration set resolves and drives to
+``COMPLETED`` across three runtimes with no explicit worker script, and that
+the acceptance-criteria handoff chain (see the G-04-1 paragraph above)
+survives the hop through those external runtimes. No assertion changed for
+this: the test still exercises ``FakeWorker`` alone until Task 3's role-YAML
+edit lands, at which point the same fixture -- installed here, unchanged --
+becomes load-bearing with zero further edits to this file.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -61,6 +79,9 @@ from dark_factory.domain.artifacts import (
 from dark_factory.git.client import run_git
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
+from tests.support.fake_claude_cli import write_fake_claude
+from tests.support.fake_copilot_cli import write_fake_copilot
+from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import make_git_repo, run_artifact_text
 
 pytestmark = pytest.mark.integration
@@ -137,13 +158,76 @@ def _run_cli_against_real_repo(
         text=True,
         env=env,
         cwd=cwd,  # the shipped config set, copied into a throwaway git repo
-        timeout=90,
+        # 08-04 Task 2: after Task 3's reassignment this run spawns three
+        # additional CLI subprocesses (Copilot, Claude Code, Hermes) on top
+        # of BA's in-process FakeWorker step. A generous upper bound on a
+        # cold start across four role attempts, not a timing assertion.
+        timeout=240,
         check=False,
     )
 
 
+@pytest.fixture
+def _external_runtime_fakes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """Install all three fake CLI executables -- ``claude``, ``copilot``,
+    ``hermes`` -- with ``declared_outputs=True`` in one directory, prepend it
+    to ``PATH``, and set both worker credentials to obviously-fake values
+    (08-04 Task 2).
+
+    :func:`_run_cli_against_real_repo` builds the child environment from
+    ``os.environ`` at call time, so every value ``monkeypatch.setenv`` sets
+    here reaches the CLI subprocess directly and, through
+    :func:`~dark_factory.tools.env.build_worker_env`'s ``PATH`` entry,
+    reaches each adapter's own spawn in turn.
+
+    This fixture is installed unconditionally, independent of which worker
+    each shipped role is currently assigned to: until Task 3 reassigns
+    ``ARCHITECTURE``/``DEVELOPMENT``/``QA`` away from ``fake``, none of these
+    three fakes are ever invoked (``FakeWorker`` runs in-process and spawns
+    nothing) -- installing them here in advance is what lets Task 3's
+    role-YAML edit alone flip this test onto three real runtimes with no
+    further edit to this file (WORK-09's "zero workflow/test-code change").
+    """
+    fake_dir = tmp_path / "external-runtime-fakebin"
+    # ClaudeCodeWorker parses a single JSON object off stdout (--output-format
+    # json); the other two adapters parse plain text. Only the Claude Code
+    # payload needs a `result` field to make it through `_spawn_and_parse`
+    # cleanly, and it deliberately carries no NEEDS_INPUT marker.
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=json.dumps(
+            {
+                "subtype": "success",
+                "is_error": False,
+                "session_id": "sess-08-04-development",
+                "result": "implementation complete",
+            }
+        ),
+        declared_outputs=True,
+    )
+    write_fake_copilot(
+        fake_dir, stdout_payload="architecture design complete", declared_outputs=True
+    )
+    write_fake_hermes(
+        fake_dir, stdout_payload="QA verification complete", declared_outputs=True
+    )
+
+    existing_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{fake_dir}{os.pathsep}{existing_path}")
+    monkeypatch.setenv(
+        "COPILOT_GITHUB_TOKEN", "github_pat_fake0000000000000000000000000000"
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake0000000000000000000000000000")
+    yield fake_dir
+
+
 def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
-    pg_url: str, engine: Engine, tmp_path: Path
+    pg_url: str,
+    engine: Engine,
+    tmp_path: Path,
+    _external_runtime_fakes: Path,
 ) -> None:
     config_root = _copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
     proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url, config_root)
