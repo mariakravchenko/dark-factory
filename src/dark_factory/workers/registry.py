@@ -68,6 +68,17 @@ class WorkerRegistry:
         would raise ``NotImplementedError`` during validation."""
         return name in self._factories
 
+    def names(self) -> frozenset[str]:
+        """Every registered worker name. Mirrors
+        :meth:`~dark_factory.tools.registry.ToolRegistry.names`'s shape
+        (Plan 08-03, Task 2) -- used by
+        ``tests/unit/test_every_real_adapter_has_a_live_suite.py`` so the
+        QUAL-03 completeness obligation is enumerated from this registry,
+        the source of truth for which adapters exist, rather than from a
+        hand-maintained list that could drift. Never returns a raw
+        factory."""
+        return frozenset(self._factories)
+
 
 default_registry = WorkerRegistry()
 
