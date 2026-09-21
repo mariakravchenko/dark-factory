@@ -25,7 +25,10 @@ from dark_factory.domain.artifacts import (
 )
 from dark_factory.workers import fake
 from dark_factory.workers.cli_runtime import build_prompt
-from dark_factory.workers.fake import criterion_ids_from_text, synthesize_artifact_content
+from dark_factory.workers.fake import (
+    criterion_ids_from_text,
+    synthesize_artifact_content,
+)
 from tests.support.fake_copilot_cli import fake_copilot_env, write_fake_copilot
 
 pytestmark = pytest.mark.unit
@@ -125,8 +128,8 @@ def test_fake_worker_own_behaviour_is_unchanged() -> None:
     class _Context:
         role = "ARCHITECTURE"
         run_id = _RUN_ID
-        outputs: list[str] = []
-        inputs: list[object] = []
+        outputs: tuple[str, ...] = ()
+        inputs: tuple[object, ...] = ()
 
     result = fake.FakeWorker().execute(_Context())
     assert result.status == WorkerResultStatus.COMPLETED

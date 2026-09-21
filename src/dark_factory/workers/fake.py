@@ -96,7 +96,12 @@ from dark_factory.domain.worker import (
 )
 from dark_factory.workers.base import CodingWorker
 
-__all__ = ["FakeWorker", "ScriptExhaustedError"]
+__all__ = [
+    "FakeWorker",
+    "ScriptExhaustedError",
+    "criterion_ids_from_text",
+    "synthesize_artifact_content",
+]
 
 _SCRIPT_ENV_VAR = "DARK_FACTORY_FAKE_SCRIPT"
 _SLEEP_MS_ENV_VAR = "DARK_FACTORY_FAKE_SLEEP_MS"
@@ -165,6 +170,54 @@ def _textual_criterion_ids(content: str) -> tuple[str, ...]:
     return tuple(_CRITERION_LINE_RE.findall(content))
 
 
+def _candidate_ids_for_text(content: str) -> tuple[str, ...]:
+    """Strategy dispatch shared by :func:`criterion_ids_from_text` and
+    :func:`_extract_criterion_ids`: try the structural JSON-document
+    extraction first, falling back to the textual carrier-line scan when
+    ``content`` does not parse as an
+    :class:`~dark_factory.domain.artifacts.AcceptanceCriteriaDocument`."""
+    candidates = _structural_criterion_ids(content)
+    if candidates is None:
+        candidates = _textual_criterion_ids(content)
+    return candidates
+
+
+def _finalize_criterion_ids(candidate_ids: Iterable[str]) -> tuple[str, ...]:
+    """The one finishing step both :func:`criterion_ids_from_text` and
+    :func:`_extract_criterion_ids` share so they cannot drift: filter
+    ``candidate_ids`` through :func:`_is_valid_criterion_id`, de-duplicate
+    preserving order, cap at :data:`_MAX_CRITERION_IDS`, and fall back to
+    :data:`_ORIGIN_CRITERION_IDS` when nothing valid survives."""
+    ids: list[str] = []
+    seen: set[str] = set()
+    for candidate in candidate_ids:
+        if not _is_valid_criterion_id(candidate) or candidate in seen:
+            continue
+        seen.add(candidate)
+        ids.append(candidate)
+
+    if not ids:
+        return _ORIGIN_CRITERION_IDS
+    return tuple(ids[:_MAX_CRITERION_IDS])
+
+
+def criterion_ids_from_text(text: str) -> tuple[str, ...]:
+    """The G-04-1 extraction run over one blob of raw ``text`` rather than a
+    role's resolved ``inputs`` -- the same contract :func:`_extract_criterion_ids`
+    has (structural-then-textual, filtered, de-duplicated, capped, defaulting
+    to :data:`_ORIGIN_CRITERION_IDS`), differing only in taking text directly
+    rather than an iterable of objects with a ``content`` attribute.
+
+    Public (08-04 Task 1): the test-support fake CLIs
+    (``tests/support/fake_cli.py``) generate standalone executables that must
+    derive the same criterion ids ``FakeWorker`` itself would from the same
+    prompt text, so that a fake agent's synthesized artifacts carry the same
+    ids a real synthesis call would. A second hand-maintained extraction
+    would silently drift the day this extraction's rules change.
+    """
+    return _finalize_criterion_ids(_candidate_ids_for_text(text))
+
+
 def _extract_criterion_ids(inputs: Iterable[object] | None) -> tuple[str, ...]:
     """The role-agnostic G-04-1 extraction: an ordered, de-duplicated tuple
     of criterion ids found across ``inputs`` (a role's resolved upstream
@@ -175,26 +228,19 @@ def _extract_criterion_ids(inputs: Iterable[object] | None) -> tuple[str, ...]:
     input's ``content`` attribute is read via ``getattr`` and skipped unless
     it is a string. Dispatch across strategies is on the content's shape
     only -- never on ``context.role`` and never a filesystem read -- so this
-    function stays D-08/CTX-02 compliant regardless of caller.
+    function stays D-08/CTX-02 compliant regardless of caller. Delegates the
+    per-item strategy dispatch and the final filter/dedupe/cap/default step to
+    :func:`_candidate_ids_for_text` and :func:`_finalize_criterion_ids`
+    respectively -- the same two helpers :func:`criterion_ids_from_text`
+    shares, so the two entry points cannot drift.
     """
-    ids: list[str] = []
-    seen: set[str] = set()
+    candidate_ids: list[str] = []
     for item in inputs or ():
         content = getattr(item, "content", None)
         if not isinstance(content, str):
             continue
-        candidates = _structural_criterion_ids(content)
-        if candidates is None:
-            candidates = _textual_criterion_ids(content)
-        for candidate in candidates:
-            if not _is_valid_criterion_id(candidate) or candidate in seen:
-                continue
-            seen.add(candidate)
-            ids.append(candidate)
-
-    if not ids:
-        return _ORIGIN_CRITERION_IDS
-    return tuple(ids[:_MAX_CRITERION_IDS])
+        candidate_ids.extend(_candidate_ids_for_text(content))
+    return _finalize_criterion_ids(candidate_ids)
 
 
 def _synthesize_machine_artifact(
@@ -262,13 +308,20 @@ def _synthesize_machine_artifact(
     return None
 
 
-def _synthesize_artifact_content(filename: str, criterion_ids: tuple[str, ...]) -> str:
+def synthesize_artifact_content(filename: str, criterion_ids: tuple[str, ...]) -> str:
     """The file content written for one declared ``outputs`` filename: a
     schema-valid JSON document when ``filename`` is a D-10 machine artifact
     type, otherwise a minimal Markdown placeholder carrying one D-07-style
     criterion-carrier line per id (``- Criterion <id> met``) so a Markdown
     artifact round-trips its ids to the next role. Content stays
-    non-task-aware throughout -- task-derived prose is Phase 7's scope."""
+    non-task-aware throughout -- task-derived prose is Phase 7's scope.
+
+    Public (08-04 Task 1): the test-support fake CLIs generate standalone
+    executables that must write the same minimal schema-valid content
+    ``FakeWorker`` writes when asked to produce a role's declared outputs, and
+    a second hand-maintained copy of that content would silently drift the
+    day an artifact model changes.
+    """
     machine_content = _synthesize_machine_artifact(filename, criterion_ids)
     if machine_content is not None:
         return machine_content
@@ -320,7 +373,7 @@ def _default_script(context: object) -> WorkerResult:
     root = run_root(work_dir, UUID(run_id))
     refs: list[ArtifactRef] = []
     for filename in outputs:
-        content = _synthesize_artifact_content(filename, criterion_ids)
+        content = synthesize_artifact_content(filename, criterion_ids)
         path, digest = write_artifact_text(root, role, filename, content)
         refs.append(ArtifactRef(type=filename, path=path, checksum=digest))
 
