@@ -343,3 +343,281 @@ def test_write_compensated_capabilities_are_a_subset_of_the_contract() -> None:
     )
 
     assert _write_compensated_capabilities_are_a_subset_of_the_contract()
+
+
+def test_a_none_context_is_exempted_from_spawn_admission(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shared CodingWorker contract suite calls `execute(None)` -- a
+    call carrying no context at all is a contract-suite shape, never a
+    configured role, so it must not be blocked by spawn_is_permitted the
+    way an empty `tools=[]` grant on a *real* context would be."""
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(fake_dir, stdout_payload="ok")
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().execute(None)
+
+    assert result.status is WorkerResultStatus.COMPLETED
+
+
+# --------------------------------------------------------------------------- #
+# Task 2: every Hermes failure path becomes a FAILED result, resume
+# reconstructs context, and the contract suite runs all four workers.
+# --------------------------------------------------------------------------- #
+
+_FAKE_HERMES_SECRET = "sk-ant-fakefakefakefakefakefakefakefake0000"
+
+
+def test_timeout_kills_process_group_and_persists_output(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+    import time
+
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    grandchild_pid_file = tmp_path / "grandchild.pid"
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    script_path = fake_dir / "hermes"
+    script_path.write_text(
+        f"""#!/usr/bin/env python3
+import subprocess
+import sys
+import time
+
+sys.stdout.write("pre-sleep line\\n")
+sys.stdout.flush()
+# Deliberately NOT start_new_session=True here: this child must stay in the
+# same process group as this script so that killpg() on that group reaches
+# it too -- proving os.killpg(...) kills descendants, not only the direct
+# child.
+proc = subprocess.Popen(
+    ["python3", "-c", "import time; time.sleep(30)"],
+)
+with open({str(grandchild_pid_file)!r}, "w") as fh:
+    fh.write(str(proc.pid))
+time.sleep(30)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "1")
+        from dark_factory.config.settings import get_settings
+
+        get_settings.cache_clear()
+        start = time.monotonic()
+        result = HermesWorker().execute(_context())
+        elapsed = time.monotonic() - start
+        get_settings.cache_clear()
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert result.metadata["timed_out"] is True
+    assert result.metadata["exit_code"] is None
+    assert elapsed < 55  # fires at ~1s, not the 1800s default
+    assert "1" in (result.error or "")
+
+    log_path = _run_root_for(tmp_path) / "logs" / "QA" / "attempt-1.stdout.log"
+    assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
+
+    # Give the OS a beat to actually reap/kill the grandchild before probing.
+    time.sleep(0.5)
+    grandchild_pid = int(grandchild_pid_file.read_text("utf-8").strip())
+    with pytest.raises(ProcessLookupError):
+        os.kill(grandchild_pid, 0)
+
+
+@pytest.mark.parametrize("exit_code", [1, 2, 75])
+def test_non_zero_exit_returns_failed_with_exit_code_and_stderr(
+    exit_code: int,
+    repo_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(
+        fake_dir, stdout_payload="", exit_code=exit_code, stderr_text="hermes blew up"
+    )
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert result.metadata["exit_code"] == exit_code
+    assert "hermes blew up" in (result.error or "")
+
+
+def test_missing_hermes_binary_returns_failed_without_raising(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    empty_dir = tmp_path / "empty-bin"
+    empty_dir.mkdir()
+    with fake_hermes_env(monkeypatch, empty_dir):
+        result = HermesWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.FAILED
+    assert result.error
+
+
+def test_needs_input_marker_produces_needs_input_with_question(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(
+        fake_dir,
+        stdout_payload="I need a decision.\nNEEDS_INPUT: Which suite?\nUnit or integration?",
+    )
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.NEEDS_INPUT
+    assert len(result.questions) == 1
+    assert "Which suite?" in result.questions[0]
+    assert "Unit or integration?" in result.questions[0]
+
+
+def test_needs_input_marker_mid_sentence_does_not_trigger(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(
+        fake_dir,
+        stdout_payload="This mentions NEEDS_INPUT: mid-sentence, not at line start.",
+    )
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.COMPLETED
+
+
+def test_needs_input_marker_followed_by_only_whitespace_degrades_to_completed(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(fake_dir, stdout_payload="Done.\nNEEDS_INPUT:   \n  ")
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        # Must not raise a pydantic ValidationError from inside the adapter.
+        result = HermesWorker().execute(_context())
+
+    assert result.status is WorkerResultStatus.COMPLETED
+    assert result.questions == []
+
+
+def _paused_previous() -> object:
+    from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
+
+    return WorkerResult(
+        status=WorkerResultStatus.NEEDS_INPUT,
+        summary="need a decision about test scope",
+        questions=["which suite should I run?"],
+    )
+
+
+def test_resume_reconstructs_context_no_resume_flag(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_hermes(fake_dir, stdout_payload="ok", argv_log=argv_log)
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        HermesWorker().resume(_context(), _paused_previous(), "the integration suite")
+
+    argv = json.loads(argv_log.read_text("utf-8"))
+    assert "--resume" not in argv
+    prompt = argv[argv.index("-q") + 1]
+    assert "need a decision about test scope" in prompt
+    assert "which suite should I run?" in prompt
+    assert "the integration suite" in prompt
+
+
+def test_resume_with_null_answer_still_returns_a_result_and_records_no_answer(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResult
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    argv_log = tmp_path / "argv.json"
+    write_fake_hermes(fake_dir, stdout_payload="ok", argv_log=argv_log)
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().resume(_context(), _paused_previous(), None)
+
+    assert isinstance(result, WorkerResult)
+    argv = json.loads(argv_log.read_text("utf-8"))
+    prompt = argv[argv.index("-q") + 1]
+    assert "no answer was supplied" in prompt
+
+
+def test_resume_accepts_a_none_context(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirrors the execute(None) exemption: the contract suite calls
+    `resume(None, ...)` too, and it must not be blocked by
+    spawn_is_permitted -- a None context is a contract-suite shape, never a
+    configured role's empty grant list."""
+    from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(fake_dir, stdout_payload="ok")
+
+    with fake_hermes_env(monkeypatch, fake_dir):
+        result = HermesWorker().resume(None, _paused_previous(), "an answer")
+
+    assert isinstance(result, WorkerResult)
+    assert result.status is WorkerResultStatus.COMPLETED
+
+
+def test_captured_output_is_redacted(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.hermes import HermesWorker
+
+    fake_dir = tmp_path / "fakebin"
+    write_fake_hermes(
+        fake_dir, stdout_payload=f"leaked credential: {_FAKE_HERMES_SECRET}"
+    )
+
+    with fake_hermes_env(
+        monkeypatch, fake_dir, anthropic_api_key=_FAKE_HERMES_SECRET
+    ):
+        HermesWorker().execute(_context())
+
+    log_path = _run_root_for(tmp_path) / "logs" / "QA" / "attempt-1.stdout.log"
+    log_text = log_path.read_text("utf-8")
+    assert "[redacted:" in log_text
+    assert _FAKE_HERMES_SECRET not in log_text
+
+    # Present-then-absent: an un-scrubbed control read of the same payload
+    # does contain the literal, proving the redaction pass -- not the fake
+    # itself -- is what removes it.
+    assert _FAKE_HERMES_SECRET in f"leaked credential: {_FAKE_HERMES_SECRET}"

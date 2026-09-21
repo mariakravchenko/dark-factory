@@ -5,11 +5,12 @@ Parametrized over ``WORKER_FACTORIES``. Phase 7 (Plan 07-03) appended
 subprocess-spawning adapter -- driven against a faked ``claude`` executable on
 ``PATH`` (see the ``_fake_clis_on_path`` autouse fixture below), never a live
 binary or a live Anthropic credential -- alongside ``FakeWorker``. Plan 08-01
-appends ``CopilotWorker``, driven against a faked ``copilot`` executable the
-same way; 08-02 appends ``HermesWorker``. This suite is the mechanism that
-stops the fake drifting from real adapter semantics, so every downstream
-orchestration test keeps testing a faithful worker rather than a divergent
-stub.
+appended ``CopilotWorker``, driven against a faked ``copilot`` executable the
+same way; Plan 08-02 appends ``HermesWorker`` (ROADMAP SC3, QUAL-02: all
+four workers now run under one shared contract suite). This suite is the
+mechanism that stops the fake drifting from real adapter semantics, so every
+downstream orchestration test keeps testing a faithful worker rather than a
+divergent stub.
 
 It covers **both** methods the orchestrator actually calls: ``execute`` and
 ``resume``. The runner picks ``resume`` off a persisted ``RESUMING`` marker after
@@ -35,8 +36,10 @@ from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.claude_code import ClaudeCodeWorker
 from dark_factory.workers.copilot import CopilotWorker
 from dark_factory.workers.fake import FakeWorker
+from dark_factory.workers.hermes import HermesWorker
 from tests.support.fake_claude_cli import fake_claude_env, write_fake_claude
 from tests.support.fake_copilot_cli import fake_copilot_env, write_fake_copilot
+from tests.support.fake_hermes_cli import fake_hermes_env, write_fake_hermes
 
 pytestmark = pytest.mark.contract
 
@@ -44,6 +47,7 @@ WORKER_FACTORIES: list[Callable[[], CodingWorker]] = [
     FakeWorker,
     ClaudeCodeWorker,
     CopilotWorker,
+    HermesWorker,
 ]
 
 # A clean COMPLETED payload -- no NEEDS_INPUT marker -- so the fake CLI does
@@ -57,18 +61,20 @@ _FAKE_CLI_PAYLOAD = """{"subtype": "success", "duration_ms": 1, "duration_api_ms
 "result": "contract-suite fake CLI result, no marker here", \
 "structured_output": null, "permission_denials": []}"""
 
-# CopilotWorker parses plain stdout text directly (D-02, no JSON decode
-# step), unlike the Claude Code payload above -- a clean payload with no
-# NEEDS_INPUT marker so the shared tests do not land on the pause branch.
+# CopilotWorker/HermesWorker each parse plain stdout text directly (D-02, no
+# JSON decode step), unlike the Claude Code payload above -- a clean payload
+# with no NEEDS_INPUT marker so the shared tests do not land on the pause
+# branch.
 _FAKE_COPILOT_PAYLOAD = "contract-suite fake CLI result, no marker here"
+_FAKE_HERMES_PAYLOAD = "contract-suite fake CLI result, no marker here"
 
 
 @pytest.fixture(autouse=True)
 def _fake_clis_on_path(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[None]:
-    """Install fake ``claude`` and ``copilot`` executables into one
-    temporary directory prepended once to ``PATH``, plus obviously-fake
+    """Install fake ``claude``, ``copilot`` and ``hermes`` executables into
+    one temporary directory prepended once to ``PATH``, plus obviously-fake
     credentials and database URLs, before any parametrized worker in this
     module is constructed -- so every real adapter here spawns its fake,
     never a live binary, and needs no live credential (Task 2, QUAL-02).
@@ -82,7 +88,12 @@ def _fake_clis_on_path(
     fake_dir = tmp_path_factory.mktemp("fake-cli-bin")
     write_fake_claude(fake_dir, stdout_payload=_FAKE_CLI_PAYLOAD)
     write_fake_copilot(fake_dir, stdout_payload=_FAKE_COPILOT_PAYLOAD)
-    with fake_claude_env(monkeypatch, fake_dir), fake_copilot_env(monkeypatch, fake_dir):
+    write_fake_hermes(fake_dir, stdout_payload=_FAKE_HERMES_PAYLOAD)
+    with (
+        fake_claude_env(monkeypatch, fake_dir),
+        fake_copilot_env(monkeypatch, fake_dir),
+        fake_hermes_env(monkeypatch, fake_dir),
+    ):
         yield
 
 
@@ -141,3 +152,16 @@ def test_a_needs_input_result_with_no_questions_cannot_be_constructed() -> None:
     # present or future adapter from inventing a pause with nothing to ask.
     with pytest.raises(ValidationError):
         WorkerResult(status=WorkerResultStatus.NEEDS_INPUT, questions=[])
+
+
+def test_all_four_workers_are_registered_in_the_contract_suite() -> None:
+    """ROADMAP SC3 / QUAL-02, pinned directly: this suite now covers every
+    real and fake CodingWorker -- a future adapter added to the registry
+    without being added here would silently escape this suite's coverage."""
+    assert len(WORKER_FACTORIES) == 4
+    assert {factory.__name__ for factory in WORKER_FACTORIES} == {
+        "FakeWorker",
+        "ClaudeCodeWorker",
+        "CopilotWorker",
+        "HermesWorker",
+    }
