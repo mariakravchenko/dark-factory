@@ -58,6 +58,12 @@ resume it; durability and observability are the same requirement.
 - ✓ A worker's subprocess environment is built from an explicit allowlist; infrastructure credentials (`DATABASE_URL`, `GITHUB_TOKEN`, worker credentials) are never passed to a worker — Phase 6 (TOOL-04, SEC-03)
 - ✓ MCP supported as one optional transport adapter for exposing tools to compatible workers; orchestrator has no internal dependency on MCP — Phase 6 (TOOL-05)
 - ✓ Credential/secret values never appear in role artifacts, worker prompts, Neon event payloads, logs, or reports — Phase 6 (SEC-01)
+- ✓ `ClaudeCodeWorker` — functional `CodingWorker` adapter registered as `default_registry`'s `"claude-code"` factory (`execute()`, `resume()`, `capabilities()`) — Phase 7
+- ✓ `CodingWorker` contract proven for a real runtime: `execute()`, `resume()` (native `--resume <session_id>` when a prior `worker_session_id` exists, context-reconstruction fallback when it doesn't), `capabilities()` reporting `native_resume=True` — Phase 7
+- ✓ Any role can be assigned to `claude-code` via config with no workflow-code change (worker registry factory lookup only) — Phase 7
+- ✓ Role `context.tools` grants translate into `--allowedTools`, deny-by-omission, via `NATIVE_TOOL_CONTRACT`'s first real runtime consumer — Phase 7 (defense-in-depth; `enforce_write_scope` (ROLE-05) remains the authoritative after-the-fact boundary)
+- ✓ CI executes the same quality gates on every push/PR: lint, types, worker-name leak guard, unit/contract tiers — one `.github/workflows/ci.yml`, not a separate CI orchestrator — Phase 7 (verified live: real green run + real red run on a deliberate leak)
+- ✓ Attempt logs and resume transcripts pass through one shared spawn/redact/parse pipeline so secret redaction and the never-raise failure wrapper cannot drift between `execute()` and `resume()` — Phase 7
 
 ### Active
 
@@ -73,8 +79,7 @@ resume it; durability and observability are the same requirement.
 - [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement shipped Phase 6 (TOOL-01/02/03))
 
 **Worker (agent runtime) abstraction**
-- [ ] `CodingWorker` contract: `execute()`, `resume()`, `capabilities()`
-- [ ] `ClaudeCodeWorker` — functional adapter
+- [ ] `CodingWorker` contract proven across all three runtimes (proven for Claude Code — Phase 7; Copilot and Hermes remain)
 - [ ] `CopilotWorker` — functional adapter
 - [ ] `HermesWorker` — functional adapter
 - [ ] `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
@@ -193,6 +198,10 @@ resume it; durability and observability are the same requirement.
 | `ToolRegistry.invoke()` is the single deny-by-default enforcement point every capability call and every transport (MCP included) funnels through — never a second permission check at the transport layer | Spec's tool-permission-as-security-boundary requirement (TOOL-03); keeps the grant check in exactly one place so a new transport can't accidentally bypass it | Shipped Phase 6 |
 | `build_worker_env` is additive-from-empty-dict over an explicit allowlist, never `os.environ.copy()`/spread/exclusion-filter | CLAUDE.md's explicit "What NOT to Use" prohibition on `os.environ.copy()` when spawning workers — the credential boundary must be constructive, not subtractive | Shipped Phase 6 (TOOL-04, SEC-03) |
 | Three long-standing "pre-existing, unrelated" test failures (phase-4/5 git-worktree/artifact-commit mechanics) were a stale-fixture defect, not a product bug — each test declared its role's `write_scope: []` (D-14 zero-tolerance deny-all) while its own worker planted a non-artifact file in the worktree, and write-scope enforcement correctly reverted it | Root cause: `.planning/debug/resolved/phase4-artifact-commit-bugs.md`. The detection gate (db/integration tier) worked and reported it correctly for two phases; the response gate did not — it was triaged as pre-existing/unrelated and carried as an accepted baseline instead of investigated | Fixed at Phase 6 close-out (commit `ffc333f`); zero production changes |
+| `execute()` and `resume()` both route through one shared `_spawn_and_parse` pipeline rather than each owning its own spawn/redact/parse logic | Prevents secret redaction or the never-raise failure wrapper from drifting between entry points as the adapter grows | Shipped Phase 7 (plan 07-03) |
+| `NEEDS_INPUT:` is a trusted model-authored marker (D-01) that lets the agent itself select the pause branch, accepted rather than requiring structured (`--json-schema`) output for this phase | Worst case of a false positive is a spurious human-resolved pause, not privilege escalation; structured-output hardening deferred to a future phase (recorded in 07-RESEARCH.md) | Shipped Phase 7 (plan 07-03); threat T-07-11 accepted |
+| `--allowedTools` is built strictly from `context.tools` with deny-by-omission as defense-in-depth, while `enforce_write_scope` (ROLE-05) remains the sole authoritative after-the-fact boundary | A role without a grant should not even present the native tool to the agent, but the post-hoc scope check is what actually can't be bypassed by a misbehaving worker | Shipped Phase 7 (plan 07-04) |
+| CI's `quality` job holds no secrets and skips the `db`/`integration` tiers entirely, rather than provisioning a throwaway Postgres in the hosted runner | Nothing to leak if there's nothing to leak; `db`/`integration` tiers verified manually against a real backend instead (this UAT: 828 passed, 56m22s) | Shipped Phase 7 (plan 07-02); threat T-07-09 accepted, revisit at Phase 8 credential-gated integration jobs |
 
 ## Evolution
 
@@ -212,4 +221,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-20 after Phase 6*
+*Last updated: 2026-09-21 after Phase 7*

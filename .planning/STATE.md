@@ -1,44 +1,44 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 07
-current_phase_name: Claude Code — the First Real Worker
-status: verifying
-stopped_at: Completed 07-04-PLAN.md
-last_updated: "2026-09-20T18:49:34.363Z"
-last_activity: 2026-09-20
-last_activity_desc: Phase 07 execution started
-state_head: ce9bdbecb6ccfd8b9cb0f54c8309d0fba24d5161
+current_phase: 8
+current_phase_name: Copilot & Hermes — Worker Independence Proven
+status: planning
+stopped_at: Phase 07 complete, ready to plan Phase 8
+last_updated: "2026-09-21T09:55:59.811Z"
+last_activity: 2026-09-21
+last_activity_desc: Phase 07 complete, transitioned to Phase 8
+state_head: 0a7873f58490825d95c94d4cc0ff6d120a8a14e0
 progress:
   total_phases: 12
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 39
   completed_plans: 39
-  percent: 0
+  percent: 8
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-20)
+See: .planning/PROJECT.md (updated 2026-09-21)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 07 — Claude Code — the First Real Worker
+**Current focus:** Phase 08 — Copilot & Hermes — Worker Independence Proven
 
 ## Current Position
 
-Phase: 07 (Claude Code — the First Real Worker) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-09-20 — Phase 07 execution started
+Phase: 8 — Copilot & Hermes — Worker Independence Proven
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-21 — Phase 07 complete, transitioned to Phase 8
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 8%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 35
+- Total plans completed: 39
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -52,6 +52,7 @@ Progress: [░░░░░░░░░░] 0%
 | 04 | 5 | - | - |
 | 05 | 6 | - | - |
 | 06 | 4 | - | - |
+| 07 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -218,6 +219,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-20T18:49:26.267Z
-Stopped at: Completed 07-04-PLAN.md
+Last session: 2026-09-21T10:00:00.000Z
+Stopped at: Phase 07 complete, ready to plan Phase 8
 Resume file: None
