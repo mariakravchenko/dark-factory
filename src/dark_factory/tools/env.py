@@ -72,9 +72,9 @@ def role_worker_root(role: str) -> Path:
     its ``XDG_*`` entries when ``xdg_root`` is omitted (Plan 08-02).
 
     Exists so an adapter that needs to place a *non*-XDG state directory
-    (for example Hermes's ``HERMES_HOME``, which does not follow the XDG
-    specification) alongside the ``XDG_*`` entries can name the exact same
-    disposable root instead of re-deriving the formula and risking drift.
+    (for a CLI runtime that does not itself follow the XDG specification)
+    alongside the ``XDG_*`` entries can name the exact same disposable root
+    instead of re-deriving the formula and risking drift.
     """
     return Path(tempfile.gettempdir()) / "dark-factory-worker-xdg" / role
 

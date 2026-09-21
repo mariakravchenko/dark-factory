@@ -332,3 +332,14 @@ def test_unenforceable_grant_error_is_importable_and_a_runtime_error() -> None:
     from dark_factory.workers.hermes import UnenforceableGrantError
 
     assert issubclass(UnenforceableGrantError, RuntimeError)
+
+
+def test_write_compensated_capabilities_are_a_subset_of_the_contract() -> None:
+    """A renamed or removed NATIVE_TOOL_CONTRACT capability must fail this
+    test, not silently widen or narrow the write-compensated set
+    spawn_is_permitted() relies on."""
+    from dark_factory.workers.hermes import (
+        _write_compensated_capabilities_are_a_subset_of_the_contract,
+    )
+
+    assert _write_compensated_capabilities_are_a_subset_of_the_contract()

@@ -9,15 +9,15 @@ class hands back a fresh instance every call, a factory bound to a single object
 hands back that same object every call. The choice is the registrant's, not the
 registry's -- the registry stays a plain name-to-callable map.
 
-``default_registry`` maps four names: ``"fake"`` (the real, working test worker),
-``"claude-code"`` (Plan 07-01: a real adapter that spawns the ``claude`` CLI),
-``"copilot"`` (Plan 08-01: a real adapter that spawns the ``copilot`` CLI), and
-``"hermes"``, which still resolves to a placeholder so config validation at run
-creation can accept a role that names it -- every :class:`CodingWorker` entry
-point on its placeholder raises ``NotImplementedError`` until its real adapter
-lands later in Phase 8 (08-02). Config validation must therefore test
-membership with ``name in registry`` (see :meth:`WorkerRegistry.__contains__`),
-never ``registry.get(name)`` -- ``get`` invokes the factory.
+``default_registry`` maps four names, all real as of Plan 08-02: ``"fake"``
+(the real, working test worker), ``"claude-code"`` (Plan 07-01: a real
+adapter that spawns the ``claude`` CLI), ``"copilot"`` (Plan 08-01: a real
+adapter that spawns the ``copilot`` CLI), and ``"hermes"`` (Plan 08-02: a
+real adapter that spawns the ``hermes`` CLI, D-04) -- no name in this
+registry resolves to a not-yet-implemented placeholder any more. Config
+validation tests membership with ``name in registry`` (see
+:meth:`WorkerRegistry.__contains__`), never ``registry.get(name)`` -- ``get``
+invokes the factory.
 
 **``default_registry``'s ``"fake"`` factory returns one long-lived
 :class:`FakeWorker`.** ``_run_current_role`` calls ``registry.get(node.worker)``
@@ -32,13 +32,12 @@ per-instance factory (see ``tests/conftest.py::fake_worker_registry``).
 """
 
 from collections.abc import Callable
-from typing import NoReturn
 
-from dark_factory.domain.worker import WorkerCapabilities, WorkerResult
 from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.claude_code import ClaudeCodeWorker
 from dark_factory.workers.copilot import CopilotWorker
 from dark_factory.workers.fake import FakeWorker
+from dark_factory.workers.hermes import HermesWorker
 
 __all__ = ["UnknownWorkerError", "WorkerRegistry", "default_registry"]
 
@@ -70,32 +69,6 @@ class WorkerRegistry:
         return name in self._factories
 
 
-class _NotYetImplementedWorker(CodingWorker):
-    """A registered-but-inert worker: its name resolves so run-creation config
-    validation passes, but every :class:`CodingWorker` entry point raises
-    ``NotImplementedError`` naming the phase its real adapter lands in."""
-
-    def __init__(self, name: str, phase: str) -> None:
-        self._name = name
-        self._phase = phase
-
-    def _fail(self) -> NoReturn:
-        raise NotImplementedError(
-            f"{self._name} worker adapter lands in Phase {self._phase}"
-        )
-
-    def execute(self, context: object) -> WorkerResult:
-        self._fail()
-
-    def resume(
-        self, context: object, previous: WorkerResult, answer: str | None
-    ) -> WorkerResult:
-        self._fail()
-
-    def capabilities(self) -> WorkerCapabilities:
-        self._fail()
-
-
 default_registry = WorkerRegistry()
 
 # One process-lifetime FakeWorker so its script cursor advances across the
@@ -123,7 +96,8 @@ default_registry.register("claude-code", ClaudeCodeWorker)
 # mirrors the claude-code registration exactly.
 default_registry.register("copilot", CopilotWorker)
 
-# The one remaining real agent-runtime name. Registered so a role that names
-# it passes run-creation config validation; the placeholder raises
-# NotImplementedError on every entry point until its adapter lands (08-02).
-default_registry.register("hermes", lambda: _NotYetImplementedWorker("hermes", "8"))
+# Plan 08-02: the third and final real adapter, the class itself as the
+# factory -- mirrors the claude-code/copilot registrations exactly. No name
+# in default_registry resolves to a not-yet-implemented placeholder any
+# more (D-04).
+default_registry.register("hermes", HermesWorker)
