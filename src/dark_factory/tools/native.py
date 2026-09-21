@@ -34,6 +34,29 @@ subprocess ``cwd``, not from ``--permission-mode`` -- see
 per-tool native restriction flag at all, so its entries say that honestly
 rather than inventing one -- an adapter that cannot enforce a restriction
 natively must not claim that it can.
+
+**Plan 08-02 narrowing (checkpoint decision, Option A).** Read literally,
+each entry's original Hermes ``absent_behaviour`` prose ("the adapter must
+not spawn Hermes for a role denied this grant at all") admitted Hermes only
+for a role holding **every** capability in this contract. The shipped ``QA``
+role (``.dark-factory/roles/QA.yaml``) deliberately withholds ``repo.write``
+while holding every other capability -- Phase 6 SC1's "QA can write tests
+but cannot publish" half -- so the literal rule would block D-04's locked
+``QA`` -> ``hermes`` reassignment entirely, a genuine conflict between a
+locked user decision and this published design contract. Plan 08-02
+resolved that conflict at a blocking checkpoint (not silently, inside the
+adapter): for ``repo.write`` and ``repo.write_tests`` only, the two entries
+below now say that denial is compensated after the fact by
+:func:`dark_factory.git.scope.enforce_write_scope` (ROLE-05), which reverts
+and fails any changed path outside a role's configured ``write_scope`` --
+including the zero-tolerance empty scope -- so ``HermesWorker`` may spawn
+for a role denied only one of those two grants and let that already-shipped
+control hold the boundary. Every other capability's ``absent_behaviour``
+is unchanged: no post-hoc control exists for those, so the literal refusal
+still stands. See ``.planning/phases/08-copilot-hermes-worker-independence-
+proven/08-02-SUMMARY.md`` for the full decision record and
+``dark_factory.workers.hermes.spawn_is_permitted`` for the enforcement
+point this narrowing authorizes.
 """
 
 from __future__ import annotations
@@ -115,8 +138,15 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
         ),
         absent_behaviour=(
             "Claude Code / Copilot: omit Write/Edit from the allow-list "
-            "entirely, so the CLI itself refuses the write. Hermes: the "
-            "adapter must not spawn Hermes for a role denied this grant."
+            "entirely, so the CLI itself refuses the write. Hermes "
+            "(narrowed 08-02, checkpoint Option A): this capability's "
+            "denial is compensated after the fact by "
+            "dark_factory.git.scope.enforce_write_scope (ROLE-05), which "
+            "reverts and fails any changed path outside the role's "
+            "configured write_scope -- including the zero-tolerance empty "
+            "scope -- so the adapter may spawn Hermes for a role denied "
+            "only this grant and let that control hold the boundary "
+            "instead."
         ),
     ),
     "repo.write_tests": NativeToolGrant(
@@ -139,8 +169,14 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
         ),
         absent_behaviour=(
             "Claude Code / Copilot: omit Write/Edit from the allow-list "
-            "entirely. Hermes: the adapter must not spawn Hermes for a "
-            "role denied this grant."
+            "entirely. Hermes (narrowed 08-02, checkpoint Option A): this "
+            "capability's denial is compensated after the fact by "
+            "dark_factory.git.scope.enforce_write_scope (ROLE-05), which "
+            "reverts and fails any changed path outside the role's "
+            "configured write_scope -- including the zero-tolerance empty "
+            "scope -- so the adapter may spawn Hermes for a role denied "
+            "only this grant and let that control hold the boundary "
+            "instead."
         ),
     ),
     "shell.execute": NativeToolGrant(

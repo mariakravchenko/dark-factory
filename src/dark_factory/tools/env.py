@@ -37,6 +37,7 @@ __all__ = [
     "InvalidShellCommandError",
     "ShellResult",
     "build_worker_env",
+    "role_worker_root",
     "shell_execute",
 ]
 
@@ -66,6 +67,18 @@ WORKER_ENV_ALLOWLIST: tuple[str, ...] = (
 )
 
 
+def role_worker_root(role: str) -> Path:
+    """The disposable per-role temp root :func:`build_worker_env` uses for
+    its ``XDG_*`` entries when ``xdg_root`` is omitted (Plan 08-02).
+
+    Exists so an adapter that needs to place a *non*-XDG state directory
+    (for example Hermes's ``HERMES_HOME``, which does not follow the XDG
+    specification) alongside the ``XDG_*`` entries can name the exact same
+    disposable root instead of re-deriving the formula and risking drift.
+    """
+    return Path(tempfile.gettempdir()) / "dark-factory-worker-xdg" / role
+
+
 def build_worker_env(
     role: str,
     *,
@@ -79,13 +92,13 @@ def build_worker_env(
     allowlisted names *present in the parent process* are copied, one at a
     time -- an allowlisted name absent from the parent is absent from the
     result rather than present as an empty string. Layered on top are four
-    temp ``XDG_*`` entries rooted at ``xdg_root`` (or a ``TMPDIR``-derived
-    per-role path when ``xdg_root`` is omitted), so a worker's own
-    config/cache writes land somewhere disposable rather than in the
-    operator's home directory. Finally, when **both** ``env_var_name`` and
-    ``value`` are supplied, exactly one additional key is set to
-    ``value.get_secret_value()`` -- a named-but-unsupplied credential
-    (either argument left ``None``) adds nothing at all.
+    temp ``XDG_*`` entries rooted at ``xdg_root`` (or :func:`role_worker_root`
+    when ``xdg_root`` is omitted), so a worker's own config/cache writes
+    land somewhere disposable rather than in the operator's home directory.
+    Finally, when **both** ``env_var_name`` and ``value`` are supplied,
+    exactly one additional key is set to ``value.get_secret_value()`` -- a
+    named-but-unsupplied credential (either argument left ``None``) adds
+    nothing at all.
 
     ``role`` participates only in the temp XDG path, so two roles never
     share a worker config directory; it is never branched on -- this
@@ -103,11 +116,7 @@ def build_worker_env(
         name: os.environ[name] for name in WORKER_ENV_ALLOWLIST if name in os.environ
     }
 
-    root = (
-        xdg_root
-        if xdg_root is not None
-        else Path(tempfile.gettempdir()) / "dark-factory-worker-xdg" / role
-    )
+    root = xdg_root if xdg_root is not None else role_worker_root(role)
     env["XDG_CONFIG_HOME"] = str(root / "config")
     env["XDG_CACHE_HOME"] = str(root / "cache")
     env["XDG_DATA_HOME"] = str(root / "data")
