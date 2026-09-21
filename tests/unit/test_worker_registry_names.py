@@ -1,17 +1,21 @@
-"""Unit coverage for WorkerRegistry membership + the placeholder worker names
-(Plan 03-01 Task 2, WORK-02; ``claude-code`` updated by Plans 07-01/07-03;
-``copilot`` updated by Plan 08-01).
+"""Unit coverage for WorkerRegistry membership + the (now former) placeholder
+worker names (Plan 03-01 Task 2, WORK-02; ``claude-code`` updated by Plans
+07-01/07-03; ``copilot`` updated by Plan 08-01; ``hermes`` updated by Plan
+08-02).
 
-Membership must work without constructing a worker. ``hermes`` invocations
-still raise ``NotImplementedError`` naming the phase its real adapter lands
-in (Phase 8, plan 08-02). ``claude-code`` is no longer a placeholder as of
-Plan 07-01 -- it resolves to a real :class:`~dark_factory.workers.
-claude_code.ClaudeCodeWorker` whose ``execute()`` and (as of Plan 07-03)
-``resume()`` both never raise (see ``tests/unit/test_claude_code_worker.py``
-for the full behavior suite). ``copilot`` is no longer a placeholder as of
-Plan 08-01 -- it resolves to a real :class:`~dark_factory.workers.
-copilot.CopilotWorker`, same shape (see ``tests/unit/test_copilot_worker.py``
-for the full behavior suite).
+Membership must work without constructing a worker. No name in
+``default_registry`` resolves to a not-yet-implemented placeholder any more
+(D-04). ``claude-code`` is no longer a placeholder as of Plan 07-01 -- it
+resolves to a real :class:`~dark_factory.workers.claude_code.
+ClaudeCodeWorker` whose ``execute()`` and (as of Plan 07-03) ``resume()``
+both never raise (see ``tests/unit/test_claude_code_worker.py`` for the full
+behavior suite). ``copilot`` is no longer a placeholder as of Plan 08-01 --
+it resolves to a real :class:`~dark_factory.workers.copilot.CopilotWorker`,
+same shape (see ``tests/unit/test_copilot_worker.py`` for the full behavior
+suite). ``hermes`` is no longer a placeholder as of Plan 08-02 -- it
+resolves to a real :class:`~dark_factory.workers.hermes.HermesWorker`, same
+shape (see ``tests/unit/test_hermes_worker.py`` for the full behavior
+suite).
 """
 
 import pytest
@@ -82,14 +86,25 @@ def test_copilot_resolves_to_a_real_adapter_not_a_placeholder() -> None:
     assert worker.capabilities().non_interactive is True
 
 
-@pytest.mark.parametrize("name", ["hermes"])
-def test_phase_8_placeholders_resolve_but_every_entry_point_names_phase_8(
-    name: str,
-) -> None:
-    worker = default_registry.get(name)  # construction must not raise
-    with pytest.raises(NotImplementedError, match="Phase 8"):
-        worker.execute({})
-    with pytest.raises(NotImplementedError, match="Phase 8"):
-        worker.resume({}, None, None)  # type: ignore[arg-type]
-    with pytest.raises(NotImplementedError, match="Phase 8"):
-        worker.capabilities()
+def test_hermes_resolves_to_a_real_adapter_not_a_placeholder() -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.hermes import HermesWorker
+
+    worker = default_registry.get("hermes")
+    assert isinstance(worker, HermesWorker)
+
+    # execute() never raises (WORK-06) -- with no `tools` attribute on this
+    # test's deliberately bare `{}` context, the spawn-admission check
+    # blocks before the credential gate is even reached; either way the
+    # result is FAILED, not an exception. See test_hermes_worker.py for the
+    # full behavior suite, including the credential-specific FAILED path.
+    result = worker.execute({})
+    assert result.status is WorkerResultStatus.FAILED
+
+    # resume() never raises either, given this test's deliberately bare
+    # `None` previous result and no ANTHROPIC_API_KEY configured.
+    resume_result = worker.resume({}, None, None)  # type: ignore[arg-type]
+    assert resume_result.status is WorkerResultStatus.FAILED
+
+    # capabilities() is implemented (not a placeholder); does not raise.
+    assert worker.capabilities().non_interactive is True

@@ -32,6 +32,10 @@ _ALLOWED_CONSUMERS = {
     # Plan 08-01: dark_factory.workers.copilot is this contract's second
     # real runtime consumer, mirroring what 07-04 did for claude_code.py.
     _SRC_ROOT / "workers" / "copilot.py",
+    # Plan 08-02: dark_factory.workers.hermes is this contract's third real
+    # runtime consumer, and the first to also read past the .hermes field --
+    # spawn_is_permitted() derives from the whole contract's capability set.
+    _SRC_ROOT / "workers" / "hermes.py",
 }
 
 
