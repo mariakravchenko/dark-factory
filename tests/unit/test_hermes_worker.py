@@ -409,7 +409,7 @@ time.sleep(30)
     script_path.chmod(0o755)
 
     with fake_hermes_env(monkeypatch, fake_dir):
-        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "1")
+        monkeypatch.setenv("WORKER_TIMEOUT_SECONDS", "2")
         from dark_factory.config.settings import get_settings
 
         get_settings.cache_clear()
@@ -421,8 +421,8 @@ time.sleep(30)
     assert result.status is WorkerResultStatus.FAILED
     assert result.metadata["timed_out"] is True
     assert result.metadata["exit_code"] is None
-    assert elapsed < 55  # fires at ~1s, not the 1800s default
-    assert "1" in (result.error or "")
+    assert elapsed < 55  # fires at ~2s, not the 1800s default
+    assert "2" in (result.error or "")
 
     log_path = _run_root_for(tmp_path) / "logs" / "QA" / "attempt-1.stdout.log"
     assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
