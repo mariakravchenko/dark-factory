@@ -1,7 +1,8 @@
 # Developer role definition (CFG-02 / CFG-03, ROLE-03). Editing this file
 # changes the resolved role in the next run's snapshot with no Python change.
 name: DEVELOPMENT
-worker: fake
+# 08-04 (ROADMAP SC2): Developer runs on Claude Code -- WORK-09's role-reassignment proof.
+worker: claude-code
 instructions: ../instructions/development.md
 
 # tools (TOOL-03) are enforced on every invocation by

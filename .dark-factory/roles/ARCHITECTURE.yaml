@@ -1,7 +1,8 @@
 # Architect role definition (CFG-02 / CFG-03, ROLE-02). Editing this file
 # changes the resolved role in the next run's snapshot with no Python change.
 name: ARCHITECTURE
-worker: fake
+# 08-04 (ROADMAP SC2): Architect runs on Copilot -- WORK-09's role-reassignment proof.
+worker: copilot
 instructions: ../instructions/architecture.md
 
 # tools (TOOL-03) are enforced on every invocation by
