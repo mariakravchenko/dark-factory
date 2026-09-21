@@ -4,7 +4,8 @@
 # output, the role immediately prior) -- proving selection is by declared
 # filename, not pipeline adjacency.
 name: QA
-worker: fake
+# 08-04 (ROADMAP SC2): QA runs on Hermes -- WORK-09's role-reassignment proof.
+worker: hermes
 instructions: ../instructions/qa.md
 
 # Phase 6 (plan 06-01, D-16): a deliberate permission expansion resolving
