@@ -1,12 +1,13 @@
 """The shared CodingWorker contract suite.
 
-Parametrized over ``WORKER_FACTORIES``. Phase 7 (Plan 07-03) has appended
-``ClaudeCodeWorker`` to that list, so this suite now runs a real
+Parametrized over ``WORKER_FACTORIES``. Phase 7 (Plan 07-03) appended
+``ClaudeCodeWorker`` to that list, so this suite runs a real
 subprocess-spawning adapter -- driven against a faked ``claude`` executable on
-``PATH`` (see the ``_fake_claude_cli_on_path`` autouse fixture below), never a
-live binary or a live Anthropic credential -- alongside ``FakeWorker``. Phase 8
-will append ``CopilotWorker`` and ``HermesWorker``. This suite is the mechanism
-that stops the fake drifting from real adapter semantics, so every downstream
+``PATH`` (see the ``_fake_clis_on_path`` autouse fixture below), never a live
+binary or a live Anthropic credential -- alongside ``FakeWorker``. Plan 08-01
+appends ``CopilotWorker``, driven against a faked ``copilot`` executable the
+same way; 08-02 appends ``HermesWorker``. This suite is the mechanism that
+stops the fake drifting from real adapter semantics, so every downstream
 orchestration test keeps testing a faithful worker rather than a divergent
 stub.
 
@@ -32,12 +33,18 @@ from pydantic import ValidationError
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.workers.base import CodingWorker
 from dark_factory.workers.claude_code import ClaudeCodeWorker
+from dark_factory.workers.copilot import CopilotWorker
 from dark_factory.workers.fake import FakeWorker
 from tests.support.fake_claude_cli import fake_claude_env, write_fake_claude
+from tests.support.fake_copilot_cli import fake_copilot_env, write_fake_copilot
 
 pytestmark = pytest.mark.contract
 
-WORKER_FACTORIES: list[Callable[[], CodingWorker]] = [FakeWorker, ClaudeCodeWorker]
+WORKER_FACTORIES: list[Callable[[], CodingWorker]] = [
+    FakeWorker,
+    ClaudeCodeWorker,
+    CopilotWorker,
+]
 
 # A clean COMPLETED payload -- no NEEDS_INPUT marker -- so the fake CLI does
 # not force every ClaudeCodeWorker call in this module down the pause branch;
@@ -50,16 +57,21 @@ _FAKE_CLI_PAYLOAD = """{"subtype": "success", "duration_ms": 1, "duration_api_ms
 "result": "contract-suite fake CLI result, no marker here", \
 "structured_output": null, "permission_denials": []}"""
 
+# CopilotWorker parses plain stdout text directly (D-02, no JSON decode
+# step), unlike the Claude Code payload above -- a clean payload with no
+# NEEDS_INPUT marker so the shared tests do not land on the pause branch.
+_FAKE_COPILOT_PAYLOAD = "contract-suite fake CLI result, no marker here"
+
 
 @pytest.fixture(autouse=True)
-def _fake_claude_cli_on_path(
+def _fake_clis_on_path(
     tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[None]:
-    """Install a fake ``claude`` executable on ``PATH`` plus obviously-fake
-    credentials before any parametrized worker in this module is
-    constructed, so a ``ClaudeCodeWorker.execute()``/``resume()`` call here
-    spawns the fake -- never a real ``claude`` binary -- and needs no live
-    ``ANTHROPIC_API_KEY`` (Task 3, QUAL-02).
+    """Install fake ``claude`` and ``copilot`` executables into one
+    temporary directory prepended once to ``PATH``, plus obviously-fake
+    credentials and database URLs, before any parametrized worker in this
+    module is constructed -- so every real adapter here spawns its fake,
+    never a live binary, and needs no live credential (Task 2, QUAL-02).
 
     Environment variables take precedence over ``.env`` in
     pydantic-settings, so this fixture behaves identically on a developer
@@ -67,9 +79,10 @@ def _fake_claude_cli_on_path(
     is exactly why it sets the database URLs too, rather than relying on
     ``.env`` being present.
     """
-    fake_dir = tmp_path_factory.mktemp("fake-claude-bin")
+    fake_dir = tmp_path_factory.mktemp("fake-cli-bin")
     write_fake_claude(fake_dir, stdout_payload=_FAKE_CLI_PAYLOAD)
-    with fake_claude_env(monkeypatch, fake_dir):
+    write_fake_copilot(fake_dir, stdout_payload=_FAKE_COPILOT_PAYLOAD)
+    with fake_claude_env(monkeypatch, fake_dir), fake_copilot_env(monkeypatch, fake_dir):
         yield
 
 

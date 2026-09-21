@@ -56,6 +56,27 @@ class Settings(BaseSettings):
     duration" exists to anchor it against (07-RESEARCH.md Open Question #1),
     chosen so a DEVELOPMENT-role attempt that builds and iterates is not
     truncated mid-flight.
+
+    ``copilot_github_token`` (Plan 08-01, D-01) is deliberately a *separate*
+    field from ``github_token`` even though both are GitHub-scoped PATs:
+    ``github_token`` is Dark Factory's own infrastructure credential (used
+    for its own push/PR creation, TOOL-04/SEC-01) and must never reach a
+    worker subprocess, while ``copilot_github_token`` is a worker's own
+    authentication material, injected into the ``copilot`` subprocess
+    exclusively through ``build_worker_env(role, env_var_name=
+    "COPILOT_GITHUB_TOKEN", value=...)``. Conflating the two fields would
+    make "did the infrastructure credential ever reach a worker" unanswerable
+    from the field name alone. The GitHub Copilot CLI requires a
+    fine-grained, personal-account-owned personal access token carrying the
+    ``Copilot Requests`` permission -- a classic PAT (``ghp_*``) is rejected
+    by the CLI (08-RESEARCH.md Finding 3). Like ``anthropic_api_key``, its
+    absence only surfaces as a typed error (``CopilotWorker``'s own
+    ``MissingWorkerCredentialError``) when a role actually tries to invoke
+    the ``copilot`` worker. ``copilot_model`` is optional: no model
+    identifier is pinned by default because no verified identifier exists
+    for this environment (D-02 defers the live spike to whenever the CLI is
+    actually installed), so the CLI's own default model is used unless an
+    operator configures one.
     """
 
     model_config = SettingsConfigDict(
@@ -71,6 +92,8 @@ class Settings(BaseSettings):
     lease_ttl_seconds: int = 900
     lease_heartbeat_seconds: int = 300
     anthropic_api_key: SecretStr | None = None
+    copilot_github_token: SecretStr | None = None
+    copilot_model: str | None = None
     worker_timeout_seconds: int = 1800
 
     @field_validator("log_level")

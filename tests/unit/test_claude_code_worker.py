@@ -42,6 +42,7 @@ def _context(
     run_id: str = _RUN_ID,
     attempt: int = 1,
     tools: list[str] | None = None,
+    outputs: list[str] | None = None,
 ) -> RoleContext:
     return RoleContext(
         run_id=run_id,
@@ -57,7 +58,7 @@ def _context(
         constraints={},
         tools=tools or [],
         permissions={},
-        outputs=[],
+        outputs=outputs or [],
         artifacts_dir=f"artifacts/{role}",
     )
 
@@ -1075,3 +1076,54 @@ def test_artifacts_read_grant_produces_path_scoped_read_in_execute_argv(
     argv = json.loads(argv_log.read_text("utf-8"))
     value = argv[argv.index("--allowedTools") + 1]
     assert value == f"Read(.dark-factory/runs/{_RUN_ID}/artifacts/**)"
+
+
+# --------------------------------------------------------------------------- #
+# 08-01 Task 3: a real adapter reports the artifacts its CLI actually wrote,
+# through the shared cli_runtime.collect_declared_artifacts helper.
+# --------------------------------------------------------------------------- #
+
+
+def test_end_to_end_completed_result_reports_declared_artifact(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    artifacts_dir = _run_root_for(tmp_path) / "artifacts" / "DEVELOPMENT"
+    script_path = fake_dir / "claude"
+    script_path.write_text(
+        f"""#!/usr/bin/env python3
+import json
+import os
+import sys
+
+os.makedirs({str(artifacts_dir)!r}, exist_ok=True)
+with open(os.path.join({str(artifacts_dir)!r}, "implementation_summary.json"), "w") as fh:
+    fh.write("{{}}")
+sys.stdout.write(json.dumps({{
+    "subtype": "success",
+    "duration_ms": 1,
+    "duration_api_ms": 1,
+    "is_error": False,
+    "num_turns": 1,
+    "session_id": "sess-artifacts",
+    "total_cost_usd": 0.0,
+    "usage": {{}},
+    "result": "done",
+    "structured_output": None,
+    "permission_denials": [],
+}}))
+sys.exit(0)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+    context = _context(role="DEVELOPMENT", outputs=["implementation_summary.json"])
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().execute(context)
+
+    assert result.status.value == "COMPLETED"
+    assert {ref.type for ref in result.artifacts} == {"implementation_summary.json"}
