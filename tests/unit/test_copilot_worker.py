@@ -37,6 +37,7 @@ def _context(
     run_id: str = _RUN_ID,
     attempt: int = 1,
     tools: list[str] | None = None,
+    outputs: list[str] | None = None,
 ) -> RoleContext:
     return RoleContext(
         run_id=run_id,
@@ -52,7 +53,7 @@ def _context(
         constraints={},
         tools=tools or [],
         permissions={},
-        outputs=[],
+        outputs=outputs or [],
         artifacts_dir=f"artifacts/{role}",
     )
 
@@ -583,3 +584,163 @@ def test_captured_output_is_redacted(
     # does contain the literal, proving the redaction pass -- not the fake
     # itself -- is what removes it.
     assert _FAKE_COPILOT_SECRET in f"leaked credential: {_FAKE_COPILOT_SECRET}"
+
+
+# --------------------------------------------------------------------------- #
+# Task 3: a real adapter reports the artifacts its CLI actually wrote.
+# --------------------------------------------------------------------------- #
+
+
+class _OutputsContext:
+    def __init__(self, outputs: list[str], artifacts_dir: str | None) -> None:
+        self.outputs = outputs
+        self.artifacts_dir = artifacts_dir
+
+
+def test_collect_declared_artifacts_returns_refs_for_existing_files(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.artifacts.paths import checksum
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    root = tmp_path / "run-root"
+    artifacts_dir = root / "artifacts" / "ARCHITECTURE"
+    artifacts_dir.mkdir(parents=True)
+    (artifacts_dir / "design.md").write_bytes(b"design content")
+    (artifacts_dir / "constraints.json").write_bytes(b'{"a": 1}')
+
+    context = _OutputsContext(
+        outputs=["design.md", "constraints.json"],
+        artifacts_dir="artifacts/ARCHITECTURE",
+    )
+    refs = collect_declared_artifacts(root, context)
+
+    paths = {ref.path for ref in refs}
+    assert paths == {
+        "artifacts/ARCHITECTURE/design.md",
+        "artifacts/ARCHITECTURE/constraints.json",
+    }
+    for ref in refs:
+        data = (root / ref.path).read_bytes()
+        assert ref.checksum == checksum(data)
+        assert ref.type == Path(ref.path).name
+
+
+def test_collect_declared_artifacts_skips_missing_files(tmp_path: Path) -> None:
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    root = tmp_path / "run-root"
+    artifacts_dir = root / "artifacts" / "ARCHITECTURE"
+    artifacts_dir.mkdir(parents=True)
+    (artifacts_dir / "design.md").write_bytes(b"design content")
+
+    context = _OutputsContext(
+        outputs=["design.md", "constraints.json", "verdict.json"],
+        artifacts_dir="artifacts/ARCHITECTURE",
+    )
+    refs = collect_declared_artifacts(root, context)
+
+    assert len(refs) == 1
+    assert refs[0].path == "artifacts/ARCHITECTURE/design.md"
+
+
+def test_collect_declared_artifacts_none_context_yields_empty_list(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    assert collect_declared_artifacts(tmp_path, None) == []
+
+
+def test_collect_declared_artifacts_empty_outputs_yields_empty_list(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    context = _OutputsContext(outputs=[], artifacts_dir="artifacts/ARCHITECTURE")
+    assert collect_declared_artifacts(tmp_path, context) == []
+
+
+def test_collect_declared_artifacts_no_artifacts_dir_yields_empty_list(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    context = _OutputsContext(outputs=["design.md"], artifacts_dir=None)
+    assert collect_declared_artifacts(tmp_path, context) == []
+
+
+def test_collect_declared_artifacts_escaping_filename_contributes_no_ref(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.workers.cli_runtime import collect_declared_artifacts
+
+    root = tmp_path / "run-root"
+    root.mkdir(parents=True)
+
+    context = _OutputsContext(
+        outputs=["../escape.json"], artifacts_dir="artifacts/ARCHITECTURE"
+    )
+    # Must not raise ArtifactPathError out of this function.
+    assert collect_declared_artifacts(root, context) == []
+
+
+def _write_fake_copilot_that_writes_artifacts(
+    fake_dir: Path, artifacts_dir: Path, *, stdout_payload: str = "ok"
+) -> None:
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    script_path = fake_dir / "copilot"
+    script_path.write_text(
+        f"""#!/usr/bin/env python3
+import os
+import sys
+
+os.makedirs({str(artifacts_dir)!r}, exist_ok=True)
+with open(os.path.join({str(artifacts_dir)!r}, "design.md"), "w") as fh:
+    fh.write("design content")
+with open(os.path.join({str(artifacts_dir)!r}, "constraints.json"), "w") as fh:
+    fh.write('{{"a": 1}}')
+sys.stdout.write({stdout_payload!r})
+sys.exit(0)
+""",
+        encoding="utf-8",
+    )
+    script_path.chmod(0o755)
+
+
+def test_end_to_end_completed_result_reports_declared_artifacts(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.copilot import CopilotWorker
+
+    fake_dir = tmp_path / "fakebin"
+    artifacts_dir = _run_root_for(tmp_path) / "artifacts" / "ARCHITECTURE"
+    _write_fake_copilot_that_writes_artifacts(fake_dir, artifacts_dir)
+
+    context = _context(outputs=["design.md", "constraints.json"])
+    with fake_copilot_env(monkeypatch, fake_dir):
+        result = CopilotWorker().execute(context)
+
+    assert result.status is WorkerResultStatus.COMPLETED
+    assert {ref.type for ref in result.artifacts} == {"design.md", "constraints.json"}
+
+
+def test_end_to_end_needs_input_result_reports_no_artifacts(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.copilot import CopilotWorker
+
+    fake_dir = tmp_path / "fakebin"
+    artifacts_dir = _run_root_for(tmp_path) / "artifacts" / "ARCHITECTURE"
+    _write_fake_copilot_that_writes_artifacts(
+        fake_dir, artifacts_dir, stdout_payload="NEEDS_INPUT: pick one"
+    )
+
+    context = _context(outputs=["design.md", "constraints.json"])
+    with fake_copilot_env(monkeypatch, fake_dir):
+        result = CopilotWorker().execute(context)
+
+    assert result.status is WorkerResultStatus.NEEDS_INPUT
+    assert result.artifacts == []
