@@ -345,8 +345,24 @@ Plans:
   3. Each adapter has its own integration suite that is skipped — not failed — when that runtime's credentials are absent, and the shared contract suite passes over all four workers.
   4. Each adapter's declared `WorkerCapabilities` matches its observed behaviour for native resume, session id, non-interactive mode and structured output.
 
-**Plans**: TBD
-**Decision**: Resolves open decision 3 — the exact non-interactive flag/env matrix for the Copilot and Hermes CLIs, established by hands-on spike in a clean container and documented in `WorkerCapabilities`.
+**Plans**: 4 plans
+
+Plans:
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — TRACER: shared CLI-adapter runtime + `CopilotWorker` end to end, registered, contract-suite-pinned, reporting declared artifacts (WORK-05)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 08-02-PLAN.md — `HermesWorker` end to end with `HERMES_HOME` isolation and a spawn-admission rule; contract suite over all four workers (WORK-06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 08-03-PLAN.md — Three skip-guarded live integration suites (`claude-code`, `copilot`, `hermes`) plus the declared-vs-observed capabilities proof (QUAL-03, SC4)
+- [ ] 08-04-PLAN.md — Shipped roles reassigned across three runtimes and proven equal to the all-`fake` run (WORK-09, SC2)
+
+**Decision**: Resolves open decision 3 — the exact non-interactive flag/env matrix for the Copilot and Hermes CLIs. Per 08-CONTEXT.md D-02 it is resolved from official documentation now (neither CLI is installed in this environment) and documented in `WorkerCapabilities`; the hands-on clean-container spike is carried, not dropped — plan 08-03's three `skipif`-guarded live suites execute it automatically the day either binary is installed, with no code change.
+**Note**: 08-RESEARCH.md's Scope Correction found QUAL-03 also unmet for `claude-code` (ROADMAP maps QUAL-03 to Phase 8 only, and Phase 7 proved that adapter solely against a faked executable), so this phase ships three live suites, not two.
 
 ### Phase 9: Independent Quality Gate & Bounded Feedback Loops
 
