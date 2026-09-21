@@ -345,12 +345,12 @@ Plans:
   3. Each adapter has its own integration suite that is skipped — not failed — when that runtime's credentials are absent, and the shared contract suite passes over all four workers.
   4. Each adapter's declared `WorkerCapabilities` matches its observed behaviour for native resume, session id, non-interactive mode and structured output.
 
-**Plans**: 4 plans
+**Plans**: 1/4 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — TRACER: shared CLI-adapter runtime + `CopilotWorker` end to end, registered, contract-suite-pinned, reporting declared artifacts (WORK-05)
+- [x] 08-01-PLAN.md — TRACER: shared CLI-adapter runtime + `CopilotWorker` end to end, registered, contract-suite-pinned, reporting declared artifacts (WORK-05)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -442,7 +442,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
-| 8. Copilot & Hermes — Worker Independence Proven | 0/TBD | Not started | - |
+| 8. Copilot & Hermes — Worker Independence Proven | 1/4 | In Progress|  |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
