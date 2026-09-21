@@ -239,11 +239,21 @@ class HermesWorker(CodingWorker):
         ``settings.anthropic_api_key``, and an isolated ``HERMES_HOME``
         added to the built environment.
         """
-        blocking_capability = spawn_is_permitted(
-            getattr(context, "tools", None) or []
-        )
-        if blocking_capability is not None:
-            raise UnenforceableGrantError(blocking_capability)
+        # A None context is the shared CodingWorker contract suite's shape
+        # (`worker.execute(None)` / `worker.resume(None, ...)`), never a
+        # configured role -- a real role attempt always carries a
+        # RoleContext, even one whose `tools` list happens to be empty. Only
+        # the latter is a genuine "denied every capability" grant that
+        # spawn_is_permitted must block; a call carrying no context at all
+        # is exempted so this adapter's admission rule degrades the same
+        # way CopilotWorker/ClaudeCodeWorker already do for the identical
+        # call shape (08-02 Task 2).
+        if context is not None:
+            blocking_capability = spawn_is_permitted(
+                getattr(context, "tools", None) or []
+            )
+            if blocking_capability is not None:
+                raise UnenforceableGrantError(blocking_capability)
 
         settings = get_settings()
         if settings.anthropic_api_key is None:
