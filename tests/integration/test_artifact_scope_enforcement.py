@@ -49,6 +49,14 @@ from tests.support.git_repo import make_git_repo, read_committed
 
 pytestmark = pytest.mark.integration
 
+# D-05 (phase-01 decision, `01-RESEARCH.md:18`; published source:
+# `src/dark_factory/cli.py`'s own module docstring) maps a run's terminal status
+# to a `dark-factory run` process exit code: `COMPLETED` and `WAITING_HUMAN` map
+# to exit 0, every other terminal status maps to a nonzero exit. Hardcoded here
+# rather than imported from the CLI's private `_CLEAN_FINALS`, mirroring the
+# idiom `tests/integration/test_exit_codes.py` already uses.
+_D05_SUCCESS_STATUSES = frozenset({"COMPLETED", "WAITING_HUMAN"})
+
 
 def _install_fakes(
     fake_dir: Path,
@@ -103,6 +111,7 @@ def _drive_shipped_config(
     monkeypatch: pytest.MonkeyPatch,
     *,
     label: str,
+    expected_exit: int,
     hermes_run_root_writes: dict[str, str] | None = None,
     copilot_run_root_writes: dict[str, str] | None = None,
 ) -> dict[str, object]:
@@ -114,6 +123,16 @@ def _drive_shipped_config(
     Copilot negative proofs, and the positive control, all call with
     different tampering arguments (08-05 Task 2). Callers are responsible
     for cleaning up the returned run directory via :func:`_cleanup_run_dir`.
+
+    ``expected_exit`` is the caller's own stated expectation for the
+    ``dark-factory run`` subprocess exit code -- keyword-only, with no
+    default, so a future caller cannot silently inherit another caller's
+    expectation (G-08-2). The two tamper callers below drive their run to
+    terminal ``FAILED``, which D-05 maps to exit 1; the untampered positive
+    control reaches ``COMPLETED``, which D-05 maps to exit 0. The harness
+    cross-checks this expectation against the persisted terminal status it
+    reads from the database, so it fails loudly if the CLI's D-05 exit
+    mapping and the observed run status ever disagree.
     """
     config_root = _copy_shipped_config_into(make_git_repo(tmp_path / f"{label}-repo"))
     fake_dir = tmp_path / f"{label}-fakebin"
@@ -125,7 +144,9 @@ def _drive_shipped_config(
     )
 
     proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url, config_root)
-    assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}"
+    assert proc.returncode == expected_exit, (
+        f"exit={proc.returncode} expected={expected_exit}\n{proc.stdout}\n{proc.stderr}"
+    )
     run_id = UUID(proc.stdout.splitlines()[0].strip())
 
     with Session(engine) as session:
@@ -154,6 +175,12 @@ def _drive_shipped_config(
             )
             artifact_types_by_role[execution.role] = types
         status_value = run.status.value
+        assert (status_value in _D05_SUCCESS_STATUSES) == (expected_exit == 0), (
+            f"the caller's expected exit code ({expected_exit}) and the persisted "
+            f"terminal status ({status_value!r}) contradict D-05: exit 0 is "
+            f"contracted only for {sorted(_D05_SUCCESS_STATUSES)}; every other "
+            "terminal status maps to a nonzero exit"
+        )
 
     return {
         "run_id": run_id,
@@ -188,6 +215,7 @@ def test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_
         tmp_path,
         monkeypatch,
         label="hermes-tamper",
+        expected_exit=1,
         hermes_run_root_writes={
             "artifacts/ARCHITECTURE/design.md": "QA overwrote this\n"
         },
@@ -199,8 +227,12 @@ def test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_
 
     try:
         assert result["status"] != "COMPLETED"
-        assert result["status_by_role"]["QA"] == "FAILED"
-        error_blob = json.dumps(result["error_by_role"]["QA"])
+        status_by_role = result["status_by_role"]
+        assert isinstance(status_by_role, dict)
+        assert status_by_role["QA"] == "FAILED"
+        error_by_role = result["error_by_role"]
+        assert isinstance(error_by_role, dict)
+        error_blob = json.dumps(error_by_role["QA"])
         assert "artifacts/ARCHITECTURE/design.md" in error_blob
 
         working_branch = working_branch_name(run_id)
@@ -242,6 +274,7 @@ def test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and
         tmp_path,
         monkeypatch,
         label="copilot-tamper",
+        expected_exit=1,
         copilot_run_root_writes={
             "artifacts/BA/acceptance_criteria.json": '{"criteria": []}'
         },
@@ -253,9 +286,11 @@ def test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and
 
     try:
         assert result["status"] != "COMPLETED"
-        assert result["status_by_role"]["ARCHITECTURE"] == "FAILED"
+        status_by_role = result["status_by_role"]
+        assert isinstance(status_by_role, dict)
+        assert status_by_role["ARCHITECTURE"] == "FAILED"
         for role in ("DEVELOPMENT", "QA"):
-            assert result["status_by_role"].get(role) != "COMPLETED", (
+            assert status_by_role.get(role) != "COMPLETED", (
                 f"{role} reached COMPLETED after ARCHITECTURE FAILED -- the "
                 "pipeline must stop at the failed role rather than "
                 "continuing past it"
@@ -292,7 +327,7 @@ def test_the_identical_shipped_config_with_no_tampering_completes_with_all_artif
     harness with no tampering entry at all must still reach ``COMPLETED``
     with every role completed and every role's artifacts collected."""
     result = _drive_shipped_config(
-        pg_url, engine, tmp_path, monkeypatch, label="no-tamper"
+        pg_url, engine, tmp_path, monkeypatch, label="no-tamper", expected_exit=0
     )
     run_id = result["run_id"]
     config_root = result["config_root"]
