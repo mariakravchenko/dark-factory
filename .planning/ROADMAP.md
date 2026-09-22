@@ -385,7 +385,13 @@ Plans:
   3. A QA FAIL returns a structured issues artifact (severity, acceptance criterion, description) to the Developer; a gate FAIL returns the actual command failure output, after which QA re-evaluates and the gate re-runs.
   4. Iteration counts are checked before dispatch against `retry.qa_developer_max_iterations` and `retry.quality_gate_max_iterations`, and on exhaustion the run transitions to FAILED with every attempt and reason persisted.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — The gate runs for real: after a PASS verdict the repo's own `quality_gate.commands` execute in the run worktree, `verification/quality_gate.json` is written, and a non-zero exit keeps the run out of COMPLETED
+- [ ] 09-02-PLAN.md — Rejections loop instead of killing the run: `Signal.ROLE_BOUNCED`, `previous_node`, the per-edge iteration caps checked before dispatch, and FAILED with the reason on exhaustion
+- [ ] 09-03-PLAN.md — The Developer's bounced attempt receives the feedback: declared `optional_inputs` deliver QA's structured issues and the gate's real command output through `ContextBuilder`
+
 **Invariants**: verdicts from exit codes and machine JSON, never prose; the real failure payload is persisted, not just a boolean.
 
 ### Phase 10: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
