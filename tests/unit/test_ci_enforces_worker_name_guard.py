@@ -55,16 +55,12 @@ def _offenders(document: dict[str, Any]) -> list[str]:
     steps = _quality_steps(document)
 
     if not any(_LEAK_GUARD_PATH in step.get("run", "") for step in steps):
-        offenders.append(
-            f"no step in the quality job runs {_LEAK_GUARD_PATH!r}"
-        )
+        offenders.append(f"no step in the quality job runs {_LEAK_GUARD_PATH!r}")
 
     for index, step in enumerate(steps):
         if step.get("continue-on-error"):
             name = step.get("name", f"step[{index}]")
-            offenders.append(
-                f"step {name!r} sets continue-on-error to a truthy value"
-            )
+            offenders.append(f"step {name!r} sets continue-on-error to a truthy value")
 
     for index, step in enumerate(steps):
         run = step.get("run", "")
@@ -84,8 +80,8 @@ def _offenders(document: dict[str, Any]) -> list[str]:
 def test_ci_workflow_gates_on_worker_name_guard() -> None:
     document = _load()
     offenders = _offenders(document)
-    assert not offenders, (
-        "CI no longer gates on the worker-name guard:\n" + "\n".join(offenders)
+    assert not offenders, "CI no longer gates on the worker-name guard:\n" + "\n".join(
+        offenders
     )
 
 
@@ -96,11 +92,7 @@ def test_the_guard_detects_its_own_subject() -> None:
     ``_offenders`` notices."""
     document = copy.deepcopy(_load())
     steps = _quality_steps(document)
-    remaining = [
-        step
-        for step in steps
-        if _LEAK_GUARD_PATH not in step.get("run", "")
-    ]
+    remaining = [step for step in steps if _LEAK_GUARD_PATH not in step.get("run", "")]
     assert len(remaining) < len(steps), "fixture did not actually drop a step"
     document["jobs"]["quality"]["steps"] = remaining
 

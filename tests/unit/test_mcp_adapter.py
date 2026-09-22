@@ -262,9 +262,7 @@ async def test_each_advertised_tool_dispatches_to_its_own_capability(
 
 
 @pytest.mark.anyio
-async def test_artifacts_write_through_the_transport_actually_writes_the_file() -> (
-    None
-):
+async def test_artifacts_write_through_the_transport_actually_writes_the_file() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         server = build_mcp_server("DEVELOPMENT", ["artifacts.write"], default_registry)

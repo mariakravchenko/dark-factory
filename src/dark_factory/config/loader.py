@@ -77,9 +77,7 @@ class RolePermissions(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    write_scope: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_WRITE_SCOPE)
-    )
+    write_scope: list[str] = Field(default_factory=lambda: list(DEFAULT_WRITE_SCOPE))
 
 
 class RoleDefinition(BaseModel):

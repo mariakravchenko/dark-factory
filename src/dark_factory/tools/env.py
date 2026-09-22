@@ -206,9 +206,7 @@ def shell_execute(
         )
     command_list = list(command)
     if not command_list or not all(isinstance(part, str) for part in command_list):
-        raise InvalidShellCommandError(
-            "command must be a non-empty sequence of str"
-        )
+        raise InvalidShellCommandError("command must be a non-empty sequence of str")
 
     env = build_worker_env(role, env_var_name=env_var_name, value=value)
     proc = subprocess.Popen(
@@ -228,9 +226,7 @@ def shell_execute(
         with contextlib.suppress(ProcessLookupError):
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         stdout, stderr = proc.communicate()
-        return ShellResult(
-            exit_code=None, stdout=stdout, stderr=stderr, timed_out=True
-        )
+        return ShellResult(exit_code=None, stdout=stdout, stderr=stderr, timed_out=True)
     return ShellResult(
         exit_code=proc.returncode, stdout=stdout, stderr=stderr, timed_out=False
     )

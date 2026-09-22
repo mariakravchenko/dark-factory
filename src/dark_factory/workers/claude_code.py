@@ -300,10 +300,7 @@ class ClaudeCodeWorker(CodingWorker):
             return WorkerResult(
                 status=WorkerResultStatus.FAILED,
                 summary="claude-code worker exited non-zero",
-                error=(
-                    f"claude exited {exit_code}: "
-                    f"{stderr_text[:MAX_ERROR_EXCERPT]}"
-                ),
+                error=(f"claude exited {exit_code}: {stderr_text[:MAX_ERROR_EXCERPT]}"),
                 metadata={"timed_out": False, "exit_code": exit_code},
             )
 
@@ -331,9 +328,7 @@ class ClaudeCodeWorker(CodingWorker):
                 worker_session_id=parsed.get("session_id"),
             )
 
-        metadata = {
-            key: parsed[key] for key in _RESULT_METADATA_KEYS if key in parsed
-        }
+        metadata = {key: parsed[key] for key in _RESULT_METADATA_KEYS if key in parsed}
         result_text = str(parsed.get("result", ""))
         session_id = parsed.get("session_id")
 

@@ -333,10 +333,7 @@ class HermesWorker(CodingWorker):
             return WorkerResult(
                 status=WorkerResultStatus.FAILED,
                 summary="hermes worker exited non-zero",
-                error=(
-                    f"hermes exited {exit_code}: "
-                    f"{stderr_text[:MAX_ERROR_EXCERPT]}"
-                ),
+                error=(f"hermes exited {exit_code}: {stderr_text[:MAX_ERROR_EXCERPT]}"),
                 metadata={"timed_out": False, "exit_code": exit_code},
             )
 

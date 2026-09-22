@@ -217,9 +217,7 @@ def test_a_role_invoking_an_ungranted_capability_is_denied_and_recorded(
         assert "CAPABILITY_DENIED" in event_types
         assert "ROLE_FAILED" in event_types
         assert "RUN_FAILED" in event_types
-        assert event_types.index("CAPABILITY_DENIED") < event_types.index(
-            "ROLE_FAILED"
-        )
+        assert event_types.index("CAPABILITY_DENIED") < event_types.index("ROLE_FAILED")
         assert event_types.index("ROLE_FAILED") < event_types.index("RUN_FAILED")
 
         (denial_row,) = [row for row in event_rows if row.type == "CAPABILITY_DENIED"]

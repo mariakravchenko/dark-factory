@@ -118,8 +118,7 @@ REQUIREMENTS: dict[str, tuple[str, tuple[str, ...]]] = {
         ),
     ),
     "TOOL-02": (
-        "New tools can be added to the registry without modifying every "
-        "role executor",
+        "New tools can be added to the registry without modifying every role executor",
         (
             "tests/unit/test_tool_registry_extensibility.py",
             "tests/unit/test_native_tool_contract.py",

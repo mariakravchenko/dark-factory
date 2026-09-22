@@ -124,9 +124,7 @@ def test_attempt_log_file_exists_and_contains_the_fake_output(
     with fake_claude_env(monkeypatch, fake_dir):
         ClaudeCodeWorker().execute(_context(role="DEVELOPMENT"))
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     assert log_path.is_file()
     assert "sess-abc" in log_path.read_text("utf-8")
 
@@ -222,9 +220,7 @@ time.sleep(30)
     assert elapsed < 55  # fires at ~1s, not the 1800s default
     assert "1" in (result.error or "")
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
 
     # Give the OS a beat to actually reap/kill the grandchild before probing.
@@ -241,9 +237,7 @@ def test_non_zero_exit_returns_failed_with_exit_code_and_stderr(
     from dark_factory.workers.claude_code import ClaudeCodeWorker
 
     fake_dir = tmp_path / "fakebin"
-    write_fake_claude(
-        fake_dir, stdout_payload="", exit_code=2, stderr_text="boom"
-    )
+    write_fake_claude(fake_dir, stdout_payload="", exit_code=2, stderr_text="boom")
 
     with fake_claude_env(monkeypatch, fake_dir):
         result = ClaudeCodeWorker().execute(_context())
@@ -346,14 +340,10 @@ def test_captured_output_is_redacted(
     fake_dir = tmp_path / "fakebin"
     write_fake_claude(fake_dir, stdout_payload=_payload_leaking(_FAKE_SECRET))
 
-    with fake_claude_env(
-        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
-    ):
+    with fake_claude_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET):
         ClaudeCodeWorker().execute(_context())
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     log_text = log_path.read_text("utf-8")
     assert "[redacted:anthropic_api_key]" in log_text
     assert _FAKE_SECRET not in log_text
@@ -371,14 +361,10 @@ def test_captured_stderr_is_redacted(
         stderr_text=f"debug: key is {_FAKE_SECRET}",
     )
 
-    with fake_claude_env(
-        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
-    ):
+    with fake_claude_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET):
         ClaudeCodeWorker().execute(_context())
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
     log_text = log_path.read_text("utf-8")
     assert "[redacted:anthropic_api_key]" in log_text
     assert _FAKE_SECRET not in log_text
@@ -397,14 +383,10 @@ def test_redaction_applies_on_non_zero_exit_path(
         stderr_text=f"boom: {_FAKE_SECRET}",
     )
 
-    with fake_claude_env(
-        monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET
-    ):
+    with fake_claude_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_SECRET):
         result = ClaudeCodeWorker().execute(_context())
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stderr.log"
     log_text = log_path.read_text("utf-8")
     assert "[redacted:anthropic_api_key]" in log_text
     assert _FAKE_SECRET not in log_text
@@ -445,9 +427,7 @@ time.sleep(30)
         ClaudeCodeWorker().execute(_context())
         get_settings.cache_clear()
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     log_text = log_path.read_text("utf-8")
     assert "[redacted:anthropic_api_key]" in log_text
     assert _FAKE_SECRET not in log_text
@@ -460,16 +440,12 @@ def test_pattern_only_secret_not_in_settings_is_still_redacted(
 
     github_token = "ghp_" + ("x" * 40)
     fake_dir = tmp_path / "fakebin"
-    write_fake_claude(
-        fake_dir, stdout_payload=_payload_leaking(github_token)
-    )
+    write_fake_claude(fake_dir, stdout_payload=_payload_leaking(github_token))
 
     with fake_claude_env(monkeypatch, fake_dir):
         ClaudeCodeWorker().execute(_context())
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     log_text = log_path.read_text("utf-8")
     assert github_token not in log_text
 
@@ -625,9 +601,7 @@ def test_prompt_argument_contains_the_needs_input_marker_token(
 
     fake_dir = tmp_path / "fakebin"
     argv_log = tmp_path / "argv.json"
-    write_fake_claude(
-        fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log
-    )
+    write_fake_claude(fake_dir, stdout_payload=_SUCCESS_PAYLOAD, argv_log=argv_log)
 
     with fake_claude_env(monkeypatch, fake_dir):
         ClaudeCodeWorker().execute(_context())
@@ -762,9 +736,7 @@ time.sleep(30)
 
     assert result.status is WorkerResultStatus.FAILED
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     assert "pre-sleep line" in log_path.read_text("utf-8", errors="replace")
 
 
@@ -781,9 +753,7 @@ def test_resume_redacts_captured_transcript(
             _context(), _paused_with_session_id("sess-abc"), "answer"
         )
 
-    log_path = (
-        _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
-    )
+    log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     log_text = log_path.read_text("utf-8")
     assert "[redacted:anthropic_api_key]" in log_text
     assert _FAKE_SECRET not in log_text

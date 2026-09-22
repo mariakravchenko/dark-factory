@@ -289,9 +289,7 @@ def test_shipped_config_with_no_fake_binaries_fails_visibly_not_silently(
     monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    proc = _run_cli_against_real_repo(
-        "text:add a health endpoint", pg_url, config_root
-    )
+    proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url, config_root)
     run_id = UUID(proc.stdout.splitlines()[0].strip())
 
     run_dir: Path | None = None

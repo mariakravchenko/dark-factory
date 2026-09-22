@@ -172,16 +172,12 @@ def test_a_role_granted_the_synthetic_capability_completes_end_to_end(
     finally:
         with engine.begin() as conn:
             conn.execute(
-                sa.delete(ArtifactReference).where(
-                    ArtifactReference.run_id == run_id
-                )
+                sa.delete(ArtifactReference).where(ArtifactReference.run_id == run_id)
             )
             conn.execute(sa.delete(RunEvent).where(RunEvent.run_id == run_id))
             conn.execute(
                 sa.delete(HumanInteraction).where(HumanInteraction.run_id == run_id)
             )
-            conn.execute(
-                sa.delete(RoleExecution).where(RoleExecution.run_id == run_id)
-            )
+            conn.execute(sa.delete(RoleExecution).where(RoleExecution.run_id == run_id))
             conn.execute(sa.delete(Run).where(Run.id == run_id))
         remove_worktree(root, run_id, force=True)

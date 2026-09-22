@@ -192,8 +192,16 @@ class _WorkerCase(NamedTuple):
 # structured_output, non_interactive) do not apply to FakeWorker, which has
 # no argv at all.
 _SUBPROCESS_CASES: list[_WorkerCase] = [
-    _WorkerCase("claude-code", ClaudeCodeWorker, _claude_installed, "DEVELOPMENT", _CLAUDE_STRUCTURED_PAYLOAD),
-    _WorkerCase("copilot", CopilotWorker, _copilot_installed, "ARCHITECTURE", _PLAINTEXT_PAYLOAD),
+    _WorkerCase(
+        "claude-code",
+        ClaudeCodeWorker,
+        _claude_installed,
+        "DEVELOPMENT",
+        _CLAUDE_STRUCTURED_PAYLOAD,
+    ),
+    _WorkerCase(
+        "copilot", CopilotWorker, _copilot_installed, "ARCHITECTURE", _PLAINTEXT_PAYLOAD
+    ),
     _WorkerCase("hermes", HermesWorker, _hermes_installed, "QA", _PLAINTEXT_PAYLOAD),
 ]
 
@@ -236,7 +244,9 @@ def test_resume_argv_matches_the_native_resume_declaration(
     with case.install(monkeypatch, tmp_path, case.payload, argv_log=argv_log):
         worker = case.factory()
         caps = worker.capabilities()
-        worker.resume(_context(role=case.role, tools=_FULL_GRANT), previous, "an answer")
+        worker.resume(
+            _context(role=case.role, tools=_FULL_GRANT), previous, "an answer"
+        )
 
     argv = json.loads(argv_log.read_text("utf-8"))
 

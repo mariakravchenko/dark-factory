@@ -106,9 +106,7 @@ def test_empty_granted_list_denies_every_registered_capability() -> None:
             default_registry.invoke("BA", capability, [])
 
 
-def test_granted_but_unregistered_capability_raises_unknown_capability_error() -> (
-    None
-):
+def test_granted_but_unregistered_capability_raises_unknown_capability_error() -> None:
     """A granted-but-unregistered name raises ``UnknownCapabilityError``, not
     ``CapabilityDeniedError`` and not a bare ``KeyError`` -- a configuration
     bug, never an authorization decision (TOOL-02, edge: unclassified

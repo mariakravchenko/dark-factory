@@ -200,9 +200,7 @@ def test_the_detector_would_catch_mcp_transport_importing_mcp() -> None:
     )
 
 
-def test_the_detector_does_not_confuse_the_in_package_module_name_with_mcp() -> (
-    None
-):
+def test_the_detector_does_not_confuse_the_in_package_module_name_with_mcp() -> None:
     """Sanity: a module that merely *imports* ``dark_factory.tools.mcp_transport``
     -- an in-package name containing the substring ``mcp`` -- is not itself a
     hit. Only a genuinely third-party ``mcp`` / ``mcp_types`` import is."""

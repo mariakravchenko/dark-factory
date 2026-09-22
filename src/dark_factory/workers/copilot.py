@@ -258,8 +258,7 @@ class CopilotWorker(CodingWorker):
                 status=WorkerResultStatus.FAILED,
                 summary="copilot worker exited non-zero",
                 error=(
-                    f"copilot exited {exit_code}: "
-                    f"{stderr_text[:MAX_ERROR_EXCERPT]}"
+                    f"copilot exited {exit_code}: {stderr_text[:MAX_ERROR_EXCERPT]}"
                 ),
                 metadata={"timed_out": False, "exit_code": exit_code},
             )

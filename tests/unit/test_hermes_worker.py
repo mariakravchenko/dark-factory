@@ -190,9 +190,10 @@ def test_hermes_home_is_under_the_same_root_as_xdg_config_home(
 
     observed_env = json.loads(env_log.read_text("utf-8"))
     assert isinstance(observed_env["HERMES_HOME"], str)
-    assert Path(observed_env["XDG_CONFIG_HOME"]).parent == Path(
-        observed_env["HERMES_HOME"]
-    ).parent
+    assert (
+        Path(observed_env["XDG_CONFIG_HOME"]).parent
+        == Path(observed_env["HERMES_HOME"]).parent
+    )
 
 
 def test_two_roles_observe_two_different_hermes_home_values(
@@ -607,9 +608,7 @@ def test_captured_output_is_redacted(
         fake_dir, stdout_payload=f"leaked credential: {_FAKE_HERMES_SECRET}"
     )
 
-    with fake_hermes_env(
-        monkeypatch, fake_dir, anthropic_api_key=_FAKE_HERMES_SECRET
-    ):
+    with fake_hermes_env(monkeypatch, fake_dir, anthropic_api_key=_FAKE_HERMES_SECRET):
         HermesWorker().execute(_context())
 
     log_path = _run_root_for(tmp_path) / "logs" / "QA" / "attempt-1.stdout.log"

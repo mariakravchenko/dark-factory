@@ -428,7 +428,9 @@ def test_non_zero_exit_returns_failed_with_exit_code_and_stderr(
     from dark_factory.workers.copilot import CopilotWorker
 
     fake_dir = tmp_path / "fakebin"
-    write_fake_copilot(fake_dir, stdout_payload="", exit_code=3, stderr_text="copilot blew up")
+    write_fake_copilot(
+        fake_dir, stdout_payload="", exit_code=3, stderr_text="copilot blew up"
+    )
 
     with fake_copilot_env(monkeypatch, fake_dir):
         result = CopilotWorker().execute(_context())
