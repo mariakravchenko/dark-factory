@@ -9,15 +9,29 @@ copy of this repository's own shipped config set, mirroring
 ``DARK_FACTORY_FAKE_SCRIPT``, so ``FakeWorker``'s true zero-config default
 synthesizes real, schema-valid artifact content for every declared output
 with nothing here to keep in sync with the shipped role definitions.
+
+Plan 08-04 reassigned the shipped config's ``ARCHITECTURE``/``DEVELOPMENT``/
+``QA`` roles away from ``fake`` onto real Copilot/Claude-Code/Hermes
+adapters (WORK-09/SC2) -- this test predates that reassignment and, without
+fake CLI executables on ``PATH``, those three roles now fail for real
+(no such binaries installed) instead of running FakeWorker's in-process
+zero-config synthesis. Installing the same three fake CLI executables
+``test_real_pipeline_zero_config.py`` uses restores BA-only zero-config
+synthesis as the *only* thing this test's own proof depends on, while the
+other three roles run their real (faked) adapters exactly as the shipped
+config now declares -- this test's actual claim (fresh-clone artifact
+durability) never depended on which worker produced the artifacts.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from uuid import UUID
 
@@ -28,6 +42,9 @@ from sqlalchemy.orm import Session
 from dark_factory.git.client import run_git
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, Run
+from tests.support.fake_claude_cli import write_fake_claude
+from tests.support.fake_copilot_cli import write_fake_copilot
+from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import clone_repo, make_git_repo
 
 pytestmark = pytest.mark.integration
@@ -76,13 +93,58 @@ def _run_cli_against_real_repo(
         text=True,
         env=env,
         cwd=cwd,
-        timeout=90,
+        # 08-04: the shipped config's ARCHITECTURE/DEVELOPMENT/QA roles now
+        # spawn real (faked) Copilot/Claude-Code/Hermes CLI subprocesses on
+        # top of BA's in-process FakeWorker step -- a generous upper bound
+        # on a cold start across four role attempts, not a timing assertion.
+        timeout=240,
         check=False,
     )
 
 
+@pytest.fixture
+def _external_runtime_fakes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """Install all three fake CLI executables -- ``claude``, ``copilot``,
+    ``hermes`` -- on ``PATH`` with fake credentials (mirrors
+    ``test_real_pipeline_zero_config.py``'s ``_external_runtime_fakes``, 08-04
+    Task 2), so the shipped config's post-reassignment roles run their real
+    (faked) adapters instead of failing outright for a missing binary. This
+    test's own proof (fresh-clone artifact durability) never depended on
+    which worker produced the artifacts -- only BA's zero-config synthesis
+    matters here, and it stays in-process regardless."""
+    fake_dir = tmp_path / "external-runtime-fakebin"
+    write_fake_claude(
+        fake_dir,
+        stdout_payload=json.dumps(
+            {
+                "subtype": "success",
+                "is_error": False,
+                "session_id": "sess-cross-clone-development",
+                "result": "implementation complete",
+            }
+        ),
+        declared_outputs=True,
+    )
+    write_fake_copilot(
+        fake_dir, stdout_payload="architecture design complete", declared_outputs=True
+    )
+    write_fake_hermes(
+        fake_dir, stdout_payload="QA verification complete", declared_outputs=True
+    )
+
+    existing_path = os.environ.get("PATH", "")
+    monkeypatch.setenv("PATH", f"{fake_dir}{os.pathsep}{existing_path}")
+    monkeypatch.setenv(
+        "COPILOT_GITHUB_TOKEN", "github_pat_fake0000000000000000000000000000"
+    )
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake0000000000000000000000000000")
+    yield fake_dir
+
+
 def test_fresh_clone_of_the_working_branch_carries_every_artifact_byte(
-    pg_url: str, engine: Engine, tmp_path: Path
+    pg_url: str, engine: Engine, tmp_path: Path, _external_runtime_fakes: Path
 ) -> None:
     config_root = _copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
     proc = _run_cli_against_real_repo(
