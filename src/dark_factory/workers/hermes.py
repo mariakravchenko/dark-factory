@@ -31,7 +31,13 @@ explicitly:
    forces: a role denied a capability with no compensating post-hoc
    control is never spawned at all (checkpoint decision, Option A -- see
    ``.planning/phases/08-copilot-hermes-worker-independence-proven/
-   08-02-SUMMARY.md`` for the full decision record).
+   08-02-SUMMARY.md`` for the full decision record). That covers the
+   *denied* case only. For the *granted* case (plan 08-05, CR-01/WR-03):
+   a granted ``artifacts.write`` is confined to the role's own
+   ``artifacts/<role>/`` subtree only after the fact, by
+   :func:`dark_factory.git.scope.enforce_artifact_scope`, never natively on
+   this runtime; a granted ``artifacts.read`` carries reach identical to
+   ``repo.read``, with no mechanism of any kind narrowing it.
 
 ``execute()``/``resume()`` each wrap their entire body in a catch-all
 ``try/except Exception``, mirroring ``dark_factory.workers.copilot``'s own
@@ -172,6 +178,16 @@ def spawn_is_permitted(granted: Collection[str]) -> str | None:
     (checkpoint decision, Option A): their denial is independently
     compensated by ``enforce_write_scope`` (ROLE-05), so this function
     treats them as never blocking.
+
+    This function decides admission only -- it says nothing about what a
+    *granted* capability may reach, and a caller must not read "permitted to
+    spawn" as "confined once running" (plan 08-05, CR-01/WR-03). A granted
+    ``artifacts.write`` is confined to the role's own ``artifacts/<role>/``
+    subtree only after the fact, by
+    :func:`dark_factory.git.scope.enforce_artifact_scope`, never natively on
+    this runtime. A granted ``artifacts.read`` carries reach identical to
+    ``repo.read``, with no mechanism of any kind -- native or post-hoc --
+    narrowing it.
     """
     granted_set = set(granted)
     for capability in sorted(NATIVE_TOOL_CONTRACT):

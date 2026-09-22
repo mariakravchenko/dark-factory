@@ -63,6 +63,37 @@ def test_hermes_entries_are_honest_about_having_no_native_mechanism() -> None:
         assert "no documented per-tool native restriction flag" in grant.hermes
 
 
+# The exact claim WR-02 named as factually false: Copilot's artifacts.*
+# entries used to assert parity with Claude Code's path-scoped specifiers,
+# which copilot.py's own `_TOOL_NAMES` table never implemented. Pinned as a
+# module-level constant, the same shape
+# `test_hermes_entries_are_honest_about_having_no_native_mechanism` already
+# uses, so this retired claim cannot silently regress back into the
+# contract text.
+_RETIRED_COPILOT_SCOPE_EQUIVALENCE_CLAIM = "same scope as Claude Code"
+
+
+def test_no_copilot_entry_claims_scope_equivalence_with_claude_code() -> None:
+    """WR-02 (08-REVIEW.md, closed by plan 08-05): the Copilot ``artifacts.*``
+    prose no longer claims a path-scoped restriction the CLI cannot express."""
+    for grant in NATIVE_TOOL_CONTRACT.values():
+        assert _RETIRED_COPILOT_SCOPE_EQUIVALENCE_CLAIM not in grant.copilot
+
+
+def test_copilot_artifacts_capabilities_translate_to_the_same_tool_names_as_repo() -> (
+    None
+):
+    """Ties the contract's breadth statement to the shipped translation
+    table so it is checkable rather than decorative: the moment
+    ``copilot._TOOL_NAMES`` gains a genuinely narrower specifier for either
+    artifacts capability, this assertion fails and the contract prose above
+    must be updated with it (plan 08-05, WR-02)."""
+    from dark_factory.workers.copilot import _TOOL_NAMES
+
+    assert _TOOL_NAMES["artifacts.read"] == _TOOL_NAMES["repo.read"]
+    assert _TOOL_NAMES["artifacts.write"] == _TOOL_NAMES["repo.write"]
+
+
 def test_native_tool_grant_is_frozen_and_extra_forbid() -> None:
     grant = next(iter(NATIVE_TOOL_CONTRACT.values()))
     assert grant.model_config.get("frozen") is True

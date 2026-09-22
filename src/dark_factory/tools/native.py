@@ -57,6 +57,25 @@ still stands. See ``.planning/phases/08-copilot-hermes-worker-independence-
 proven/08-02-SUMMARY.md`` for the full decision record and
 ``dark_factory.workers.hermes.spawn_is_permitted`` for the enforcement
 point this narrowing authorizes.
+
+**Plan 08-05 granted-case finding (CR-01).** The 08-02 narrowing above
+reasoned entirely about *denial* -- what happens when a role does not hold
+a capability. For ``repo.write``/``repo.write_tests`` that reasoning is
+correct, because git-tracked ``src/**``/``tests/**`` changes are visible to
+:func:`~dark_factory.git.scope.attempt_changed_paths`. For
+``artifacts.write`` it was silent, and until plan 08-05 no control existed
+once the capability was *granted*: a role holding ``artifacts.write`` on
+Copilot or Hermes could read or overwrite any other role's artifact output
+in the same run, undetected. What changed:
+:func:`~dark_factory.git.scope.enforce_artifact_scope` now holds that
+boundary for every worker at once, confining a granted ``artifacts.write``
+to the role's own ``artifacts/<role>/`` subtree regardless of which adapter
+performed the write. What did not change: a granted ``artifacts.read``
+still has no narrowing mechanism on either runtime, because no post-hoc
+control can undo a read -- and reading a prior role's artifacts inside the
+run is the intended posture anyway (the Claude Code grant is run-scoped by
+design; see ``claude_code.allowed_tools_for``'s own docstring). See
+``08-REVIEW.md`` CR-01/WR-02/WR-03 for the finding this paragraph closes.
 """
 
 from __future__ import annotations
@@ -205,7 +224,13 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
             "artifact content with its own native read tool, not through "
             f"Dark Factory. {WORKTREE_CONFINEMENT_NOTE}"
         ),
-        copilot="a narrow --allow-tool 'read' entry, same scope as Claude Code",
+        copilot=(
+            "an unscoped --allow-tool 'read' entry, identical breadth to "
+            "this contract's repo.read entry -- the CLI exposes no "
+            "path-scoped read specifier, so a role granted this capability "
+            "on Copilot has read reach equal to repo.read whether or not "
+            "it also holds repo.read (plan 08-05, WR-02)"
+        ),
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
             "cannot enforce a read restriction natively and must not claim "
@@ -229,7 +254,16 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
             "...) path exists for a future transport a worker calls back "
             f"into Dark Factory over. {WORKTREE_CONFINEMENT_NOTE}"
         ),
-        copilot="a narrow --allow-tool 'write' entry, same scope as Claude Code",
+        copilot=(
+            "an unscoped --allow-tool 'write' entry, identical breadth to "
+            "this contract's repo.write entry -- the CLI exposes no "
+            "path-scoped write specifier. The role-subtree boundary the "
+            "Claude Code entry achieves natively is held here after the "
+            "fact instead, by dark_factory.git.scope.enforce_artifact_scope "
+            "(plan 08-05), which reverts and fails any change under the "
+            "run's artifacts tree outside the role's own "
+            "artifacts/<role>/ subtree (WR-02)"
+        ),
         hermes=(
             "no documented per-tool native restriction flag -- the adapter "
             "cannot enforce a write restriction natively and must not "
