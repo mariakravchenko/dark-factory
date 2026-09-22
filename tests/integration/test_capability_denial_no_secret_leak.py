@@ -221,7 +221,15 @@ def denied_run(
     advance_session_factory: Callable[[], Session],
     capability_denial_secrets: Settings,
 ) -> DeniedRun:
-    root = _one_role_ba_tree(config_root_factory, tools="[repo.read, repo.search]")
+    # artifacts.write IS granted (unlike pre-Phase-8) so plan 08-05's
+    # enforce_artifact_scope -- which denies the whole artifacts tree
+    # outright when a role holds no artifacts.write grant at all -- does not
+    # itself fail the role first and mask the ToolRegistry.invoke() denial
+    # this fixture exists to drive. artifacts.read stays withheld: that is
+    # the one capability this fixture denies.
+    root = _one_role_ba_tree(
+        config_root_factory, tools="[repo.read, repo.search, artifacts.write]"
+    )
     snapshot = load_effective_config(root)
 
     with real_log_sink() as buffer:

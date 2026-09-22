@@ -173,8 +173,18 @@ def test_a_role_invoking_an_ungranted_capability_is_denied_and_recorded(
     ``ToolRegistry.invoke()`` before the reported file is ever opened, the
     run fails in the existing Phase 4/5 shape, and ``run_events`` carries
     ``CAPABILITY_DENIED`` ahead of ``ROLE_FAILED`` and ``RUN_FAILED``, in
-    that relative order, with zero ``artifacts`` rows for the attempt."""
-    root = _one_role_ba_tree(config_root_factory, tools="[repo.read, repo.search]")
+    that relative order, with zero ``artifacts`` rows for the attempt.
+
+    ``artifacts.write`` IS granted (unlike pre-Phase-8) so plan 08-05's
+    ``enforce_artifact_scope`` -- which denies the whole artifacts tree
+    outright when a role holds no ``artifacts.write`` grant at all -- does
+    not itself fail the role first and mask the ``ToolRegistry`` denial this
+    test exists to prove. ``artifacts.read`` stays withheld: that is the one
+    capability this test denies.
+    """
+    root = _one_role_ba_tree(
+        config_root_factory, tools="[repo.read, repo.search, artifacts.write]"
+    )
     snapshot = load_effective_config(root)
 
     run_id = start_run(
