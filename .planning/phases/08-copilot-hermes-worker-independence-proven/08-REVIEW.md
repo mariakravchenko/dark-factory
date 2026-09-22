@@ -1,6 +1,6 @@
 ---
 phase: 08-copilot-hermes-worker-independence-proven
-reviewed: 2026-09-21T00:00:00Z
+reviewed: 2026-09-22T00:00:00Z
 depth: standard
 files_reviewed: 30
 files_reviewed_list:
@@ -36,10 +36,10 @@ files_reviewed_list:
   - tests/unit/test_worker_capabilities_match_behaviour.py
   - tests/unit/test_worker_registry_names.py
 findings:
-  critical: 1
-  warning: 3
-  info: 1
-  total: 5
+  critical: 0
+  warning: 2
+  info: 2
+  total: 4
 status: issues_found
 ---
 
@@ -249,3 +249,144 @@ under `artifacts/DEVELOPMENT/`.
 _Reviewed: 2026-09-21_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+---
+
+## Incremental Re-Review — 2026-09-22 (wave-scoped, CR-01 fix)
+
+**Base of comparison:** commit `fecd6e20d788d568a57eb55822f62f2f7173292f` (the review above)
+**Scope:** `src/dark_factory/git/__init__.py`, `src/dark_factory/git/scope.py`,
+`src/dark_factory/orchestrator/runner.py`, `src/dark_factory/tools/native.py`,
+`src/dark_factory/workers/copilot.py`, `src/dark_factory/workers/hermes.py`,
+`tests/integration/test_artifact_scope_enforcement.py`,
+`tests/support/fake_claude_cli.py`, `tests/support/fake_cli.py`,
+`tests/support/fake_copilot_cli.py`, `tests/support/fake_hermes_cli.py`,
+`tests/unit/test_artifact_scope.py`, `tests/unit/test_native_tool_contract.py`
+
+**CR-01 verdict: CLOSED.** `enforce_artifact_scope()` (new,
+`src/dark_factory/git/scope.py:374-439`) is wired into
+`orchestrator/runner.py::_run_current_role` (lines 908-920)
+unconditionally for every role/worker -- there is no `if worker == ...`
+branch anywhere in the call path -- and it runs strictly before
+`collect_role_artifacts`, `commit_run_artifacts`, and
+`push_working_branch` (confirmed by reading the ordering in
+`runner.py:896-981`, not just trusting the docstring). It correctly
+reverts both tracked modifications/deletions (`git restore
+--source=HEAD`) and newly-created foreign paths (`git clean --force -x`
+via the new `revert_paths(..., include_ignored=True)` parameter), because
+the run's whole `artifacts/` subtree is force-added and committed by
+`commit_run_artifacts` (`git/diff.py:91-153`), which is what makes the
+"tracked" branch of `attempt_changed_artifact_paths`'s `git diff
+--name-only HEAD` see a later role's overwrite of an earlier role's
+already-committed artifact file. Deny-by-default polarity is verified
+both by direct code inspection (`allowed = []` when
+`ARTIFACTS_WRITE_CAPABILITY not in granted`, then handed to the same
+zero-tolerance `is_out_of_scope` D-14 relies on) and by an explicit unit
+test (`test_no_artifacts_write_grant_is_zero_tolerance_for_the_roles_own_subtree`)
+that proves a role's *own* subtree is not exempted when the capability
+is absent. `role` is passed through `glob.escape()` before being
+interpolated into the `fnmatch` pattern (`scope.py:424`), closing the
+metacharacter-widening risk, and is exercised end-to-end by two real
+subprocess integration tests (`test_artifact_scope_enforcement.py`) that
+drive the shipped `.dark-factory/` config through fake `hermes` and
+`copilot` binaries that tamper with a *different* role's committed
+artifact file, plus a positive control proving the check does not
+false-positive on the legitimate happy path. WR-02 and WR-03 are also
+**CLOSED**: `NATIVE_TOOL_CONTRACT`'s Copilot `artifacts.*` prose no
+longer claims Claude-Code-equivalent path scoping (verified both by
+reading the corrected text and by the new regression test
+`test_no_copilot_entry_claims_scope_equivalence_with_claude_code`, which
+pins the retired claim string so it cannot silently return), and
+`hermes.spawn_is_permitted`'s docstring, plus the module docstrings in
+both `native.py` and `hermes.py`, now state plainly that a *granted*
+`artifacts.write` is confined only after the fact by
+`enforce_artifact_scope` and that a granted `artifacts.read` has no
+narrowing mechanism at all -- accurately describing the shipped
+behaviour, not over- or under-claiming it. No regression was found in
+`enforce_write_scope`/`attempt_changed_paths`/A-05-15: both functions are
+byte-for-byte unchanged, `revert_paths`'s new `include_ignored` parameter
+defaults to `False` and every existing call site (`enforce_write_scope`)
+is unmodified, so write-scope enforcement's existing behaviour is
+untouched. The `granted` read in `runner.py` was correctly hoisted to a
+single call site shared by both the new artifact-scope check and the
+existing capability-gated artifact collection, eliminating the
+possibility of the two computing different grant lists.
+
+One genuine, narrower gap remains and is worth recording as a new
+finding below (WR-04): the fix is deliberately scoped to the
+`artifacts/` subtree only, and by its own design explicitly does not
+cover the sibling `verification/`, `logs/`, and `input/` directories
+inside the same gitignored per-run tree -- those remain reachable by any
+worker with native filesystem/shell access and are invisible to both
+`enforce_write_scope` (which excludes the whole `.dark-factory/runs`
+pathspec) and the new `enforce_artifact_scope` (which is deliberately
+scoped to `artifacts/` alone, per its own docstring). This is not a
+regression and not part of what CR-01 promised to fix, but it is an
+adjacent, currently-undetected tamper surface a reader evaluating "is
+the per-run tree now safe" should know about.
+
+### WR-04: The per-run tree's `verification/`, `logs/`, and `input/` directories remain fully unenforced against tampering by any worker
+
+**File:** `src/dark_factory/git/scope.py:157-210` (`attempt_changed_artifact_paths`'s own docstring, lines 197-200), `src/dark_factory/git/diff.py:61` (`ARTIFACT_EXCLUDE_PATHSPEC`)
+
+**Issue:** `enforce_write_scope`'s diff excludes the entire
+`.dark-factory/runs` pathspec (`ARTIFACT_EXCLUDE_PATHSPEC =
+":(exclude).dark-factory/runs"`), and the new `enforce_artifact_scope`
+is deliberately scoped only to the `artifacts/` subtree within that
+tree -- its own docstring states explicitly: "This function never
+reports a path under the same run's `verification/`, `logs/` or
+`input/` directories". Any role holding `shell.execute` (or running on
+an adapter, like Hermes or Copilot, whose native tools are not
+worktree-subtree-scoped beyond `cwd`) can therefore overwrite
+`verification/diff.patch` (the artifact Phase 9's quality gate and any
+human reviewer will read as "the PR diff") or another role's captured
+`logs/<role>/attempt-N.std{out,err}.log`, with zero detection by any
+mechanism in this codebase -- the whole `.dark-factory/runs` tree is
+gitignored, so none of it is visible to a `HEAD`-relative git diff
+unless a function explicitly re-includes it the way
+`attempt_changed_artifact_paths` does for `artifacts/` alone. This is
+narrower than CR-01 (the highest-value target, `artifacts/`, is now
+closed) but is the same class of gap CR-01 identified, left open by
+design in this changeset.
+
+**Fix:** Either extend `enforce_artifact_scope` (or add a further
+sibling) to also enumerate and revert out-of-role changes under
+`verification/`/`logs/`/`input/`, or, if those directories are judged
+low-value enough to leave unenforced (e.g. `verification/diff.patch` is
+regenerated by a trusted orchestrator action rather than the worker
+itself under normal operation), state that judgment explicitly in a
+docstring/decision record the way the 08-02 checkpoint did for the
+`repo.write`/`repo.write_tests` narrowing, so a future reader does not
+assume "the run tree is now covered" from CR-01's fix alone.
+
+### IN-02: A multi-violation assertion in the new unit suite is weak enough to pass without proving what it claims
+
+**File:** `tests/unit/test_artifact_scope.py:243-274` (`test_two_violating_paths_are_both_named_and_both_reverted`)
+
+**Issue:** The test asserts `"3" in message` to prove the attempt number
+(`attempt=3`) is named in the raised `ArtifactScopeViolation` message.
+`run_id` is a random `uuid4()` whose canonical 32-hex-digit string
+representation contains the digit `3` with very high probability on any
+given test run (independent of whether `attempt=3` is actually rendered
+correctly), and the violating paths embedded in the same message also
+contain the run id. A regression that dropped the attempt number from
+the message entirely (or rendered the wrong attempt) would very likely
+still pass this assertion by coincidence, purely because `"3"` also
+tends to appear somewhere inside the UUID substring already asserted
+present a few lines above. This does not affect today's correctness
+(the code does render the attempt correctly, confirmed by direct
+reading of `enforce_artifact_scope`'s f-string), but the assertion does
+not reliably guard against a future regression the way the test's own
+name claims it does.
+
+**Fix:** Assert a more specific substring that cannot be satisfied by
+coincidence, e.g. `f"attempt {3}"` or the exact `f"role QA attempt 3
+wrote outside"` prefix `enforce_artifact_scope` constructs, mirroring
+how the same test already asserts the full path strings rather than a
+single bare digit.
+
+---
+
+_Reviewed: 2026-09-22_
+_Reviewer: Claude (gsd-code-reviewer)_
+_Depth: standard (incremental, wave-scoped)_
