@@ -388,8 +388,16 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 09-01-PLAN.md — The gate runs for real: after a PASS verdict the repo's own `quality_gate.commands` execute in the run worktree, `verification/quality_gate.json` is written, and a non-zero exit keeps the run out of COMPLETED
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 09-02-PLAN.md — Rejections loop instead of killing the run: `Signal.ROLE_BOUNCED`, `previous_node`, the per-edge iteration caps checked before dispatch, and FAILED with the reason on exhaustion
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 09-03-PLAN.md — The Developer's bounced attempt receives the feedback: declared `optional_inputs` deliver QA's structured issues and the gate's real command output through `ContextBuilder`
 
 **Invariants**: verdicts from exit codes and machine JSON, never prose; the real failure payload is persisted, not just a boolean.
