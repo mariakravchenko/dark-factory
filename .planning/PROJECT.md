@@ -64,6 +64,11 @@ resume it; durability and observability are the same requirement.
 - ✓ Role `context.tools` grants translate into `--allowedTools`, deny-by-omission, via `NATIVE_TOOL_CONTRACT`'s first real runtime consumer — Phase 7 (defense-in-depth; `enforce_write_scope` (ROLE-05) remains the authoritative after-the-fact boundary)
 - ✓ CI executes the same quality gates on every push/PR: lint, types, worker-name leak guard, unit/contract tiers — one `.github/workflows/ci.yml`, not a separate CI orchestrator — Phase 7 (verified live: real green run + real red run on a deliberate leak)
 - ✓ Attempt logs and resume transcripts pass through one shared spawn/redact/parse pipeline so secret redaction and the never-raise failure wrapper cannot drift between `execute()` and `resume()` — Phase 7
+- ✓ `CopilotWorker` is a functional adapter that runs a role non-interactively and returns a normalized result — Phase 8 (WORK-05)
+- ✓ `HermesWorker` is a functional adapter that runs a role non-interactively and returns a normalized result — Phase 8 (WORK-06)
+- ✓ `CodingWorker` contract proven across all three runtimes (Claude Code — Phase 7; Copilot and Hermes — Phase 8) — shared contract suite pins the invariant across all three, and plan 08-06 additionally executed the full negative/positive proof set against a real PostgreSQL instance for the first time
+- ✓ Any role can be assigned to any of the three workers via configuration with no workflow-code change — Phase 8 (WORK-09, ROADMAP SC2: shipped roles reassigned across all three runtimes, run still completes)
+- ✓ Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent — Phase 8 (QUAL-03)
 
 ### Active
 
@@ -79,12 +84,8 @@ resume it; durability and observability are the same requirement.
 - [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement shipped Phase 6 (TOOL-01/02/03))
 
 **Worker (agent runtime) abstraction**
-- [ ] `CodingWorker` contract proven across all three runtimes (proven for Claude Code — Phase 7; Copilot and Hermes remain)
-- [ ] `CopilotWorker` — functional adapter
-- [ ] `HermesWorker` — functional adapter
 - [ ] `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
 - [ ] `WorkerResult` normalizes every adapter's output (status COMPLETED|NEEDS_INPUT|FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
-- [ ] Any role can be assigned to any worker via config with no workflow code change
 - [ ] `FakeWorker` for orchestration tests (scripted `WorkerResult` sequence)
 
 **Tools, permissions, security boundary**
@@ -143,7 +144,6 @@ resume it; durability and observability are the same requirement.
 
 **Quality**
 - [ ] Orchestration tested with `FakeWorker` (role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing) — no external AI calls
-- [ ] Each real worker adapter (ClaudeCode, Copilot, Hermes) has independent integration tests; the same `CodingWorker` contract holds for all
 
 ### Out of Scope
 
@@ -202,6 +202,9 @@ resume it; durability and observability are the same requirement.
 | `NEEDS_INPUT:` is a trusted model-authored marker (D-01) that lets the agent itself select the pause branch, accepted rather than requiring structured (`--json-schema`) output for this phase | Worst case of a false positive is a spurious human-resolved pause, not privilege escalation; structured-output hardening deferred to a future phase (recorded in 07-RESEARCH.md) | Shipped Phase 7 (plan 07-03); threat T-07-11 accepted |
 | `--allowedTools` is built strictly from `context.tools` with deny-by-omission as defense-in-depth, while `enforce_write_scope` (ROLE-05) remains the sole authoritative after-the-fact boundary | A role without a grant should not even present the native tool to the agent, but the post-hoc scope check is what actually can't be bypassed by a misbehaving worker | Shipped Phase 7 (plan 07-04) |
 | CI's `quality` job holds no secrets and skips the `db`/`integration` tiers entirely, rather than provisioning a throwaway Postgres in the hosted runner | Nothing to leak if there's nothing to leak; `db`/`integration` tiers verified manually against a real backend instead (this UAT: 828 passed, 56m22s) | Shipped Phase 7 (plan 07-02); threat T-07-09 accepted, revisit at Phase 8 credential-gated integration jobs |
+| `enforce_artifact_scope` confines a role's `artifacts.write` grant to its own `artifacts/<role>/` subtree — a narrower, orchestrator-side, worker-agnostic control distinct from `enforce_write_scope` (ROLE-05's repo-wide boundary) — because Copilot's and Hermes's native tool surfaces expose no path-scoped read/write specifier to narrow at the adapter level | CR-01 (08-REVIEW.md): a granted `artifacts.write`, once native-tool-confined only by each adapter's own (uneven) capability, let one role overwrite another's committed artifact. Deny-by-default over the whole tree when the role holds no `artifacts.write` grant at all, matching D-14's zero-tolerance polarity | Shipped Phase 8 (plan 08-05); proven negatively on both Hermes and Copilot, positively on the untampered control |
+| A shared test harness's exit-code expectation must be stated per-caller with no default, never inherited from whichever caller was written first | G-08-2 (08-REVIEW.md, `.planning/debug/cli-exit-code-on-failed-run.md`): `_drive_shipped_config` asserted a positive-path exit code unconditionally, contradicting the two negative-path tests it also served — committed and never executed against a real database, so the contradiction shipped silently | Fixed Phase 8 (plan 08-06); zero production change, `src/dark_factory/cli.py`'s D-05 mapping unchanged |
+| A `FakeWorker`-scripted multi-role fixture must write each role's artifact files at `execute()` time, never all up front | Front-loading (the original `four_role_script` shape) is invisible to `enforce_write_scope`/exit-code checks but trips `enforce_artifact_scope` (08-05) the moment it exists: a later role's not-yet-run files are already on disk when an earlier role's own scope check runs. `LazyFourRoleWorker` is now the shared pattern for any db test driving a real multi-role `drive()` call | Found and fixed Phase 8 (plan 08-06, out of that plan's declared scope, fixed at user request); `tests/db/test_artifact_commit_per_role.py` had already independently discovered the same fix for the same reason |
 
 ## Evolution
 
@@ -221,4 +224,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-21 after Phase 7*
+*Last updated: 2026-09-22 after Phase 8*
