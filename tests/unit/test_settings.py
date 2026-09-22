@@ -27,6 +27,12 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
         "LOG_LEVEL": None,
         "LEASE_TTL_SECONDS": None,
         "LEASE_HEARTBEAT_SECONDS": None,
+        # Phase 8 added these two secret fields to Settings; a developer's own
+        # shell commonly has both set for personal claude/copilot CLI use,
+        # unrelated to this repo -- clear them so "defaults to None" tests
+        # don't depend on the ambient environment they happen to run in.
+        "ANTHROPIC_API_KEY": None,
+        "COPILOT_GITHUB_TOKEN": None,
     }
     values.update(overrides)
     for name, value in values.items():

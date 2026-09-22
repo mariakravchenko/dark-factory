@@ -255,8 +255,16 @@ def test_missing_credential_returns_failed_and_spawns_nothing(
     assert not argv_log.exists()
 
 
-def test_settings_copilot_fields_default_to_none() -> None:
+def test_settings_copilot_fields_default_to_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from dark_factory.config.settings import Settings
+
+    # A developer's own shell commonly has COPILOT_GITHUB_TOKEN set for
+    # personal copilot CLI use, unrelated to this repo -- clear it so this
+    # "defaults to None" assertion doesn't depend on the ambient environment.
+    monkeypatch.delenv("COPILOT_GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("COPILOT_MODEL", raising=False)
 
     settings = Settings(
         _env_file=None,
