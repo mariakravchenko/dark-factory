@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 08-copilot-hermes-worker-independence-proven
 source: [08-VERIFICATION.md]
 started: 2026-09-22T05:10:00Z
-updated: 2026-09-22T06:15:00Z
+updated: 2026-09-22T06:30:00Z
 ---
 
 ## Current Test
@@ -53,5 +53,11 @@ blocked: 0
   reason: "User reported: 4 passed, 2 failed. Both failures in test_artifact_scope_enforcement.py assert proc.returncode == 0 on the `dark-factory run` CLI subprocess, and got 1 -- the run correctly reached terminal state FAILED after the artifact-scope violation was detected and reverted, but the CLI now exits non-zero on a FAILED terminal run state."
   severity: major
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "tests/integration/test_artifact_scope_enforcement.py:128, in the shared harness _drive_shipped_config, asserts proc.returncode == 0 unconditionally on the `dark-factory run` CLI subprocess -- copied verbatim from a positive-path test (test_real_pipeline_zero_config.py:237) into a harness that also serves two negative-path tests whose runs are expected (and explicitly asserted by those same tests) to reach terminal FAILED. Per phase-01 decision D-05 (01-RESEARCH.md:18), FAILED -> exit 1 is the correct, documented, costly-to-reverse CLI contract (the Phase 11 CI trigger encodes these exit codes). The CLI (src/dark_factory/cli.py:147-157) is correct and unchanged since Phase 02 -- this is not a regression. tests/integration/test_exit_codes.py already asserts the opposite (FAILED -> exit 1) as its own D-05 contract guard, confirming the two tests cannot both be right. Shipped without ever executing (08-05-SUMMARY.md recorded D4/D5/D6 as collection-verified only, no DB available in that sandbox) -- this UAT session was their first real run."
+  artifacts:
+    - path: "tests/integration/test_artifact_scope_enforcement.py"
+      issue: "_drive_shipped_config (line 128) asserts proc.returncode == 0 unconditionally, wrong for the two negative-path (tamper) callers which expect the run to reach FAILED and the CLI to exit 1 per D-05"
+  missing:
+    - "Give _drive_shipped_config an expected_exit parameter (1 for the two tamper/negative cases, 0 for the positive control) instead of a hardcoded == 0 assertion"
+    - "Assert proc.returncode == expected_exit for each of the three callers in test_artifact_scope_enforcement.py"
+  debug_session: ".planning/debug/cli-exit-code-on-failed-run.md"
