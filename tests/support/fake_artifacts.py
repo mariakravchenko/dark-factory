@@ -160,6 +160,16 @@ class LazyFourRoleWorker(CodingWorker):
         )
 
 
+# Per-role summary text for four_role_script's WorkerResults, keyed the same
+# way as _FOUR_ROLE_FILES so the two dicts can't drift out of role-order sync.
+_FOUR_ROLE_SUMMARIES: dict[str, str] = {
+    "BA": "BA analysis complete",
+    "ARCHITECTURE": "architecture design complete",
+    "DEVELOPMENT": "implementation complete",
+    "QA": "QA verified every acceptance criterion",
+}
+
+
 def four_role_script(run_root: Path) -> list[WorkerResult]:
     """The single ordered ``[BA, ARCHITECTURE, DEVELOPMENT, QA]`` script a
     four-role db test hands to one :class:`~dark_factory.workers.fake.FakeWorker`
@@ -171,103 +181,18 @@ def four_role_script(run_root: Path) -> list[WorkerResult]:
     carries an ``AC-1``-shaped id, and ``verdict.json`` references that same id
     with a declared status consistent with its criteria (D-04/D-05). Realistic
     task-aware prose is Phase 7's concern, not this one.
-    """
-    ba_refs = write_role_artifacts(
-        run_root,
-        "BA",
-        {
-            "requirements.md": (
-                "# Requirements\n\n1. The system does the thing correctly.\n"
-            ),
-            "acceptance_criteria.json": json.dumps(
-                {
-                    "criteria": [
-                        {"id": "AC-1", "description": "the thing works"},
-                    ]
-                }
-            ),
-        },
-    )
-    architecture_refs = write_role_artifacts(
-        run_root,
-        "ARCHITECTURE",
-        {
-            "design.md": (
-                "# Design\n\nImplement the thing in the existing service layer; "
-                "no new component is needed.\n"
-            ),
-            "constraints.json": json.dumps(
-                {
-                    "constraints": [
-                        {"id": "C-1", "description": "no new database migration"},
-                    ]
-                }
-            ),
-        },
-    )
-    development_refs = write_role_artifacts(
-        run_root,
-        "DEVELOPMENT",
-        {
-            "implementation_summary.json": json.dumps(
-                {
-                    "summary": "implemented the thing",
-                    "changed_files": [],
-                    "tests_added": [],
-                }
-            ),
-        },
-    )
-    qa_refs = write_role_artifacts(
-        run_root,
-        "QA",
-        {
-            "test_report.json": json.dumps(
-                {
-                    "cases": [
-                        {
-                            "name": "AC-1: the thing works",
-                            "result": "PASS",
-                            "detail": "reproduced manually",
-                        }
-                    ]
-                }
-            ),
-            "verdict.json": json.dumps(
-                {
-                    "criteria": [
-                        {"criterion_id": "AC-1", "result": "PASS", "notes": ""}
-                    ],
-                    "issues": [],
-                    "status": "PASS",
-                }
-            ),
-        },
-    )
 
+    Built from the same ``_FOUR_ROLE_FILES`` content :class:`LazyFourRoleWorker`
+    uses, so the two can never drift apart on what each role's files contain --
+    only on *when* those files land on disk (all at once here vs. one role at a
+    time there, per the module docstring's G-08-2 follow-on note).
+    """
     return [
         WorkerResult(
             status=WorkerResultStatus.COMPLETED,
-            summary="BA analysis complete",
-            worker_session_id=f"fake-ba-{uuid4()}",
-            artifacts=ba_refs,
-        ),
-        WorkerResult(
-            status=WorkerResultStatus.COMPLETED,
-            summary="architecture design complete",
-            worker_session_id=f"fake-architecture-{uuid4()}",
-            artifacts=architecture_refs,
-        ),
-        WorkerResult(
-            status=WorkerResultStatus.COMPLETED,
-            summary="implementation complete",
-            worker_session_id=f"fake-development-{uuid4()}",
-            artifacts=development_refs,
-        ),
-        WorkerResult(
-            status=WorkerResultStatus.COMPLETED,
-            summary="QA verified every acceptance criterion",
-            worker_session_id=f"fake-qa-{uuid4()}",
-            artifacts=qa_refs,
-        ),
+            summary=_FOUR_ROLE_SUMMARIES[role],
+            worker_session_id=f"fake-{role.lower()}-{uuid4()}",
+            artifacts=write_role_artifacts(run_root, role, files),
+        )
+        for role, files in _FOUR_ROLE_FILES.items()
     ]
