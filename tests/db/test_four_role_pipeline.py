@@ -21,10 +21,13 @@ Follows the in-process db-test idiom of `tests/db/test_role_hooks_invoked.py`
 and `tests/db/test_artifact_handoff.py` (04-01): `start_run` + `drive` with an
 injected `WorkerRegistry` against the real provisioned PostgreSQL,
 `cleanup_runs` deleting every fixture row (including `artifacts`) at
-teardown. The single four-element script comes from
-`tests/support/fake_artifacts.py::four_role_script` (Task 2), wrapped in a
-small capturing worker so the test can inspect the `RoleContext` object the
-runner built for each of the four roles.
+teardown. The scripted four-role content comes from
+`tests/support/fake_artifacts.py::LazyFourRoleWorker` (Task 2; G-08-2
+follow-on -- writes each role's files at execute() time rather than
+upfront, so plan 08-05's `enforce_artifact_scope` never sees a later role's
+not-yet-run files early), wrapped in a small capturing worker so the test
+can inspect the `RoleContext` object the runner built for each of the four
+roles.
 """
 
 from __future__ import annotations
@@ -40,6 +43,7 @@ from sqlalchemy.orm import Session
 
 from dark_factory.artifacts.paths import run_root
 from dark_factory.config.loader import load_effective_config
+from dark_factory.context.builder import RoleContext
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import (
     WorkerCapabilities,
@@ -56,9 +60,8 @@ from dark_factory.persistence.models import (
     RunEvent,
 )
 from dark_factory.workers.base import CodingWorker
-from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
-from tests.support.fake_artifacts import four_role_script
+from tests.support.fake_artifacts import LazyFourRoleWorker
 from tests.support.git_repo import run_artifact_text
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
@@ -79,12 +82,12 @@ _EXPECTED_FILES: tuple[tuple[str, str], ...] = (
 
 
 class _CapturingWorker(CodingWorker):
-    """Delegates to a real :class:`FakeWorker` but records every ``context``
-    object it is handed, so the test can inspect the ``RoleContext`` the
-    runner built for each step, in call order."""
+    """Delegates to a real inner worker but records every ``context`` object
+    it is handed, so the test can inspect the ``RoleContext`` the runner
+    built for each step, in call order."""
 
-    def __init__(self, script: list[WorkerResult], captured: list[object]) -> None:
-        self._inner = FakeWorker(script)
+    def __init__(self, inner: CodingWorker, captured: list[object]) -> None:
+        self._inner = inner
         self._captured = captured
 
     def execute(self, context: object) -> WorkerResult:
@@ -203,18 +206,20 @@ def test_four_roles_run_in_order_and_produce_the_sc1_artifact_set(
     cleanup_runs.append(run_id)
 
     # GIT-01: pre-create the run's worktree now (idempotent -- the runner's
-    # own ensure_worktree call inside drive() reuses it) so the scripted
-    # four-role artifact content is written exactly where the runner will
+    # own ensure_worktree call inside drive() reuses it) so each role's
+    # scripted artifact content is written exactly where the runner will
     # look, mirroring what a real worker's own writes would already have
-    # produced.
+    # produced. LazyFourRoleWorker writes each role's files at execute()
+    # time, one role at a time -- a front-loaded write trips plan 08-05's
+    # enforce_artifact_scope (G-08-2 follow-on; see
+    # tests/support/fake_artifacts.py).
     work_dir = ensure_worktree(
         root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
     )
     run_dir = run_root(work_dir, run_id)
-    script = four_role_script(run_dir)
 
     captured: list[object] = []
-    worker = _CapturingWorker(script, captured)
+    worker = _CapturingWorker(LazyFourRoleWorker(run_dir), captured)
 
     final = drive(
         run_id,
@@ -254,13 +259,13 @@ def test_four_roles_run_in_order_and_produce_the_sc1_artifact_set(
 
     # -- QA's RoleContext carries exactly its declared inputs, nothing more --
     qa_context = captured[3]
-    assert qa_context is not None
-    input_filenames = {i.filename for i in qa_context.inputs}  # type: ignore[union-attr]
+    assert isinstance(qa_context, RoleContext)
+    input_filenames = {i.filename for i in qa_context.inputs}
     assert input_filenames == {
         "acceptance_criteria.json",
         "implementation_summary.json",
     }
-    produced_by = {i.filename: i.produced_by for i in qa_context.inputs}  # type: ignore[union-attr]
+    produced_by = {i.filename: i.produced_by for i in qa_context.inputs}
     assert produced_by["acceptance_criteria.json"] == "BA"
     assert produced_by["implementation_summary.json"] == "DEVELOPMENT"
     assert "design.md" not in input_filenames

@@ -46,9 +46,8 @@ from dark_factory.persistence.models import (
 )
 from dark_factory.persistence.mutations import ArtifactReferenceWrite, apply_transition
 from dark_factory.workers.base import CodingWorker
-from dark_factory.workers.fake import FakeWorker
 from dark_factory.workers.registry import WorkerRegistry
-from tests.support.fake_artifacts import four_role_script
+from tests.support.fake_artifacts import LazyFourRoleWorker
 from tests.support.git_repo import run_artifact_text
 
 pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
@@ -181,16 +180,19 @@ def _drive_four_role_run(
     cleanup_runs.append(run_id)
 
     # GIT-01: pre-create the run's worktree now (idempotent -- the runner's
-    # own ensure_worktree call inside drive() reuses it) so the scripted
-    # four-role artifact content is written exactly where the runner will
+    # own ensure_worktree call inside drive() reuses it) so each role's
+    # scripted artifact content is written exactly where the runner will
     # look, mirroring what a real worker's own writes would already have
-    # produced.
+    # produced. LazyFourRoleWorker (not four_role_script + FakeWorker) writes
+    # each role's files at execute() time, one role at a time -- a
+    # front-loaded write trips plan 08-05's enforce_artifact_scope, which
+    # expects only the currently-executing role's own uncommitted writes to
+    # be present (G-08-2 follow-on; see tests/support/fake_artifacts.py).
     work_dir = ensure_worktree(
         root, run_id, base_branch="main", working_branch=working_branch_name(run_id)
     )
     run_dir = run_root(work_dir, run_id)
-    script = four_role_script(run_dir)
-    worker = FakeWorker(script)
+    worker = LazyFourRoleWorker(run_dir)
 
     final = drive(
         run_id,
