@@ -257,3 +257,56 @@ This should collect and pass all 3 tests: the Hermes negative proof, the Copilot
 - `uv run pytest -m integration -q --collect-only` on `test_role_reassignment_sc2.py`, `test_write_scope_enforcement.py`, `test_real_pipeline_zero_config.py`: 9 tests collected, zero errors -- confirming the pre-existing integration suites are unaffected.
 - `git diff --numstat cf2a4b5..f82f176 -- .planning/phases/08-copilot-hermes-worker-independence-proven/08-02-SUMMARY.md`: 65 added, 0 deleted -- the addendum is confirmed additive.
 - All non-DB-gated plan-level `<verification>` items pass in full; the two DB-gated `<verify>` blocks and the plan-level DB-gated `<verification>` line are honestly deferred per coverage D4-D6, not silently skipped.
+
+## Addendum (Plan 08-06, 2026-09-22): D4, D5, D6 are now execution-verified
+
+Coverage entries D4, D5 and D6 above were recorded as collection-verified only — this
+sandbox had no reachable PostgreSQL 17 at authoring time. That gap let a real defect
+(G-08-2) escape: the shared harness `_drive_shipped_config` asserted `proc.returncode
+== 0` unconditionally, contradicting the two negative-path tests it also served, which
+expect their run to reach terminal `FAILED`. All three tests were committed having
+never actually run.
+
+Plan 08-06 closed G-08-2 as a test-only repair (zero production change — `git diff
+--numstat -- src/dark_factory/` is empty across its commits) and then executed the
+gap's own claim for real. The following command now passes against a real PostgreSQL
+instance:
+
+```bash
+uv run pytest -m integration -q tests/integration/test_role_reassignment_sc2.py tests/integration/test_real_pipeline_zero_config.py tests/integration/test_artifact_scope_enforcement.py tests/integration/test_exit_codes.py
+```
+
+Result: **10 passed, 0 failed, 0 skipped** (2026-09-22). This is the exact UAT Test 2
+command set, run together with the phase-01 D-05 contract guard (`test_exit_codes.py`)
+in one invocation — the pair that previously made contradictory claims about a
+persisted `FAILED` run's exit code now agree.
+
+D4, D5 and D6's original `collection-verified only` entries above are left unedited —
+they are the honest record of how G-08-2 escaped and why plan 08-06's execution gate
+exists. This addendum is additive: D4/D5/D6 are now also execution-verified, on top
+of, not instead of, that record.
+
+The original D4/D5/D6 entries' 3 scenarios plus the parametrized `expected_exit`
+repair map as follows:
+- D4 (Hermes negative proof) → `test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_fails`, `expected_exit=1`
+- D5 (Copilot negative proof) → `test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and_fails`, `expected_exit=1`
+- D6 (positive control) → `test_the_identical_shipped_config_with_no_tampering_completes_with_all_artifacts`, `expected_exit=0`
+
+Repo-wide standing gates, also verified against the same environment: `pytest -m
+"unit or contract"` — 640 passed; `mypy src/dark_factory` — clean; `ruff check .` and
+`ruff format --check .` — clean (the latter required a separate, out-of-scope
+whole-repo reformat of 17 pre-existing files unrelated to G-08-2, committed
+independently). `git diff --numstat -- src/dark_factory/` is empty across all of
+plan 08-06's commits.
+
+**Follow-on defect found and fixed alongside this closure (not part of G-08-2, and
+not gated by plan 08-06's own acceptance criteria):** running the full `db`-marked
+tier surfaced that `tests/support/fake_artifacts.py::four_role_script` front-loads
+all four roles' artifact files before a scripted run even starts. That was harmless
+before this same plan's enforce_artifact_scope (08-05) existed, but now trips a false
+`ArtifactScopeViolation` on the first role, since later roles' not-yet-run files are
+already sitting on disk when the first role's own scope check runs. Fixed via a new
+`LazyFourRoleWorker` (writes each role's files at `execute()` time, matching the
+pattern `tests/db/test_artifact_commit_per_role.py` already used for the same reason)
+in `tests/db/test_artifact_persistence.py` and `tests/db/test_four_role_pipeline.py`.
+Verified together: 8 passed, 0 failed.
