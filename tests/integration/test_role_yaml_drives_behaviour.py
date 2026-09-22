@@ -11,8 +11,11 @@ persisted ``runs.workflow`` snapshot of the next run reflects the edit:
 * an edited ``instructions:`` path inlines the *new* file's bytes verbatim into
   ``roles[0]["instruction_text"]``;
 * an edited ``worker:`` changes which worker the run dispatches (``copilot`` is a
-  registered placeholder, so the run reaches dispatch and fails with the
-  ``NotImplementedError`` that names Phase 8 -- proving the name came from YAML).
+  real adapter as of Phase 8; with no ``copilot`` binary/credentials in this test
+  environment the role fails cleanly to ``FAILED`` -- D-05's outermost
+  try/except never lets that surface as an uncaught crash -- while the
+  persisted ``runs.workflow`` snapshot still names ``copilot`` as the
+  dispatched worker, proving the name came from YAML).
 
 A SHA-256 digest of every ``*.py`` under ``src/dark_factory`` is taken before and
 after each test: editing role YAML must never require a source change.
@@ -139,12 +142,13 @@ def test_editing_the_worker_changes_which_worker_the_run_dispatches(
     _write_ba_role(config_root, worker="copilot")
     rc, stdout, stderr = _run(config_root, pg_url, "text:sc2-worker-copilot")
 
-    # the run is created (copilot is a registered placeholder), so the name was
-    # read from YAML and persisted; dispatch then raises the Phase 8 placeholder.
+    # the run is created and the name was read from YAML and persisted; with no
+    # real copilot binary/credentials here, the role fails cleanly to FAILED
+    # (D-05) rather than crashing -- Phase 8's outermost try/except wraps it.
     run_id = run_id_from_stdout(stdout)
     assert _persisted_role0(engine, run_id)["worker"] == "copilot"
     assert rc != 0
-    assert "copilot" in stderr and "Phase 8" in stderr
+    assert "BA → FAILED" in stdout
 
     # revert: a fake worker drives the same one-role pipeline to COMPLETED
     _write_ba_role(config_root, worker="fake")
