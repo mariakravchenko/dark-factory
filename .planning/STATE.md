@@ -23,7 +23,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-22)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 08 — Copilot & Hermes — Worker Independence Proven
+**Current focus:** Phase 9 — Independent Quality Gate & Bounded Feedback Loops
 
 ## Current Position
 
