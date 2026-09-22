@@ -345,7 +345,7 @@ Plans:
   3. Each adapter has its own integration suite that is skipped — not failed — when that runtime's credentials are absent, and the shared contract suite passes over all four workers.
   4. Each adapter's declared `WorkerCapabilities` matches its observed behaviour for native resume, session id, non-interactive mode and structured output.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -363,7 +363,7 @@ Plans:
 
 **Wave 4** *(gap closure — blocked on Wave 3 completion)*
 
-- [ ] 08-05-PLAN.md — GAP CLOSURE (08-REVIEW.md CR-01/WR-02/WR-03): `enforce_artifact_scope` confines a granted `artifacts.write` to the role's own artifact subtree on every worker, proven negatively on Hermes and Copilot; contract and decision record state the real granted-capability posture
+- [x] 08-05-PLAN.md — GAP CLOSURE (08-REVIEW.md CR-01/WR-02/WR-03): `enforce_artifact_scope` confines a granted `artifacts.write` to the role's own artifact subtree on every worker, proven negatively on Hermes and Copilot; contract and decision record state the real granted-capability posture
 
 **Decision**: Resolves open decision 3 — the exact non-interactive flag/env matrix for the Copilot and Hermes CLIs. Per 08-CONTEXT.md D-02 it is resolved from official documentation now (neither CLI is installed in this environment) and documented in `WorkerCapabilities`; the hands-on clean-container spike is carried, not dropped — plan 08-03's three `skipif`-guarded live suites execute it automatically the day either binary is installed, with no code change.
 **Note**: 08-RESEARCH.md's Scope Correction found QUAL-03 also unmet for `claude-code` (ROADMAP maps QUAL-03 to Phase 8 only, and Phase 7 proved that adapter solely against a faked executable), so this phase ships three live suites, not two.
@@ -446,7 +446,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Isolated Workspace & Git Lifecycle | 6/6 | Complete    | 2026-09-16 |
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
-| 8. Copilot & Hermes — Worker Independence Proven | 4/4 | In Progress|  |
+| 8. Copilot & Hermes — Worker Independence Proven | 5/5 | In Progress|  |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 0/TBD | Not started | - |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
