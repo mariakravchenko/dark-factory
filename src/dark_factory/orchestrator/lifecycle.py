@@ -14,6 +14,7 @@ unit-testable with no database and no mocks::
     <role>  --ROLE_COMPLETED----> <next role>          (or COMPLETED when last)
     <role>  --ROLE_FAILED-------> FAILED               (current_role retained)
     <role>  --ROLE_NEEDS_INPUT--> WAITING_HUMAN        (current_role retained)
+    <role>  --ROLE_BOUNCED------> <previous role>      (illegal from the first role)
 
 Any (status, signal) pair not in the graph raises :class:`IllegalTransitionError`
 rather than defaulting to some status. Leaving ``WAITING_HUMAN`` is **not** a
@@ -28,7 +29,12 @@ from typing import Protocol
 
 from dark_factory.domain.signal import Signal
 from dark_factory.domain.status import TERMINAL_STATUSES, RunStatus
-from dark_factory.workflows.pipeline import Pipeline, current_node, next_node
+from dark_factory.workflows.pipeline import (
+    Pipeline,
+    current_node,
+    next_node,
+    previous_node,
+)
 
 __all__ = ["IllegalTransitionError", "transition"]
 
@@ -109,6 +115,18 @@ def transition(
 
     if signal is Signal.ROLE_FAILED:
         return RunStatus.FAILED, role, state.current_step
+
+    if signal is Signal.ROLE_BOUNCED:
+        target = previous_node(pipeline, role)
+        if target is None:
+            raise IllegalTransitionError(
+                f"{status.value} has no earlier role to bounce a signal to"
+            )
+        return (
+            RunStatus(target.name),
+            target.name,
+            pipeline.index_of(target.name),
+        )
 
     if signal is Signal.ROLE_NEEDS_INPUT:
         # Retain the role, exactly as the failure arm does: a resume needs to
