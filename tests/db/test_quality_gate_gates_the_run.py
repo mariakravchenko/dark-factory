@@ -57,6 +57,11 @@ pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
 SessionFactory = Callable[[], Session]
 
 _QUALITY_GATE_BLOCK = "quality_gate:\n  commands: []\n"
+_RETRY_BLOCK = (
+    "retry:\n"
+    "  qa_developer_max_iterations: 3\n"
+    "  quality_gate_max_iterations: 2\n"
+)
 
 
 def _py(*args: str) -> str:
@@ -67,12 +72,23 @@ def _py(*args: str) -> str:
 
 
 def _write_four_role_tree(
-    config_root_factory: Callable[..., Path], *, quality_gate_commands: list[str]
+    config_root_factory: Callable[..., Path],
+    *,
+    quality_gate_commands: list[str],
+    qa_developer_max_iterations: int = 3,
+    quality_gate_max_iterations: int = 2,
 ) -> Path:
     """The same `[BA, ARCHITECTURE, DEVELOPMENT, QA]` config tree
     `tests/db/test_four_role_pipeline.py` writes, with `quality_gate.commands`
     overwritten to `quality_gate_commands` -- the build-then-overwrite idiom
-    `tests/conftest.py` documents."""
+    `tests/conftest.py` documents. `qa_developer_max_iterations` /
+    `quality_gate_max_iterations` default to `config_root_factory`'s own
+    defaults (3, 2); a scenario proving a single-attempt terminal FAIL
+    (Phase 9, plan 09-02's bounded feedback loop otherwise bounces a FAIL
+    verdict/gate under those defaults) overrides the relevant cap to 0, so
+    `_bounce_or_fail`'s `0 < 0` is already false and the very first
+    rejection stays terminal -- preserving this module's original
+    single-attempt GATE-01..04 proofs unchanged by the later phase."""
     root = config_root_factory(roles=("BA", "ARCHITECTURE", "DEVELOPMENT", "QA"))
     definitions = {
         "BA": ("[]", "[requirements.md, acceptance_criteria.json]"),
@@ -125,6 +141,16 @@ def _write_four_role_tree(
     commands_yaml = "[" + ", ".join(json.dumps(c) for c in quality_gate_commands) + "]"
     patched = original.replace(
         _QUALITY_GATE_BLOCK, f"quality_gate:\n  commands: {commands_yaml}\n"
+    )
+    assert _RETRY_BLOCK in patched, (
+        "config_root_factory no longer writes the retry: block verbatim -- "
+        "update this test's overwrite string to match"
+    )
+    patched = patched.replace(
+        _RETRY_BLOCK,
+        "retry:\n"
+        f"  qa_developer_max_iterations: {qa_developer_max_iterations}\n"
+        f"  quality_gate_max_iterations: {quality_gate_max_iterations}\n",
     )
     config_path.write_text(patched, encoding="utf-8")
     return root
@@ -232,8 +258,15 @@ def test_gate_fail_keeps_the_run_out_of_completed_despite_a_success_summary(
 ) -> None:
     failing = _py("-c", "import sys; sys.exit(1)")
     passing = _py("-c", "pass")
+    # Phase 9, plan 09-02: quality_gate_max_iterations=0 keeps this a
+    # single-attempt terminal FAIL, the scenario this module (09-01) proves --
+    # under the default cap of 2 the same repeated gate failure would instead
+    # bounce back to the Developer twice before exhausting, which is
+    # tests/db/test_iteration_cap_exhaustion.py's scenario, not this one's.
     root = _write_four_role_tree(
-        config_root_factory, quality_gate_commands=[failing, passing]
+        config_root_factory,
+        quality_gate_commands=[failing, passing],
+        quality_gate_max_iterations=0,
     )
     snapshot = load_effective_config(root)
 
@@ -285,7 +318,12 @@ def test_gate_fail_keeps_the_run_out_of_completed_despite_a_success_summary(
         ).first()
     assert qa_execution is not None
     assert qa_execution.error is not None
-    assert qa_execution.error.get("error") == "quality_gate_fail"
+    # Phase 9, plan 09-02: with quality_gate_max_iterations=0, `_bounce_or_fail`
+    # never bounces (0 < 0 is false) -- the FAIL outcome carries the
+    # exhaustion reason string on its very first attempt, not the old
+    # unconditional "quality_gate_fail" plan 09-01 wrote before the bounce
+    # existed.
+    assert qa_execution.error.get("error") == "quality_gate_max_iterations_exhausted"
 
 
 def test_a_failing_verdict_short_circuits_the_gate_entirely(
@@ -296,8 +334,15 @@ def test_a_failing_verdict_short_circuits_the_gate_entirely(
 ) -> None:
     sentinel_name = "gate_ran_sentinel.txt"
     gate_command = _py("-c", f"open({sentinel_name!r}, 'w').close()")
+    # Phase 9, plan 09-02: qa_developer_max_iterations=0 keeps this a
+    # single-attempt terminal FAIL, the scenario this module (09-01) proves --
+    # under the default cap of 3 the same repeated FAIL verdict would instead
+    # bounce back to the Developer three times before exhausting, which is
+    # tests/db/test_iteration_cap_exhaustion.py's scenario, not this one's.
     root = _write_four_role_tree(
-        config_root_factory, quality_gate_commands=[gate_command]
+        config_root_factory,
+        quality_gate_commands=[gate_command],
+        qa_developer_max_iterations=0,
     )
     snapshot = load_effective_config(root)
 
@@ -343,4 +388,9 @@ def test_a_failing_verdict_short_circuits_the_gate_entirely(
         ).first()
     assert qa_execution is not None
     assert qa_execution.error is not None
-    assert qa_execution.error.get("error") == "qa_verdict_fail"
+    # Phase 9, plan 09-02: with qa_developer_max_iterations=0, `_bounce_or_fail`
+    # never bounces (0 < 0 is false) -- the FAIL outcome carries the
+    # exhaustion reason string on its very first attempt, not the old
+    # unconditional "qa_verdict_fail" plan 09-01 wrote before the bounce
+    # existed.
+    assert qa_execution.error.get("error") == "qa_developer_max_iterations_exhausted"

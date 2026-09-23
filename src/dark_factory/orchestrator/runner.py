@@ -118,6 +118,7 @@ from dark_factory.workflows.pipeline import (
     current_node,
     next_node,
     pipeline_from_snapshot,
+    previous_node,
 )
 
 __all__ = [
@@ -189,6 +190,46 @@ def _role_definition(state: RunState, role: str) -> Mapping[str, Any]:
         if name == role:
             return definition
     raise LookupError(f"role {role!r} is not in the run snapshot")
+
+
+# LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): maps the exhaustion reason
+# string ``_bounce_or_fail`` writes into ``outcome["error"]`` back to the
+# counter column it names, so the ``RUN_FAILED`` payload can carry the
+# exhausted counter's name/value/cap without a second, divergent lookup.
+_EXHAUSTION_REASON_TO_COUNTER: Mapping[str, str] = {
+    "qa_developer_max_iterations_exhausted": "qa_developer_iterations",
+    "quality_gate_max_iterations_exhausted": "quality_gate_iterations",
+}
+
+
+def _bounce_or_fail(
+    *,
+    current_value: int,
+    cap: int,
+    counter_name: str,
+    exhaustion_reason: str,
+    bounce_target: RoleNode | None,
+) -> tuple[Signal, dict[str, int], str | None]:
+    """Decide bounce vs. fail for a QA-verdict or quality-gate FAIL (D-04/D-06).
+
+    When ``bounce_target`` exists and ``current_value`` is strictly less than
+    ``cap``, the run bounces: returns ``Signal.ROLE_BOUNCED`` with a one-entry
+    ``counter_increments`` mapping for ``counter_name`` and no error string. A
+    cap of 0 needs no special case -- ``0 < 0`` is already false, so the very
+    first rejection is terminal with no zero-value branch anywhere here.
+
+    Otherwise the run fails: returns ``Signal.ROLE_FAILED`` with an empty
+    increment mapping and an error string -- ``"no_earlier_role_to_bounce_to"``
+    when ``bounce_target`` is ``None`` (LOOP-04's adjacency case: the failing
+    role is the pipeline's first node, so there is nowhere to loop back to and
+    the runner must never hand ``transition()`` a signal it would reject), or
+    ``exhaustion_reason`` when the counter has simply reached its cap.
+    """
+    if bounce_target is not None and current_value < cap:
+        return Signal.ROLE_BOUNCED, {counter_name: 1}, None
+    if bounce_target is None:
+        return Signal.ROLE_FAILED, {}, "no_earlier_role_to_bounce_to"
+    return Signal.ROLE_FAILED, {}, exhaustion_reason
 
 
 def _maybe_crash_after(previous: RunStatus, new: RunStatus) -> None:
@@ -785,6 +826,19 @@ def _run_current_role(
     enforce write scope, then transition**, and a denial reuses the
     identical ``FAILED`` shape every
     other post-worker check here already writes (D-05).
+
+    LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): for the pipeline's terminal
+    role only, once the gate/verdict block above has run, the ordering is
+    **fold the verdict, then run the gate, then check the relevant cap, then
+    choose bounce-or-fail, then transition** -- the cap check happens before
+    dispatch, per LOOP-03's literal wording. A FAIL verdict or a FAIL gate no
+    longer downgrades unconditionally to ``ROLE_FAILED``: :func:`_bounce_or_fail`
+    reads the relevant iteration counter (``qa_developer_iterations`` or
+    ``quality_gate_iterations``) against its own configured cap and returns
+    ``Signal.ROLE_BOUNCED`` under cap or ``Signal.ROLE_FAILED`` at/over it,
+    with the chosen counter's increment riding the same ``apply_transition``
+    call every other write in this function already commits through -- no new
+    locking site is introduced for these two columns.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -898,6 +952,17 @@ def _run_current_role(
     # so the event-dispatch ladder further down can splice it in with no
     # NameError regardless of which branch above actually ran.
     gate_events: list[EventWrite] = []
+    # LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): ``counter_increments`` is
+    # populated only inside the terminal-role gate block below, by
+    # ``_bounce_or_fail``, and passed into ``apply_transition`` unconditionally
+    # at the bottom of this function -- empty for every other role and for a
+    # run whose terminal role never reaches the bounce/fail decision.
+    # ``bounce_reason`` names which edge fired (``qa_verdict_fail`` or
+    # ``quality_gate_fail``) for the ``ROLE_BOUNCED`` event's payload. Both
+    # declared here, unconditionally, for the same NameError-avoidance reason
+    # ``gate_events`` is.
+    counter_increments: dict[str, int] = {}
+    bounce_reason: str | None = None
     # D-01/D-06: read once from the persisted snapshot -- ``.get`` with an
     # empty-list default means a legacy snapshot entry with no ``tools`` key
     # at all grants nothing (deny-by-default, never allow-by-omission).
@@ -906,6 +971,22 @@ def _run_current_role(
     # this same grant list, and reading it once here keeps the two blocks
     # from ever computing it differently.
     granted = list(role_def.get("tools", []))
+    # LOOP-03 (Phase 9, plan 09-02): the two iteration caps, read once from
+    # the persisted snapshot the same defensive-dict way ``_role_definition``
+    # and ``build_role_context`` already read ``state.workflow`` elsewhere --
+    # never re-import ``dark_factory.config.loader`` here. The literal
+    # fallbacks mirror ``RetryConfig``'s own declared defaults (3 and 2), so a
+    # legacy snapshot with no ``retry`` key resolves identically to a fresh
+    # one. Hoisted unconditionally (not just inside the terminal-role block)
+    # so the RUN_FAILED exhaustion payload below can read them regardless of
+    # which branch set ``signal`` to ``ROLE_FAILED``.
+    retry_config = state.workflow.get("retry", {})
+    qa_developer_max_iterations = retry_config.get("qa_developer_max_iterations", 3)
+    quality_gate_max_iterations = retry_config.get("quality_gate_max_iterations", 2)
+    _counter_caps = {
+        "qa_developer_iterations": qa_developer_max_iterations,
+        "quality_gate_iterations": quality_gate_max_iterations,
+    }
 
     # CR-01, plan 08-05: enforce_artifact_scope is its own sibling
     # ROLE_COMPLETED block -- not a branch nested inside the block below --
@@ -997,14 +1078,30 @@ def _run_current_role(
                 if verdict_write is not None:
                     verdict_text = read_artifact_text(run_dir, verdict_write.path)
                     verdict = Verdict.model_validate(json.loads(verdict_text))
+                    # LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): the bounce
+                    # target is always computed structurally -- never a
+                    # role-name literal (tests/unit/test_no_role_name_literal.py).
+                    bounce_target = previous_node(pipeline, node.name)
 
                     if verdict.computed_status is VerdictStatus.FAIL:
                         # GATE-01 keys the gate on QA having passed -- a FAIL
                         # verdict short-circuits before the gate ever runs.
-                        # Plan 09-02 replaces this terminal FAILED outcome
-                        # with the bounded Developer bounce loop.
-                        signal = Signal.ROLE_FAILED
-                        outcome = {**outcome, "error": "qa_verdict_fail"}
+                        # The cap is checked BEFORE the signal is chosen
+                        # (LOOP-03): under cap bounces the run back to
+                        # ``bounce_target`` with a fresh Developer attempt; at
+                        # or over cap ends the run, same as plan 09-01's
+                        # unconditional FAILED outcome did.
+                        signal, counter_increments, bounce_error = _bounce_or_fail(
+                            current_value=state.qa_developer_iterations,
+                            cap=qa_developer_max_iterations,
+                            counter_name="qa_developer_iterations",
+                            exhaustion_reason="qa_developer_max_iterations_exhausted",
+                            bounce_target=bounce_target,
+                        )
+                        if signal is Signal.ROLE_BOUNCED:
+                            bounce_reason = "qa_verdict_fail"
+                        else:
+                            outcome = {**outcome, "error": bounce_error}
                     else:
                         gate_commands = list(
                             state.workflow.get("quality_gate", {}).get("commands", [])
@@ -1049,8 +1146,28 @@ def _run_current_role(
                                     },
                                 )
                             )
-                            signal = Signal.ROLE_FAILED
-                            outcome = {**outcome, "error": "quality_gate_fail"}
+                            # LOOP-02/LOOP-03/LOOP-04: same cap-then-choose
+                            # decision as the QA-verdict branch above, keyed
+                            # on the gate's own independent counter/cap pair
+                            # (D-06) -- at most one of the two counters is
+                            # ever touched in a single attempt, because the
+                            # verdict FAIL branch above already short-circuits
+                            # before the gate ever runs.
+                            signal, counter_increments, bounce_error = (
+                                _bounce_or_fail(
+                                    current_value=state.quality_gate_iterations,
+                                    cap=quality_gate_max_iterations,
+                                    counter_name="quality_gate_iterations",
+                                    exhaustion_reason=(
+                                        "quality_gate_max_iterations_exhausted"
+                                    ),
+                                    bounce_target=bounce_target,
+                                )
+                            )
+                            if signal is Signal.ROLE_BOUNCED:
+                                bounce_reason = "quality_gate_fail"
+                            else:
+                                outcome = {**outcome, "error": bounce_error}
 
             assert (
                 state.working_branch is not None
@@ -1084,6 +1201,12 @@ def _run_current_role(
                 # audit events must not claim a persisted fact that was
                 # never actually durable.
                 gate_events = []
+                # A bounce decision made above (if any) is void once the
+                # commit/push that would have carried it never landed: the
+                # signal is now ROLE_FAILED, so neither the counter increment
+                # nor the bounce reason must survive to the dispatch below.
+                counter_increments = {}
+                bounce_reason = None
 
     # ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04): enforce_write_scope runs
     # only when the signal is still ROLE_COMPLETED after the artifact
@@ -1154,6 +1277,24 @@ def _run_current_role(
         re_status = _ROLE_FAILED
         re_result = None
         re_error = outcome
+        # LOOP-04 (Phase 9, plan 09-02): when this FAILED outcome is one of
+        # the two exhaustion reasons `_bounce_or_fail` names, the RUN_FAILED
+        # payload also carries the exhausted counter's name, its
+        # (pre-increment -- exhaustion never increments further) value and
+        # its configured cap, so the reason is persisted as machine-readable
+        # fact, not only as a string. A no-earlier-role-to-bounce-to failure
+        # and every pre-Phase-9 failure reason are untouched: the lookup
+        # simply misses and the payload stays `{"role": node.name}`.
+        run_failed_payload: dict[str, Any] = {"role": node.name}
+        exhausted_counter = _EXHAUSTION_REASON_TO_COUNTER.get(outcome.get("error", ""))
+        if exhausted_counter is not None:
+            run_failed_payload = {
+                **run_failed_payload,
+                "reason": outcome["error"],
+                "counter": exhausted_counter,
+                "value": getattr(state, exhausted_counter),
+                "cap": _counter_caps[exhausted_counter],
+            }
         events = [
             EventWrite(
                 type=EventType.ROLE_FAILED,
@@ -1162,7 +1303,7 @@ def _run_current_role(
                     "error": outcome.get("error") or result.summary,
                 },
             ),
-            EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
+            EventWrite(type=EventType.RUN_FAILED, payload=run_failed_payload),
         ]
         # GATE-01..04 (Phase 9, plan 09-01): a gate that ran and failed (or a
         # commit/push failure discovered after it ran) still needs its own
@@ -1183,6 +1324,45 @@ def _run_current_role(
                     payload=capability_denial,
                 ),
             )
+    elif signal is Signal.ROLE_BOUNCED:
+        # LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): the worker itself
+        # genuinely completed -- only the run-level routing differs -- so
+        # `re_status` stays "COMPLETED", never a new status string. This is
+        # load-bearing for plan 09-03: `context/builder.py`'s
+        # `_latest_completed_execution` filters on
+        # `RoleExecution.status == "COMPLETED"`, so a bounced QA attempt
+        # must stay visible to that filter for the Developer's next attempt
+        # to resolve `verdict.json`/`quality_gate.json` feedback at all.
+        re_status = _ROLE_COMPLETED
+        re_result = outcome
+        re_error = None
+        events = [
+            EventWrite(
+                type=EventType.ROLE_COMPLETED,
+                payload={"role": node.name, "summary": result.summary},
+            ),
+        ]
+        # Audit order: "the role finished, then the gate ran (if it ran),
+        # then the run bounced" -- mirrors the ROLE_COMPLETED arm's ordering.
+        events.extend(gate_events)
+        (bounced_counter_name, bounced_counter_delta) = next(
+            iter(counter_increments.items())
+        )
+        events.append(
+            EventWrite(
+                type=EventType.ROLE_BOUNCED,
+                payload={
+                    "role": node.name,
+                    "reason": bounce_reason,
+                    "counter": bounced_counter_name,
+                    # The value BEFORE this attempt's increment -- `state` was
+                    # loaded at the top of this step, before the decision.
+                    "value": getattr(state, bounced_counter_name),
+                    "cap": _counter_caps[bounced_counter_name],
+                }
+            )
+        )
+        assert bounced_counter_delta == 1  # _bounce_or_fail's only shape
     elif signal is Signal.ROLE_NEEDS_INPUT:
         # Mirror the failure arm's shape. The serialised NEEDS_INPUT outcome MUST
         # be stored, not discarded: it is what a resume validates back into
@@ -1225,6 +1405,7 @@ def _run_current_role(
                 error=re_error,
             ),
             events=events,
+            counter_increments=counter_increments or None,
             expected_owner_token=lease.token,
             human_interaction=human_interaction,
             artifact_references=artifact_writes,

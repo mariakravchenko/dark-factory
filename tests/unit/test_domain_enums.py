@@ -64,12 +64,13 @@ def test_terminal_statuses_is_a_strict_subset_of_stop_statuses() -> None:
     assert STOP_STATUSES is not TERMINAL_STATUSES
 
 
-def test_signal_has_the_four_phase_one_members() -> None:
+def test_signal_has_the_four_phase_one_members_plus_the_phase_nine_bounce() -> None:
     assert {m.name for m in Signal} == {
         "ENTER",
         "ROLE_COMPLETED",
         "ROLE_FAILED",
         "ROLE_NEEDS_INPUT",
+        "ROLE_BOUNCED",
     }
 
 
@@ -111,15 +112,15 @@ def test_event_type_contains_the_six_phase_one_members() -> None:
     assert required <= {m.name for m in EventType}
 
 
-def test_event_type_has_exactly_fifteen_members_with_the_phase_two_five_six_and_nine_types() -> (
+def test_event_type_has_exactly_sixteen_members_with_the_phase_two_five_six_and_nine_types() -> (
     None
 ):
     # Exactly the six Phase 1 members plus the four Phase 2 writes plus the one
-    # Phase 5 write plus the one Phase 6 write plus the three Phase 9 writes --
+    # Phase 5 write plus the one Phase 6 write plus the four Phase 9 writes --
     # the exact count is what stops a future contributor from pre-declaring the
     # Phase 12 members, which would advertise transitions that are never
     # emitted.
-    assert len(list(EventType)) == 15
+    assert len(list(EventType)) == 16
     phase_two = {
         "QUESTION_CREATED",
         "RUN_PAUSED",
@@ -135,6 +136,7 @@ def test_event_type_has_exactly_fifteen_members_with_the_phase_two_five_six_and_
         "QUALITY_GATE_STARTED",
         "QUALITY_GATE_PASSED",
         "QUALITY_GATE_FAILED",
+        "ROLE_BOUNCED",
     }
     assert phase_nine <= {m.name for m in EventType}
 
