@@ -44,5 +44,11 @@ before: [ensure_clean_worktree]
 after: [collect_diff]
 
 inputs: [design.md, constraints.json]
+# Phase 9 feedback-loop artifacts (LOOP-01/LOOP-02): verdict.json carries
+# QA's structured issues on a QA-FAIL bounce; quality_gate.json carries the
+# gate's real command output on a gate-FAIL bounce. Both are absent on the
+# first attempt of a run (before QA or the gate have ever run) and resolve
+# to nothing then -- never added to `inputs` above, which stays mandatory.
+optional_inputs: [verdict.json, quality_gate.json]
 outputs: [implementation_summary.json]
 examples: []

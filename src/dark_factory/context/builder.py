@@ -8,6 +8,16 @@ declared ``examples`` -- and nothing here ever lists, globs or walks the
 repository tree. ``tests/unit/test_no_tree_walk.py`` enforces this
 mechanically over this package and ``dark_factory.artifacts``.
 
+A role's declared ``optional_inputs`` (Phase 9, LOOP-01/LOOP-02) extend this
+same invariant with a second named-path family, resolved leniently: either
+through the identical ``outputs`` declaration path ``inputs`` uses, or, for an
+orchestrator-written ``verification/`` file that no role declares as an
+output (the quality gate has no ``role_executions`` row to hang an ``outputs``
+declaration on, per D-01), through a direct read of that one named path under
+the run root. Still a fixed, small set of named paths, still never a
+directory read -- an absent optional input is simply omitted from
+``RoleContext.inputs``, never an error.
+
 ``build_role_context`` replaces the Phase 1 ``_build_context`` dict-building
 body in ``orchestrator/runner.py``: it keeps every field that function
 produced (``run_id``, ``role``, ``worker``, ``attempt``, ``task``, ``answer``)
@@ -197,6 +207,63 @@ def _resolve_input(
     )
 
 
+def _resolve_optional_input(
+    session: Session,
+    repo_root: Path,
+    run_id: UUID,
+    state: RunState,
+    filename: str,
+) -> ArtifactInput | None:
+    """Resolve one declared ``optional_inputs`` filename leniently (D-08):
+    absent is absent, never an exception.
+
+    Tries two strategies, in a fixed order:
+
+    1. The same declared-output path :func:`_resolve_input` uses -- but a
+       :class:`~dark_factory.artifacts.MissingArtifactContentError` (the
+       producing role has no ``COMPLETED`` attempt yet, its completed attempt
+       has no matching ``artifacts`` row, or the referenced file is absent on
+       disk) resolves to ``None`` instead of propagating. This is the
+       ``verdict.json`` case: QA declares it as an output, so the lookup is
+       the ordinary one; it is only *absent* on the Developer's first attempt,
+       before QA has ever completed.
+    2. Only when strategy one's :func:`_producing_role` lookup raises
+       :class:`~dark_factory.artifacts.ArtifactContractError` -- meaning no
+       role in the snapshot declares ``filename`` as an output -- read
+       ``verification/<filename>`` directly under the run root. This is the
+       ``quality_gate.json`` case: per D-01 the gate has no ``role_executions``
+       row, and ``ArtifactReference.role_execution_id`` is a required
+       non-nullable column with nothing to point at, so this path
+       deliberately never touches :func:`_producing_role` or the
+       ``artifacts`` table.
+
+    :class:`~dark_factory.artifacts.ArtifactTooLargeError` is never caught in
+    either strategy -- an oversized feedback artifact is a real problem that
+    must surface loudly, matching the "never silently truncate" rule the rest
+    of this package already follows; swallowing it would hand the Developer a
+    silently missing failure report.
+    """
+    try:
+        return _resolve_input(session, repo_root, run_id, state, filename)
+    except MissingArtifactContentError:
+        return None
+    except ArtifactContractError:
+        pass
+
+    try:
+        content = read_artifact_text(
+            run_root(repo_root, run_id), f"verification/{filename}"
+        )
+    except MissingArtifactContentError:
+        return None
+    return ArtifactInput(
+        filename=filename,
+        produced_by="quality_gate",
+        path=f"verification/{filename}",
+        content=content,
+    )
+
+
 def _read_supplementary_doc(resolved_root: Path, relative: str) -> str | None:
     """Read ``relative`` under ``resolved_root``, optionally and size-capped.
 
@@ -260,6 +327,12 @@ def build_role_context(
         _resolve_input(session, repo_root, run_id, state, filename)
         for filename in role_def.get("inputs", [])
     ]
+    for filename in role_def.get("optional_inputs", []):
+        resolved_optional = _resolve_optional_input(
+            session, repo_root, run_id, state, filename
+        )
+        if resolved_optional is not None:
+            inputs.append(resolved_optional)
 
     resolved_root = repo_root.resolve()
     baseline_docs = _read_baseline_docs(resolved_root)

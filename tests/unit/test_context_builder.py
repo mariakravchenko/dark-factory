@@ -329,3 +329,246 @@ def test_producing_role_with_no_completed_attempt_raises_missing_content(
         build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
     assert "BA" in str(excinfo.value)
     assert "x.json" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------- #
+# 9. no `optional_inputs` key at all -> byte-identical to an explicit empty list
+# --------------------------------------------------------------------------- #
+
+
+def test_no_optional_inputs_key_is_byte_identical_to_explicit_empty_list(
+    tmp_path: Path,
+) -> None:
+    run_id = uuid4()
+    state = _state(workflow={"roles": [{"name": "TARGET", "outputs": []}]})
+
+    role_def_no_key = _role_def(inputs=[])
+    assert "optional_inputs" not in role_def_no_key
+    context_no_key = build_role_context(
+        _FakeSession([]), tmp_path, run_id, state, role_def_no_key  # type: ignore[arg-type]
+    )
+
+    role_def_empty = _role_def(inputs=[], optional_inputs=[])
+    context_empty = build_role_context(
+        _FakeSession([]), tmp_path, run_id, state, role_def_empty  # type: ignore[arg-type]
+    )
+
+    assert context_no_key == context_empty
+    assert context_no_key.inputs == []
+
+
+# --------------------------------------------------------------------------- #
+# 10. optional input resolves through the declared-output path, like a
+#     mandatory input, when the producing role has completed and its
+#     artifact row exists
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_input_resolves_when_producing_role_completed(tmp_path: Path) -> None:
+    run_id = uuid4()
+    run_dir = tmp_path / ".dark-factory" / "runs" / str(run_id)
+    artifact_path = run_dir / "artifacts" / "QA" / "verdict.json"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text('{"status": "FAIL"}', encoding="utf-8")
+
+    qa_execution = _role_execution("QA", run_id)
+    qa_artifact = _artifact_row(
+        qa_execution.id, run_id, "verdict.json", "artifacts/QA/verdict.json"
+    )
+
+    state = _state(
+        workflow={
+            "roles": [
+                {"name": "TARGET", "outputs": []},
+                {"name": "QA", "outputs": ["verdict.json"]},
+            ]
+        }
+    )
+    role_def = _role_def(inputs=[], optional_inputs=["verdict.json"])
+    session = _FakeSession([qa_execution, qa_artifact])
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert len(context.inputs) == 1
+    assert context.inputs[0].filename == "verdict.json"
+    assert context.inputs[0].produced_by == "QA"
+    assert context.inputs[0].content == '{"status": "FAIL"}'
+
+
+# --------------------------------------------------------------------------- #
+# 11. optional input absent -- producing role has no COMPLETED attempt yet --
+#     resolves to nothing, no exception (the first-attempt guarantee)
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_input_absent_when_producing_role_has_no_completed_attempt(
+    tmp_path: Path,
+) -> None:
+    run_id = uuid4()
+    state = _state(
+        workflow={
+            "roles": [
+                {"name": "TARGET", "outputs": []},
+                {"name": "QA", "outputs": ["verdict.json"]},
+            ]
+        }
+    )
+    role_def = _role_def(inputs=[], optional_inputs=["verdict.json"])
+    session = _FakeSession([None])  # no COMPLETED role_executions row for QA
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert context.inputs == []
+
+
+# --------------------------------------------------------------------------- #
+# 12. optional input absent -- producing role completed but no matching
+#     artifacts row -- resolves to nothing, no exception
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_input_absent_when_no_matching_artifact_row(tmp_path: Path) -> None:
+    run_id = uuid4()
+    qa_execution = _role_execution("QA", run_id)
+    state = _state(
+        workflow={
+            "roles": [
+                {"name": "TARGET", "outputs": []},
+                {"name": "QA", "outputs": ["verdict.json"]},
+            ]
+        }
+    )
+    role_def = _role_def(inputs=[], optional_inputs=["verdict.json"])
+    session = _FakeSession([qa_execution, None])  # execution found, no artifacts row
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert context.inputs == []
+
+
+# --------------------------------------------------------------------------- #
+# 13. optional input naming a file no role declares as an output falls back
+#     to reading verification/<filename> under the run root -- present
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_input_falls_back_to_verification_tree_when_present(
+    tmp_path: Path,
+) -> None:
+    run_id = uuid4()
+    run_dir = tmp_path / ".dark-factory" / "runs" / str(run_id)
+    verification_path = run_dir / "verification" / "quality_gate.json"
+    verification_path.parent.mkdir(parents=True)
+    verification_path.write_text('{"status": "FAIL"}', encoding="utf-8")
+
+    state = _state(workflow={"roles": [{"name": "TARGET", "outputs": []}]})
+    role_def = _role_def(inputs=[], optional_inputs=["quality_gate.json"])
+    session = _FakeSession([])
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert len(context.inputs) == 1
+    assert context.inputs[0].filename == "quality_gate.json"
+    assert context.inputs[0].produced_by == "quality_gate"
+    assert context.inputs[0].path == "verification/quality_gate.json"
+    assert context.inputs[0].content == '{"status": "FAIL"}'
+
+
+# --------------------------------------------------------------------------- #
+# 14. same fallback, file absent -- resolves to nothing, no exception
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_input_falls_back_to_verification_tree_when_absent(
+    tmp_path: Path,
+) -> None:
+    run_id = uuid4()
+    state = _state(workflow={"roles": [{"name": "TARGET", "outputs": []}]})
+    role_def = _role_def(inputs=[], optional_inputs=["quality_gate.json"])
+    session = _FakeSession([])
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert context.inputs == []
+
+
+# --------------------------------------------------------------------------- #
+# 15. an oversized optional input raises ArtifactTooLargeError -- never
+#     silently skipped
+# --------------------------------------------------------------------------- #
+
+
+def test_oversized_optional_input_raises(tmp_path: Path) -> None:
+    run_id = uuid4()
+    run_dir = tmp_path / ".dark-factory" / "runs" / str(run_id)
+    verification_path = run_dir / "verification" / "quality_gate.json"
+    verification_path.parent.mkdir(parents=True)
+    verification_path.write_text("x" * (256 * 1024 + 1), encoding="utf-8")
+
+    state = _state(workflow={"roles": [{"name": "TARGET", "outputs": []}]})
+    role_def = _role_def(inputs=[], optional_inputs=["quality_gate.json"])
+    session = _FakeSession([])
+
+    with pytest.raises(ArtifactTooLargeError):
+        build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
+# 16. resolved optional inputs appear after mandatory ones, in declaration
+#     order
+# --------------------------------------------------------------------------- #
+
+
+def test_optional_inputs_appear_after_mandatory_inputs_in_declaration_order(
+    tmp_path: Path,
+) -> None:
+    run_id = uuid4()
+    run_dir = tmp_path / ".dark-factory" / "runs" / str(run_id)
+
+    ba_artifact_path = run_dir / "artifacts" / "BA" / "design.md"
+    ba_artifact_path.parent.mkdir(parents=True)
+    ba_artifact_path.write_text("design content", encoding="utf-8")
+
+    qa_artifact_path = run_dir / "artifacts" / "QA" / "verdict.json"
+    qa_artifact_path.parent.mkdir(parents=True)
+    qa_artifact_path.write_text("verdict content", encoding="utf-8")
+
+    gate_path = run_dir / "verification" / "quality_gate.json"
+    gate_path.parent.mkdir(parents=True)
+    gate_path.write_text("gate content", encoding="utf-8")
+
+    ba_execution = _role_execution("BA", run_id)
+    ba_artifact = _artifact_row(
+        ba_execution.id, run_id, "design.md", "artifacts/BA/design.md"
+    )
+    qa_execution = _role_execution("QA", run_id)
+    qa_artifact = _artifact_row(
+        qa_execution.id, run_id, "verdict.json", "artifacts/QA/verdict.json"
+    )
+
+    state = _state(
+        workflow={
+            "roles": [
+                {"name": "BA", "outputs": ["design.md"]},
+                {"name": "TARGET", "outputs": []},
+                {"name": "QA", "outputs": ["verdict.json"]},
+            ]
+        }
+    )
+    role_def = _role_def(
+        inputs=["design.md"],
+        optional_inputs=["verdict.json", "quality_gate.json"],
+    )
+    # design.md (mandatory) consumes [ba_execution, ba_artifact]; verdict.json
+    # (optional, declared-output path) consumes [qa_execution, qa_artifact];
+    # quality_gate.json (optional, verification-tree fallback) makes no
+    # session.scalar call at all.
+    session = _FakeSession([ba_execution, ba_artifact, qa_execution, qa_artifact])
+
+    context = build_role_context(session, tmp_path, run_id, state, role_def)  # type: ignore[arg-type]
+
+    assert [i.filename for i in context.inputs] == [
+        "design.md",
+        "verdict.json",
+        "quality_gate.json",
+    ]
