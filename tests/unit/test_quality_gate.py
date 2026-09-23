@@ -132,6 +132,46 @@ def test_a_known_secret_value_in_stdout_is_redacted(tmp_path: Path) -> None:
     assert "[redacted:test_secret]" in result.commands[0].stdout
 
 
+def test_a_known_secret_value_in_the_configured_command_is_redacted(
+    tmp_path: Path,
+) -> None:
+    secret = "supersecretvalue123"
+    command = _py("-c", "pass", secret)
+
+    result = run_quality_gate(
+        commands=[command],
+        cwd=tmp_path,
+        timeout=30,
+        known_secrets={secret: "test_secret"},
+    )
+
+    assert secret not in result.commands[0].command
+    assert "[redacted:test_secret]" in result.commands[0].command
+
+
+def test_a_known_secret_in_a_command_never_reaches_the_written_artifact(
+    tmp_path: Path,
+) -> None:
+    from dark_factory.artifacts.paths import ensure_run_tree
+
+    secret = "supersecretvalue123"
+    command = _py("-c", "pass", secret)
+
+    result = run_quality_gate(
+        commands=[command],
+        cwd=tmp_path,
+        timeout=30,
+        known_secrets={secret: "test_secret"},
+    )
+
+    ensure_run_tree(tmp_path)
+    relative_path = write_quality_gate_result(tmp_path, result)
+    written = (tmp_path / relative_path).read_text(encoding="utf-8")
+
+    assert secret not in written
+    assert "[redacted:test_secret]" in written
+
+
 def test_stdout_over_the_cap_is_tail_preserved_with_an_explicit_drop_marker(
     tmp_path: Path,
 ) -> None:
