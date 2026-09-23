@@ -235,6 +235,16 @@ class AttemptAwareFourRoleWorker(CodingWorker):
     gate-FAIL-then-PASS scenario uses to make a gate command's exit code flip
     between the Developer's bounced attempts, without disturbing write-scope
     enforcement for either role.
+
+    ``out_of_scope_writes`` (plan 09-04, gap CR-01) optionally maps
+    ``(role, attempt) -> worktree-relative path``: a short, fixed-text file
+    created at that path, resolved against ``worktree_root``, when that
+    ``(role, attempt)`` executes. This is ``sentinel_writes``'s deliberate
+    opposite: ``sentinel_writes`` targets the gitignored run tree so the
+    write is invisible to ``attempt_changed_paths`` and never triggers
+    enforcement, whereas ``out_of_scope_writes`` targets a tracked-visible
+    worktree path *in order to* trigger ``enforce_write_scope`` -- which is
+    what lets a test prove the ROLE-05 boundary actually holds on a bounce.
     """
 
     def __init__(
@@ -243,10 +253,21 @@ class AttemptAwareFourRoleWorker(CodingWorker):
         *,
         attempt_files: dict[tuple[str, int], dict[str, str]],
         sentinel_writes: dict[tuple[str, int], str] | None = None,
+        out_of_scope_writes: dict[tuple[str, int], str] | None = None,
+        worktree_root: Path | None = None,
     ) -> None:
         self._run_root = run_root
         self._attempt_files = attempt_files
         self._sentinel_writes = sentinel_writes or {}
+        self._out_of_scope_writes = out_of_scope_writes or {}
+        self._worktree_root = worktree_root
+        if self._out_of_scope_writes and self._worktree_root is None:
+            raise ValueError(
+                "AttemptAwareFourRoleWorker: out_of_scope_writes was given "
+                "without worktree_root -- both keyword names must be set "
+                "together, or the planted write silently never lands and "
+                "the regression test becomes a vacuous pass"
+            )
 
     def _record(self, context: object) -> WorkerResult:
         role = getattr(context, "role", None)
@@ -262,6 +283,15 @@ class AttemptAwareFourRoleWorker(CodingWorker):
             # gitignored prefix but independent of this specific run id.
             gitignored_runs_dir = self._run_root.parent
             (gitignored_runs_dir / sentinel_name).touch()
+        out_of_scope_path = self._out_of_scope_writes.get((role, attempt))
+        if out_of_scope_path is not None:
+            assert self._worktree_root is not None  # enforced in __init__
+            target = self._worktree_root / out_of_scope_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                f"planted by {role} attempt {attempt} -- out of write_scope\n",
+                encoding="utf-8",
+            )
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
             summary=f"{role} completed (attempt {attempt})",
