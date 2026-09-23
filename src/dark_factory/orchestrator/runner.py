@@ -1208,11 +1208,17 @@ def _run_current_role(
                 counter_increments = {}
                 bounce_reason = None
 
-    # ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04): enforce_write_scope runs
-    # only when the signal is still ROLE_COMPLETED after the artifact
-    # validate/commit/push sequence above -- an attempt that already failed
-    # schema validation or the commit/push step has nothing further to
-    # enforce. The patterns are read from the persisted snapshot's role
+    # ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04). Widened in gap CR-01
+    # (Phase 9, plan 09-04): enforce_write_scope runs for every signal under
+    # which this attempt's worktree changes are *retained* rather than
+    # ending the run outright -- that is ``ROLE_COMPLETED`` and
+    # ``ROLE_BOUNCED`` -- never only ``ROLE_COMPLETED``. A bounce is the
+    # sharper of the two cases, not the safer one: a failed run has no
+    # downstream role left to contaminate, whereas a bounce hands the
+    # worktree to an earlier role, whose own WIP-recovery commit would
+    # otherwise silently absorb an out-of-scope write under that earlier
+    # role's name -- an authorization bypass wearing a routing decision's
+    # clothes. The patterns are read from the persisted snapshot's role
     # entry, defensively (`(role_def.get("permissions") or {}).get(...)`),
     # so a legacy bare-string snapshot (whose `_role_definition` fallback
     # carries no `permissions` key at all) falls back to
@@ -1229,7 +1235,7 @@ def _run_current_role(
     # the same reason the GitError branch does: a FAILED attempt records no
     # `artifacts` rows, even though the artifact content itself is already
     # durably committed on the working branch by the time this check runs.
-    if signal is Signal.ROLE_COMPLETED:
+    if signal in (Signal.ROLE_COMPLETED, Signal.ROLE_BOUNCED):
         write_scope = (role_def.get("permissions") or {}).get(
             "write_scope", list(DEFAULT_WRITE_SCOPE)
         )
@@ -1244,6 +1250,21 @@ def _run_current_role(
             signal = Signal.ROLE_FAILED
             outcome = {**outcome, "error": str(exc)}
             artifact_writes = []
+            # CR-01: a scope violation turns a would-be bounce into a
+            # genuine failure, so the bounce decision's side effects must
+            # not survive the downgrade -- an increment applied for a loop
+            # iteration that never happened would silently spend the
+            # operator's configured retry budget, and a non-empty
+            # ``counter_increments`` paired with ``ROLE_FAILED`` would also
+            # be dispatched into ``apply_transition`` as a real column
+            # write. Deliberately NOT mirrored from this block:
+            # ``gate_events`` is left alone -- by the time this check runs,
+            # ``commit_run_artifacts`` has already succeeded and the gate
+            # artifact is durably on the working branch, so its
+            # ``QUALITY_GATE_*`` events remain true statements and must
+            # still be emitted on the ``ROLE_FAILED`` path.
+            counter_increments = {}
+            bounce_reason = None
 
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
