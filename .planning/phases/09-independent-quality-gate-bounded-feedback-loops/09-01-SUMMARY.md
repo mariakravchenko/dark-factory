@@ -242,3 +242,13 @@ uv run pytest -m db -q
 ## Next Phase Readiness
 
 Plan 09-02 (bounded feedback loops, `Signal.ROLE_BOUNCED`) can proceed: the verdict-read and gate-execution logic this plan built is the exact seam 09-02 upgrades from a terminal `ROLE_FAILED` outcome to the bounded bounce loop, at the same two `signal = Signal.ROLE_FAILED` assignment sites this plan introduced (`qa_verdict_fail`, `quality_gate_fail`). No other Phase 9 plan depends on anything this plan did not ship.
+
+## Self-Check: PASSED
+
+- FOUND: `src/dark_factory/orchestrator/quality_gate.py`
+- FOUND: `tests/unit/test_quality_gate.py`
+- FOUND: `tests/db/test_quality_gate_gates_the_run.py`
+- FOUND: `.planning/phases/09-independent-quality-gate-bounded-feedback-loops/09-01-SUMMARY.md`
+- FOUND commit: `4a7a19e` (Task 1)
+- FOUND commit: `bd2ad27` (Task 2)
+- FOUND commit: `6015e5d` (metadata)
