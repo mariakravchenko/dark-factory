@@ -46,6 +46,7 @@ kill a process at a precisely chosen, already-committed point.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -61,11 +62,13 @@ from dark_factory.actions.context import ActionContext
 from dark_factory.actions.registry import ActionRegistry
 from dark_factory.artifacts import ArtifactError
 from dark_factory.artifacts.paths import ensure_run_tree, run_root
+from dark_factory.artifacts.store import read_artifact_text
 from dark_factory.artifacts.validation import collect_role_artifacts
 from dark_factory.config.settings import get_settings
 from dark_factory.context.builder import build_role_context
+from dark_factory.domain.artifacts import Verdict
 from dark_factory.domain.signal import Signal, signal_from_result
-from dark_factory.domain.status import STOP_STATUSES, RunStatus
+from dark_factory.domain.status import STOP_STATUSES, RunStatus, VerdictStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
 from dark_factory.git import (
@@ -86,6 +89,10 @@ from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
+from dark_factory.orchestrator.quality_gate import (
+    run_quality_gate,
+    write_quality_gate_result,
+)
 from dark_factory.persistence.engine import new_session
 from dark_factory.persistence.mutations import (
     ArtifactReferenceWrite,
@@ -109,6 +116,7 @@ from dark_factory.workflows.pipeline import (
     Pipeline,
     RoleNode,
     current_node,
+    next_node,
     pipeline_from_snapshot,
 )
 
@@ -884,6 +892,12 @@ def _run_current_role(
     # CapabilityDeniedError -- carries the three payload keys the
     # CAPABILITY_DENIED event below writes verbatim.
     capability_denial: dict[str, str] | None = None
+    # GATE-01..04 (Phase 9, plan 09-01): populated only inside the terminal-role
+    # gate block below; stays empty for every other role and for a run whose
+    # terminal role never reaches ROLE_COMPLETED. Declared here, unconditionally,
+    # so the event-dispatch ladder further down can splice it in with no
+    # NameError regardless of which branch above actually ran.
+    gate_events: list[EventWrite] = []
     # D-01/D-06: read once from the persisted snapshot -- ``.get`` with an
     # empty-list default means a legacy snapshot entry with no ``tools`` key
     # at all grants nothing (deny-by-default, never allow-by-omission).
@@ -952,6 +966,92 @@ def _run_current_role(
             # call introduces a new failure vocabulary: a commit or push
             # failure is a role failure, folded into the same ROLE_FAILED /
             # RUN_FAILED pair the ArtifactError branch above already uses.
+
+            # GATE-01..04 (Phase 9, plan 09-01): only for the pipeline's
+            # terminal role -- detected structurally via
+            # ``next_node(pipeline, node.name) is None``, the same predicate
+            # the RUN_COMPLETED emission below already relies on, never a
+            # role-name literal (tests/unit/test_no_role_name_literal.py).
+            # Deliberately placed here, BEFORE commit_run_artifacts below,
+            # rather than after enforce_write_scope as first sketched: the
+            # gate writes verification/quality_gate.json into this same
+            # gitignored run tree (``.dark-factory/runs/<run_id>/``), and
+            # only a force-add against that whole tree -- exactly what
+            # commit_run_artifacts below already does for this role's own
+            # artifacts -- stages a *new* file under it. Writing the gate
+            # result first means it rides that one existing commit, so no
+            # second, distinctly-labelled commit is introduced for
+            # tests/db/test_artifact_commit_per_role.py's "one artifact
+            # commit per role" invariant to trip over, and the file survives
+            # the terminal role's own worktree cleanup on COMPLETED (D-04)
+            # instead of being silently lost: the cleanup pass's
+            # ``wip_commit_if_dirty`` stages with a plain ``git add -A``,
+            # which never picks up a brand-new file under an ignored path.
+            if (
+                signal is Signal.ROLE_COMPLETED
+                and next_node(pipeline, node.name) is None
+            ):
+                verdict_write = next(
+                    (w for w in artifact_writes if w.type == "verdict.json"), None
+                )
+                if verdict_write is not None:
+                    verdict_text = read_artifact_text(run_dir, verdict_write.path)
+                    verdict = Verdict.model_validate(json.loads(verdict_text))
+
+                    if verdict.computed_status is VerdictStatus.FAIL:
+                        # GATE-01 keys the gate on QA having passed -- a FAIL
+                        # verdict short-circuits before the gate ever runs.
+                        # Plan 09-02 replaces this terminal FAILED outcome
+                        # with the bounded Developer bounce loop.
+                        signal = Signal.ROLE_FAILED
+                        outcome = {**outcome, "error": "qa_verdict_fail"}
+                    else:
+                        gate_commands = list(
+                            state.workflow.get("quality_gate", {}).get("commands", [])
+                        )
+                        gate_settings = get_settings()
+                        gate_result = run_quality_gate(
+                            commands=gate_commands,
+                            cwd=work_dir,
+                            timeout=gate_settings.worker_timeout_seconds,
+                            known_secrets=gate_settings.known_secret_values(),
+                        )
+                        gate_path = write_quality_gate_result(run_dir, gate_result)
+                        exit_codes = [c.exit_code for c in gate_result.commands]
+                        gate_events = [
+                            EventWrite(
+                                type=EventType.QUALITY_GATE_STARTED,
+                                payload={
+                                    "role": node.name,
+                                    "command_count": len(gate_commands),
+                                },
+                            ),
+                        ]
+                        if gate_result.status is VerdictStatus.PASS:
+                            gate_events.append(
+                                EventWrite(
+                                    type=EventType.QUALITY_GATE_PASSED,
+                                    payload={
+                                        "role": node.name,
+                                        "path": gate_path,
+                                        "exit_codes": exit_codes,
+                                    },
+                                )
+                            )
+                        else:
+                            gate_events.append(
+                                EventWrite(
+                                    type=EventType.QUALITY_GATE_FAILED,
+                                    payload={
+                                        "role": node.name,
+                                        "path": gate_path,
+                                        "exit_codes": exit_codes,
+                                    },
+                                )
+                            )
+                            signal = Signal.ROLE_FAILED
+                            outcome = {**outcome, "error": "quality_gate_fail"}
+
             assert (
                 state.working_branch is not None
             )  # ensure_worktree already required it
@@ -979,6 +1079,11 @@ def _run_current_role(
                 # forbids reporting artifacts as durable when the commit
                 # meant to carry them did not happen.
                 artifact_writes = []
+                # The gate's own result -- if it ran -- rode the same commit
+                # this except block just discovered never happened; its
+                # audit events must not claim a persisted fact that was
+                # never actually durable.
+                gate_events = []
 
     # ROLE-05, D-12/D-13/D-14 (Phase 5, plan 05-04): enforce_write_scope runs
     # only when the signal is still ROLE_COMPLETED after the artifact
@@ -1030,6 +1135,12 @@ def _run_current_role(
                 payload={"role": node.name, "summary": result.summary},
             ),
         ]
+        # GATE-01..04 (Phase 9, plan 09-01): the gate's own audit events (if
+        # it ran) belong between "the role finished" and "the run completed"
+        # -- the audit order reads "the role finished, then the gate ran,
+        # then the run completed". Empty for every role but the pipeline's
+        # terminal one, so this is a no-op for BA/ARCHITECTURE/DEVELOPMENT.
+        events.extend(gate_events)
         # RUN_COMPLETED belongs only to the transition that actually reaches the
         # terminal COMPLETED state -- i.e. the last node in the pipeline. For any
         # earlier role, transition() returns the next role status and the run
@@ -1053,6 +1164,13 @@ def _run_current_role(
             ),
             EventWrite(type=EventType.RUN_FAILED, payload={"role": node.name}),
         ]
+        # GATE-01..04 (Phase 9, plan 09-01): a gate that ran and failed (or a
+        # commit/push failure discovered after it ran) still needs its own
+        # audit trace -- appended after the ROLE_FAILED/RUN_FAILED pair
+        # (and after any capability_denial prepend below), never instead of
+        # them. Empty whenever the gate never ran (verdict FAIL
+        # short-circuit, an earlier failure, or a non-terminal role).
+        events.extend(gate_events)
         # D-07/D-08: a capability denial is prepended ahead of ROLE_FAILED /
         # RUN_FAILED, in the SAME apply_transition call -- additive, never
         # instead of them, so no existing observability consumer needs a new

@@ -99,10 +99,10 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Independent Quality Gate
 
-- [ ] **GATE-01**: After QA passes, Dark Factory independently runs the configured `quality_gate.commands` in the repository environment
-- [ ] **GATE-02**: The gate decision is based on command exit codes, not on agent prose or self-reports
-- [ ] **GATE-03**: Developer and QA agents can still run their own tests/lint/build during their work; that self-validation is never accepted as final system truth
-- [ ] **GATE-04**: The quality-gate result is written to `verification/quality_gate.json`
+- [x] **GATE-01**: After QA passes, Dark Factory independently runs the configured `quality_gate.commands` in the repository environment
+- [x] **GATE-02**: The gate decision is based on command exit codes, not on agent prose or self-reports
+- [x] **GATE-03**: Developer and QA agents can still run their own tests/lint/build during their work; that self-validation is never accepted as final system truth
+- [x] **GATE-04**: The quality-gate result is written to `verification/quality_gate.json`
 
 ### Git Lifecycle & GitHub
 
@@ -246,10 +246,10 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | LOOP-02 | Phase 9 | Pending |
 | LOOP-03 | Phase 9 | Pending |
 | LOOP-04 | Phase 9 | Pending |
-| GATE-01 | Phase 9 | Pending |
-| GATE-02 | Phase 9 | Pending |
-| GATE-03 | Phase 9 | Pending |
-| GATE-04 | Phase 9 | Pending |
+| GATE-01 | Phase 9 | Complete |
+| GATE-02 | Phase 9 | Complete |
+| GATE-03 | Phase 9 | Complete |
+| GATE-04 | Phase 9 | Complete |
 | GIT-01 | Phase 5 | Complete |
 | GIT-02 | Phase 5 | Complete |
 | GIT-03 | Phase 10 | Pending |
