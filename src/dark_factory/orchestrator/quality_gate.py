@@ -143,11 +143,22 @@ def run_quality_gate(
     ``shell_execute``'s own documented contract for orchestrator-invoked
     calls.
 
-    Each captured ``stdout`` / ``stderr`` is redacted
-    (:func:`dark_factory.events.redaction.redact`, patterns enabled) against
-    ``known_secrets`` *before* the tail-preserving cap is applied (T-09-03),
-    so no unredacted copy of a leaked credential ever exists in the returned
-    model.
+    Each captured ``stdout`` / ``stderr``, and the configured ``command``
+    string itself, are redacted (:func:`dark_factory.events.redaction.redact`,
+    patterns enabled) against ``known_secrets`` before the result is
+    constructed -- the cap is applied to ``stdout``/``stderr`` afterward
+    (T-09-03) but never to ``command``, so no unredacted copy of a leaked
+    credential ever exists in the returned model. The command string belongs
+    in this set because ``verification/quality_gate.json`` is force-added and
+    committed onto the run's working branch by ``commit_run_artifacts``
+    (D-16): unlike a transient log line, a credential written there is
+    permanent and unrecallable, and a ``quality_gate.commands`` entry --
+    e.g. an authenticated health-check ``curl -H "Authorization: Bearer
+    <token>"`` -- is the surface an operator is most likely to embed one in
+    by hand. This closes gap CR-02 and restores this project's Security
+    constraint (``CLAUDE.md``: infrastructure credentials "must
+    never reach workers, artifacts, prompts, event payloads, comments, logs,
+    or reports").
     """
     results: list[GateCommandResult] = []
     for command in commands:
@@ -162,7 +173,7 @@ def run_quality_gate(
         stderr = _cap_output(str(redact(outcome.stderr, known_secrets=known_secrets)))
         results.append(
             GateCommandResult(
-                command=command,
+                command=str(redact(command, known_secrets=known_secrets)),
                 exit_code=outcome.exit_code,
                 stdout=stdout,
                 stderr=stderr,
