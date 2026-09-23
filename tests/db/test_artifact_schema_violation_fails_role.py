@@ -13,6 +13,18 @@ cannot change the outcome and an invalid contract can", never "PASS and FAIL
 take different routes" -- asserting the latter would assert behaviour this
 phase does not implement.
 
+**Closed by Phase 9 (plan 09-01):** the "advances past QA regardless of
+verdict PASS or FAIL" gap this module documents above is now closed --
+`orchestrator/runner.py` reads QA's `verdict.json` back and a FAIL verdict
+now fails the run instead of completing it, and a PASS verdict is followed
+by an independent quality-gate run before the pipeline may complete. See
+`tests/db/test_quality_gate_gates_the_run.py` for the real `drive()` proof
+of both routes. Every scenario in *this* module still ends `FAILED` via a
+schema violation raised before that new logic is ever reached (the schema
+check happens first, inside `collect_role_artifacts`, and downgrades the
+signal away from `ROLE_COMPLETED` before the terminal-role gate block would
+run), so none of its own assertions changed.
+
 Follows the same real-run db-test idiom as `tests/db/test_four_role_pipeline.py`
 / `tests/db/test_run_failure_path.py`: a config tree, `start_run`, an injected
 per-test `WorkerRegistry` wrapping one ordered `FakeWorker` script, `drive`

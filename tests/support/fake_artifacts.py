@@ -47,6 +47,7 @@ from dark_factory.domain.worker import (
 from dark_factory.workers.base import CodingWorker
 
 __all__ = [
+    "QA_VERDICT_FAIL_FILES",
     "LazyFourRoleWorker",
     "four_role_script",
     "write_role_artifacts",
@@ -106,6 +107,39 @@ _FOUR_ROLE_FILES: dict[str, dict[str, str]] = {
 }
 
 
+# Phase 9 (plan 09-01, Task 2): a FAIL-shaped variant of QA's own two
+# output files, alongside (never replacing) `_FOUR_ROLE_FILES["QA"]` above --
+# every other db test depends on that PASS default staying untouched. A
+# scenario that needs "QA's own verdict FAILs" passes this dict as
+# `LazyFourRoleWorker(..., qa_files=QA_VERDICT_FAIL_FILES)`.
+QA_VERDICT_FAIL_FILES: dict[str, str] = {
+    "test_report.json": json.dumps(
+        {
+            "cases": [
+                {
+                    "name": "AC-1: the thing works",
+                    "result": "FAIL",
+                    "detail": "reproduced the defect",
+                }
+            ]
+        }
+    ),
+    "verdict.json": json.dumps(
+        {
+            "criteria": [
+                {
+                    "criterion_id": "AC-1",
+                    "result": "FAIL",
+                    "notes": "reproduced the defect",
+                }
+            ],
+            "issues": [{"severity": "blocking", "description": "AC-1 is not met"}],
+            "status": "FAIL",
+        }
+    ),
+}
+
+
 def write_role_artifacts(
     root: Path, role: str, files: dict[str, str]
 ) -> list[ArtifactRef]:
@@ -129,13 +163,25 @@ class LazyFourRoleWorker(CodingWorker):
     timing instead of pre-staging the whole run tree upfront.
     """
 
-    def __init__(self, run_root: Path) -> None:
+    def __init__(
+        self, run_root: Path, *, qa_files: dict[str, str] | None = None
+    ) -> None:
         self._run_root = run_root
+        # Phase 9 (plan 09-01, Task 2): an optional per-run override for QA's
+        # own two files -- e.g. `QA_VERDICT_FAIL_FILES` -- so a scenario can
+        # drive a real FAIL verdict without touching `_FOUR_ROLE_FILES`'s
+        # shared PASS default every other db test depends on.
+        self._qa_files = qa_files
 
     def _record(self, context: object) -> WorkerResult:
         role = getattr(context, "role", None)
         assert role in _FOUR_ROLE_FILES, role
-        refs = write_role_artifacts(self._run_root, role, _FOUR_ROLE_FILES[role])
+        files = (
+            self._qa_files
+            if role == "QA" and self._qa_files is not None
+            else _FOUR_ROLE_FILES[role]
+        )
+        refs = write_role_artifacts(self._run_root, role, files)
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
             summary=f"{role} completed",
