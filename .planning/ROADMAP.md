@@ -385,7 +385,7 @@ Plans:
   3. A QA FAIL returns a structured issues artifact (severity, acceptance criterion, description) to the Developer; a gate FAIL returns the actual command failure output, after which QA re-evaluates and the gate re-runs.
   4. Iteration counts are checked before dispatch against `retry.qa_developer_max_iterations` and `retry.quality_gate_max_iterations`, and on exhaustion the run transitions to FAILED with every attempt and reason persisted.
 
-**Plans**: 3/3 plans executed
+**Plans**: 3/5 plans executed (2 gap-closure plans added after verification)
 
 Plans:
 **Wave 1**
@@ -399,6 +399,11 @@ Plans:
 **Wave 3** *(blocked on Wave 2 completion)*
 
 - [x] 09-03-PLAN.md — The Developer's bounced attempt receives the feedback: declared `optional_inputs` deliver QA's structured issues and the gate's real command output through `ContextBuilder`
+
+**Gap closure** *(from 09-VERIFICATION.md; both wave 1, no file overlap, run in parallel)*
+
+- [ ] 09-04-PLAN.md — CR-01: a bounced attempt is write-scope-enforced exactly like a completed one — the ROLE-05 guard covers `Signal.ROLE_BOUNCED`, a violation clears the bounce's counter increment and reason, and a db-tier regression test proves an out-of-scope write cannot survive a bounce
+- [ ] 09-05-PLAN.md — CR-02: the configured `quality_gate.commands` string is redacted against `known_secrets` before it is persisted, so a credential embedded in a gate command never reaches the committed `verification/quality_gate.json`
 
 **Invariants**: verdicts from exit codes and machine JSON, never prose; the real failure payload is persisted, not just a boolean.
 
