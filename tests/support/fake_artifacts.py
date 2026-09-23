@@ -48,6 +48,7 @@ from dark_factory.workers.base import CodingWorker
 
 __all__ = [
     "QA_VERDICT_FAIL_FILES",
+    "AttemptAwareFourRoleWorker",
     "LazyFourRoleWorker",
     "four_role_script",
     "write_role_artifacts",
@@ -185,6 +186,85 @@ class LazyFourRoleWorker(CodingWorker):
         return WorkerResult(
             status=WorkerResultStatus.COMPLETED,
             summary=f"{role} completed",
+            worker_session_id=f"fake-{role.lower()}-{uuid4()}",
+            artifacts=refs,
+        )
+
+    def execute(self, context: object) -> WorkerResult:
+        return self._record(context)
+
+    def resume(
+        self, context: object, previous: WorkerResult, answer: str | None
+    ) -> WorkerResult:
+        return self._record(context)
+
+    def capabilities(self) -> WorkerCapabilities:
+        return WorkerCapabilities(
+            native_resume=False,
+            session_id=True,
+            structured_output=True,
+            non_interactive=True,
+        )
+
+
+class AttemptAwareFourRoleWorker(CodingWorker):
+    """Like :class:`LazyFourRoleWorker` -- lazy, writes at ``execute()``/
+    ``resume()`` time -- but its per-role content is selected by
+    ``context.attempt``, which :class:`LazyFourRoleWorker`'s own ``_record``
+    ignores entirely (it always returns ``_FOUR_ROLE_FILES[role]``, no matter
+    which attempt this is). This is what makes "QA fails on attempt 1 and
+    passes on attempt 2" -- or "the gate fails until the Developer's attempt
+    2 creates a sentinel file" -- expressible for a Phase 9 bounce scenario.
+
+    ``attempt_files`` maps ``(role, attempt) -> {filename: content}``; any
+    ``(role, attempt)`` pair not present falls back to
+    ``_FOUR_ROLE_FILES[role]`` (the same shared PASS-shaped default every
+    other db test in this project depends on), so a scenario only needs to
+    override the specific attempts it cares about.
+
+    ``sentinel_writes`` optionally maps ``(role, attempt) -> filename``: a
+    zero-byte file created at ``<worktree root>/.dark-factory/runs/<filename>``
+    (a fixed, run-id-independent path -- the quality-gate command that checks
+    for it is written into config before the run id exists) when that
+    ``(role, attempt)`` executes. Deliberately placed under the gitignored
+    ``.dark-factory/runs/`` prefix (A-05-15), not the bare worktree root: a
+    write there would otherwise be flagged as an out-of-scope change by the
+    writing role's own ``enforce_write_scope`` check (ROLE-05, D-14's
+    zero-tolerance empty ``write_scope`` in these db-test fixtures) and
+    reverted before ever reaching the gate. This is what a
+    gate-FAIL-then-PASS scenario uses to make a gate command's exit code flip
+    between the Developer's bounced attempts, without disturbing write-scope
+    enforcement for either role.
+    """
+
+    def __init__(
+        self,
+        run_root: Path,
+        *,
+        attempt_files: dict[tuple[str, int], dict[str, str]],
+        sentinel_writes: dict[tuple[str, int], str] | None = None,
+    ) -> None:
+        self._run_root = run_root
+        self._attempt_files = attempt_files
+        self._sentinel_writes = sentinel_writes or {}
+
+    def _record(self, context: object) -> WorkerResult:
+        role = getattr(context, "role", None)
+        attempt = getattr(context, "attempt", None)
+        assert role in _FOUR_ROLE_FILES, role
+        files = self._attempt_files.get((role, attempt), _FOUR_ROLE_FILES[role])
+        refs = write_role_artifacts(self._run_root, role, files)
+        sentinel_name = self._sentinel_writes.get((role, attempt))
+        if sentinel_name is not None:
+            # ``self._run_root`` is ``<worktree root>/.dark-factory/runs/<run_id>``
+            # (see ``artifacts.paths.run_root``) -- one ``.parent`` hop back is
+            # ``<worktree root>/.dark-factory/runs``, still inside the
+            # gitignored prefix but independent of this specific run id.
+            gitignored_runs_dir = self._run_root.parent
+            (gitignored_runs_dir / sentinel_name).touch()
+        return WorkerResult(
+            status=WorkerResultStatus.COMPLETED,
+            summary=f"{role} completed (attempt {attempt})",
             worker_session_id=f"fake-{role.lower()}-{uuid4()}",
             artifacts=refs,
         )
