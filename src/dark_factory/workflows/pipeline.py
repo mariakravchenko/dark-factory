@@ -23,6 +23,7 @@ __all__ = [
     "current_node",
     "next_node",
     "pipeline_from_snapshot",
+    "previous_node",
 ]
 
 
@@ -99,3 +100,12 @@ def next_node(pipeline: Pipeline, current_role: str) -> RoleNode | None:
     if following >= len(pipeline.nodes):
         return None
     return pipeline.nodes[following]
+
+
+def previous_node(pipeline: Pipeline, current_role: str) -> RoleNode | None:
+    """Return the node before ``current_role``, or ``None`` when it is the first one."""
+    idx = pipeline.index_of(current_role)
+    preceding = idx - 1
+    if preceding < 0:
+        return None
+    return pipeline.nodes[preceding]

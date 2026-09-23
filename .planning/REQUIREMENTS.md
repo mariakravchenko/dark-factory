@@ -94,8 +94,8 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [ ] **LOOP-01**: A QA FAIL returns a structured issues artifact (severity, acceptance_criterion, description) to the Developer for the next attempt
 - [ ] **LOOP-02**: A quality-gate failure returns the actual failure output to the Developer, after which QA re-evaluates and the gate re-runs
-- [ ] **LOOP-03**: Feedback iterations are bounded by repository configuration (`retry.qa_developer_max_iterations`, `retry.quality_gate_max_iterations`), checked before dispatch
-- [ ] **LOOP-04**: When retry limits are exhausted the run transitions to FAILED with every attempt and reason persisted
+- [x] **LOOP-03**: Feedback iterations are bounded by repository configuration (`retry.qa_developer_max_iterations`, `retry.quality_gate_max_iterations`), checked before dispatch
+- [x] **LOOP-04**: When retry limits are exhausted the run transitions to FAILED with every attempt and reason persisted
 
 ### Independent Quality Gate
 
@@ -244,8 +244,8 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | HITL-08 | Phase 2 | Complete |
 | LOOP-01 | Phase 9 | Pending |
 | LOOP-02 | Phase 9 | Pending |
-| LOOP-03 | Phase 9 | Pending |
-| LOOP-04 | Phase 9 | Pending |
+| LOOP-03 | Phase 9 | Complete |
+| LOOP-04 | Phase 9 | Complete |
 | GATE-01 | Phase 9 | Complete |
 | GATE-02 | Phase 9 | Complete |
 | GATE-03 | Phase 9 | Complete |

@@ -19,11 +19,25 @@ verdict PASS or FAIL" gap this module documents above is now closed --
 now fails the run instead of completing it, and a PASS verdict is followed
 by an independent quality-gate run before the pipeline may complete. See
 `tests/db/test_quality_gate_gates_the_run.py` for the real `drive()` proof
-of both routes. Every scenario in *this* module still ends `FAILED` via a
-schema violation raised before that new logic is ever reached (the schema
-check happens first, inside `collect_role_artifacts`, and downgrades the
-signal away from `ROLE_COMPLETED` before the terminal-role gate block would
-run), so none of its own assertions changed.
+of both routes. Every scenario in *this* module but one still ends `FAILED`
+via a schema violation raised before that new logic is ever reached (the
+schema check happens first, inside `collect_role_artifacts`, and downgrades
+the signal away from `ROLE_COMPLETED` before the terminal-role gate block
+would run), so none of those assertions changed.
+
+**Updated by Phase 9 (plan 09-02):** the one exception is
+`test_qa_verdict_fail_advances_the_run_exactly_like_pass` below -- its
+`verdict.json` is schema-*valid* (an internally consistent FAIL), so it
+*does* reach the terminal-role gate block, and plan 09-01 left its
+`RunStatus.COMPLETED` assertion stale (D-06's Phase 4 framing this module
+opens with, not yet updated for the FAIL route plan 09-01 itself closed).
+This module's own single-role `[QA]` pipeline additionally makes QA both
+the terminal *and* the first role, so plan 09-02's bounded feedback loop
+has nowhere to bounce to: `previous_node` returns `None` and
+`Signal.ROLE_FAILED` carries reason `no_earlier_role_to_bounce_to`
+(LOOP-04's adjacency case), not a bounce. See
+`tests/db/test_qa_bounce.py` for the real bounce proof on a pipeline with
+an earlier role to bounce to.
 
 Follows the same real-run db-test idiom as `tests/db/test_four_role_pipeline.py`
 / `tests/db/test_run_failure_path.py`: a config tree, `start_run`, an injected
@@ -564,16 +578,24 @@ def test_qa_misleading_success_prose_with_inconsistent_verdict_fails_the_role(
     assert path.is_file()
 
 
-def test_qa_verdict_fail_advances_the_run_exactly_like_pass(
+def test_qa_verdict_fail_with_no_earlier_role_fails_the_run(
     config_root_factory: Callable[..., Path],
     real_session_factory: SessionFactory,
     cleanup_runs: list[Any],
     engine: Engine,
 ) -> None:
-    """Behavior bullet 7 (D-06): a QA attempt whose `verdict.json` declares
-    FAIL consistently (one FAIL criterion, declared status FAIL -- internally
-    consistent) advances the run exactly as a PASS verdict does. Phase 4 does
-    not branch the transition on verdict content."""
+    """Behavior bullet 7, updated for Phase 9 (plan 09-02): a QA attempt
+    whose `verdict.json` declares FAIL consistently (one FAIL criterion,
+    declared status FAIL -- internally consistent, so it reaches the
+    terminal-role gate block rather than being caught by schema validation)
+    now fails the run -- plan 09-01 closed the Phase 4 D-06 gap this
+    module's own docstring records. This module's single-role `[QA]`
+    pipeline makes QA the terminal role *and* the first role, so plan
+    09-02's bounded feedback loop has nowhere to bounce to
+    (`previous_node` returns `None`): the run ends `FAILED` with reason
+    `no_earlier_role_to_bounce_to` (LOOP-04's adjacency case), never a
+    bounce. See `tests/db/test_qa_bounce.py` for the real bounce proof on a
+    pipeline with an earlier role."""
     root = _single_role_tree(config_root_factory, "QA", outputs="[verdict.json]")
     run_id, run_dir = _start_run_and_get_run_dir(
         root, real_session_factory, cleanup_runs
@@ -596,17 +618,20 @@ def test_qa_verdict_fail_advances_the_run_exactly_like_pass(
     ]
 
     final = _drive(run_id, root, real_session_factory, script)
-    assert final is RunStatus.COMPLETED
+    assert final is RunStatus.FAILED
 
     with Session(engine) as session:
         execution = session.scalars(
             sa.select(RoleExecution).where(RoleExecution.run_id == run_id)
         ).one()
-        assert execution.status == "COMPLETED"
+        assert execution.status == "FAILED"
+        assert execution.error is not None
+        assert execution.error.get("error") == "no_earlier_role_to_bounce_to"
 
     types = _record_event_types(engine, run_id)
-    assert "ROLE_COMPLETED" in types
-    assert "RUN_COMPLETED" in types
+    assert "ROLE_FAILED" in types
+    assert "RUN_FAILED" in types
+    assert "ROLE_BOUNCED" not in types
 
 
 def test_run_events_never_leave_the_ten_member_event_type_enum() -> None:

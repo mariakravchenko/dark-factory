@@ -17,6 +17,13 @@ substitution: the query under test (`context/builder.py`'s D-03 selection --
 ordering by `attempt DESC LIMIT 1`) is the real production query; only the
 state that reaches it is arranged by the test rather than by a feedback loop.
 
+**Phase 9, plan 09-02:** the sequence this module hand-simulates is now
+produced for real by `tests/db/test_qa_bounce.py`'s
+`test_qa_fail_then_pass_bounces_once_and_completes`, which drives an actual
+QA-verdict FAIL through `Signal.ROLE_BOUNCED` and a real `drive()` call. This
+module's own assertions are unchanged -- it still proves the production
+query in isolation, which remains valuable on its own.
+
 Follows the in-process db-test idiom `tests/db/test_apply_transition.py` and
 `tests/db/test_load_run_state.py` established: drive `create_run` /
 `apply_transition` directly against `db_session`, then read state back with

@@ -22,14 +22,20 @@ more -- QUALITY_GATE_STARTED, QUALITY_GATE_PASSED, QUALITY_GATE_FAILED
 ``orchestrator/quality_gate.py`` / ``orchestrator/runner.py`` genuinely
 write: the gate has no ``role_executions`` row of its own (D-01), so these
 purpose-built events are the only durable trace that it ran at all,
-following the identical ``CAPABILITY_DENIED`` precedent. The remainder
+following the identical ``CAPABILITY_DENIED`` precedent. Phase 9 also adds
+a fourth member -- ROLE_BOUNCED (D-04) -- the bounded-feedback-loop audit
+tie ``orchestrator/runner.py`` writes when a QA-verdict FAIL or a
+quality-gate FAIL sends the run back to the Developer under its
+configured iteration cap: deliberately **not** the ``ROLE_FAILED`` /
+``RUN_FAILED`` pair, because those two specifically mean the run is dead,
+and a bounce is a run that is still alive and looping. The remainder
 listed in PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED,
 PUBLISH_STARTED, PR_CREATED -- still arrive in Phase 12; Phase 9 having
-already shipped ``QUALITY_GATE_FAILED/PASSED`` above means Phase 12 must
-not re-add them. A member present in the enum but never written is a false
-signal in the audit surface, so the not-yet-reachable types are
-deliberately not pre-declared here; that rule is what keeps the Phase 12
-observability claim honest.
+already shipped ``QUALITY_GATE_FAILED/PASSED``/``ROLE_BOUNCED`` above
+means Phase 12 must not re-add them. A member present in the enum but
+never written is a false signal in the audit surface, so the
+not-yet-reachable types are deliberately not pre-declared here; that rule
+is what keeps the Phase 12 observability claim honest.
 """
 
 from enum import StrEnum
@@ -63,3 +69,6 @@ class EventType(StrEnum):
     QUALITY_GATE_STARTED = "QUALITY_GATE_STARTED"
     QUALITY_GATE_PASSED = "QUALITY_GATE_PASSED"
     QUALITY_GATE_FAILED = "QUALITY_GATE_FAILED"
+
+    # Phase 9 -- the bounded-feedback-loop bounce audit tie (D-04).
+    ROLE_BOUNCED = "ROLE_BOUNCED"
