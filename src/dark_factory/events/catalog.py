@@ -16,12 +16,20 @@ denied by ``ToolRegistry.invoke()`` (T-06-05) must leave a first-class,
 auditable fact behind, not just the ``ROLE_FAILED`` / ``RUN_FAILED`` pair a
 denial already produces -- this member is emitted *in addition to* those
 two, never instead of them (D-08), so no existing observability consumer
-needs a new branch to recognise a failed run. The remainder listed in
-PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED, QUALITY_GATE_FAILED/PASSED,
-PUBLISH_STARTED, PR_CREATED -- still arrive in Phase 12. A member present in the
-enum but never written is a false signal in the audit surface, so the
-not-yet-reachable types are deliberately not pre-declared here; that rule is what
-keeps the Phase 12 observability claim honest.
+needs a new branch to recognise a failed run. Phase 9 adds exactly three
+more -- QUALITY_GATE_STARTED, QUALITY_GATE_PASSED, QUALITY_GATE_FAILED
+(D-02) -- the independent-quality-gate audit tie
+``orchestrator/quality_gate.py`` / ``orchestrator/runner.py`` genuinely
+write: the gate has no ``role_executions`` row of its own (D-01), so these
+purpose-built events are the only durable trace that it ran at all,
+following the identical ``CAPABILITY_DENIED`` precedent. The remainder
+listed in PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED,
+PUBLISH_STARTED, PR_CREATED -- still arrive in Phase 12; Phase 9 having
+already shipped ``QUALITY_GATE_FAILED/PASSED`` above means Phase 12 must
+not re-add them. A member present in the enum but never written is a false
+signal in the audit surface, so the not-yet-reachable types are
+deliberately not pre-declared here; that rule is what keeps the Phase 12
+observability claim honest.
 """
 
 from enum import StrEnum
@@ -50,3 +58,8 @@ class EventType(StrEnum):
 
     # Phase 6 -- the capability-denial audit tie (D-07, D-08).
     CAPABILITY_DENIED = "CAPABILITY_DENIED"
+
+    # Phase 9 -- the independent quality-gate audit tie (D-02).
+    QUALITY_GATE_STARTED = "QUALITY_GATE_STARTED"
+    QUALITY_GATE_PASSED = "QUALITY_GATE_PASSED"
+    QUALITY_GATE_FAILED = "QUALITY_GATE_FAILED"
