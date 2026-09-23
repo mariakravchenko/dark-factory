@@ -13,8 +13,16 @@ which this package's actions are forbidden to do. The shipped role YAMLs
 ``before:``/``after:``; both calls happen unconditionally in
 ``orchestrator/runner.py`` for every role, not as something a role's config
 opts into. ``ensure_clean_worktree`` became real in Phase 5 (GIT-01, D-05,
-D-06, D-08); ``collect_diff`` became real in plan 05-03 (D-10) -- only
-``collect_test_results`` still waits on a later phase (Phase 9, GATE-04).
+D-06, D-08); ``collect_diff`` became real in plan 05-03 (D-10).
+``collect_test_results`` joins ``prepare_role_context``/``store_role_artifacts``
+as a permanent no-op as of Phase 9 (plan 09-03): the quality gate is
+orchestrator-only code in ``orchestrator/quality_gate.py``, wired directly
+into ``orchestrator/runner.py``'s post-QA dispatch, because an ``after:``
+hook runs unconditionally regardless of the worker's signal and cannot
+itself influence the ``Signal`` the transition uses three lines later --
+a hook could never have driven the gate/bounce decision. See
+``orchestrator/quality_gate.py`` for where the quality-gate result is
+actually produced.
 
 Phase 6 (plan 06-01, TOOL-03): artifact-tier capability grants are checked
 inside ``collect_role_artifacts`` itself, at the same unconditional
@@ -134,5 +142,14 @@ def store_role_artifacts(ctx: ActionContext) -> None:
 
 
 def collect_test_results(ctx: ActionContext) -> None:
-    """No-op until Phase 9 (GATE-04): captures the quality-gate test results."""
+    """Permanent no-op (Phase 9, plan 09-03), joining ``prepare_role_context``/
+    ``store_role_artifacts``'s register: the quality gate's execution and its
+    verdict/gate-driven bounce decision are unconditional
+    ``orchestrator/runner.py`` logic (see ``orchestrator/quality_gate.py`` for
+    where the gate result is actually produced), not a hook a role's
+    ``after:`` list opts into -- an ``after:`` hook runs regardless of the
+    worker's signal and cannot itself influence the ``Signal`` the transition
+    uses three lines later, so it could never have driven that decision.
+    Kept, and still resolvable through the default action registry, because a
+    role YAML in the wild may still list it."""
     return None

@@ -33,9 +33,14 @@ permissions:
 # unconditional orchestrator behaviour (orchestrator/runner.py), not
 # something a role opts into -- prepare_role_context / store_role_artifacts
 # used to be listed here but named no-op stubs that never gated either one.
-# collect_test_results stays: it is a genuine Phase 9 (GATE-04) placeholder
-# with no unconditional equivalent elsewhere yet. See
-# src/dark_factory/actions/builtins.py's module docstring.
+# collect_test_results is no longer a placeholder for anything (Phase 9,
+# plan 09-03): GATE-04 shipped as orchestrator-inline code in plan 09-01
+# because an after: hook runs unconditionally regardless of the worker's
+# signal and cannot itself influence the Signal the transition uses three
+# lines later, so a hook could never have driven the bounce decision.
+# collect_test_results remains a registered no-op, kept for config
+# compatibility. See src/dark_factory/actions/builtins.py's module
+# docstring and src/dark_factory/orchestrator/quality_gate.py.
 # ensure_clean_worktree (Phase 5, GIT-01) is different: unlike context
 # assembly and artifact persistence it opens no session, so it is
 # legitimately a role-configurable hook and is listed here on every role
