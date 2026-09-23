@@ -385,7 +385,7 @@ Plans:
   3. A QA FAIL returns a structured issues artifact (severity, acceptance criterion, description) to the Developer; a gate FAIL returns the actual command failure output, after which QA re-evaluates and the gate re-runs.
   4. Iteration counts are checked before dispatch against `retry.qa_developer_max_iterations` and `retry.quality_gate_max_iterations`, and on exhaustion the run transitions to FAILED with every attempt and reason persisted.
 
-**Plans**: 1/3 plans executed
+**Plans**: 2/3 plans executed
 
 Plans:
 **Wave 1**
@@ -394,7 +394,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-02-PLAN.md — Rejections loop instead of killing the run: `Signal.ROLE_BOUNCED`, `previous_node`, the per-edge iteration caps checked before dispatch, and FAILED with the reason on exhaustion
+- [x] 09-02-PLAN.md — Rejections loop instead of killing the run: `Signal.ROLE_BOUNCED`, `previous_node`, the per-edge iteration caps checked before dispatch, and FAILED with the reason on exhaustion
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -465,7 +465,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
-| 9. Independent Quality Gate & Bounded Feedback Loops | 1/3 | In Progress|  |
+| 9. Independent Quality Gate & Bounded Feedback Loops | 2/3 | In Progress|  |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
