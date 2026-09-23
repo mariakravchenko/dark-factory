@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 09
-current_phase_name: independent-quality-gate-bounded-feedback-loops
+current_phase_name: Independent Quality Gate & Bounded Feedback Loops
 status: executing
-stopped_at: Phase 9 context gathered
-last_updated: "2026-09-23T11:06:30.013Z"
+stopped_at: Completed 09-04-PLAN.md (gap CR-01 closed); 09-05 (gap CR-02) still pending
+last_updated: "2026-09-23T11:26:58.011Z"
 last_activity: 2026-09-23
 last_activity_desc: Phase 09 execution started
-state_head: 212dd0c07cff84f42a245a616d4e271d577a25a4
+state_head: f83b23a5928433b289e4a498c729ead1994d1dcc
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 50
-  completed_plans: 45
+  completed_plans: 49
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 
 ## Current Position
 
-Phase: 09 (independent-quality-gate-bounded-feedback-loops) — READY TO EXECUTE
-Plan: 1 of 3
-Status: Ready to execute
-Last activity: 2026-09-23 — Phase 09 execution started
+Phase: 09 (Independent Quality Gate & Bounded Feedback Loops) — EXECUTING
+Plan: 4 of 5 complete (09-01, 09-02, 09-03, 09-04 have SUMMARY.md; 09-05 gap-closure CR-02 still pending)
+Status: 09-04 (gap CR-01) closed this session; 09-05 (gap CR-02) queued next, no file overlap
+Last activity: 2026-09-23 — Completed 09-04-PLAN.md
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -101,6 +101,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 07 P03 | 12min | 3 tasks | 4 files |
 | Phase 07 P04 | 14min | 2 tasks | 4 files |
 | Phase 08 P06 | 90min | 2 tasks | 21 files |
+| Phase 09 P04 | 35min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,7 @@ Recent decisions affecting current work:
 - [Phase 07]: [Phase 07]: 07-02: TDD RED anchor for the guard-on-the-guard test was the self-detection sanity test, not the main assertion -- a stub _offenders() returning [] trivially passes "no offenders" on an already-compliant workflow, so RED had to target test_the_guard_detects_its_own_subject instead
 - [Phase 07]: [Phase 07]: 07-03: NEEDS_INPUT marker regex (MULTILINE anchors line-start; DOTALL+\Z captures multi-line question); resume() shares execute()'s entire spawn/timeout/redact/parse pipeline via _spawn_and_parse(argv, context) so the two entry points cannot drift; capabilities() now native_resume=True; contract suite runs ClaudeCodeWorker with a fake CLI on PATH and no live credential (QUAL-02)
 - [Phase 07]: 07-04: --allowedTools derived from context.tools via NATIVE_TOOL_CONTRACT's first real consumer; artifacts.write kept out of the flat _TOOL_NAMES map and emitted as a path-scoped Edit(<glob>/**) specifier instead of a bare tool name; contract's claude_code prose corrected to name cwd=<worktree> (WORKTREE_CONFINEMENT_NOTE) as the real confinement mechanism, replacing a nonexistent --permission-mode claim; reference guard narrowed to a 3-path _ALLOWED_CONSUMERS allowlist, not deleted
+- [Phase 09]: [Phase 09]: 09-04: widened enforce_write_scope to cover Signal.ROLE_BOUNCED alongside ROLE_COMPLETED (gap CR-01); WriteScopeViolation handler clears counter_increments/bounce_reason on downgrade but leaves gate_events untouched since the gate artifact is already durably committed by the time the check runs
 
 ### Pending Todos
 
@@ -221,6 +223,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-22T19:29:36.566Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-independent-quality-gate-bounded-feedback-loops/09-CONTEXT.md
+Last session: 2026-09-23T11:26:57.937Z
+Stopped at: Completed 09-04-PLAN.md (gap CR-01 closed); 09-05 (gap CR-02) still pending
+Resume file: None
