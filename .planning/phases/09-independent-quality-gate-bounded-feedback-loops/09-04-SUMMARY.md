@@ -129,3 +129,7 @@ None -- no external services, no new dependency, no config change.
 ## Next Phase Readiness
 
 Gap CR-01 is closed. Sibling gap-closure plan `09-05` (CR-02, touching `src/dark_factory/orchestrator/quality_gate.py` and `tests/unit/test_quality_gate.py`) has not yet run -- it is still pending and is expected to execute next, with no file overlap against this plan's changes.
+
+## Self-Check: PASSED
+
+All created/modified files confirmed present on disk; all 4 task/plan commit hashes (932a278, d276985, 3655448, b84685c) confirmed present in git log.
