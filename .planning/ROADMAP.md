@@ -385,7 +385,7 @@ Plans:
   3. A QA FAIL returns a structured issues artifact (severity, acceptance criterion, description) to the Developer; a gate FAIL returns the actual command failure output, after which QA re-evaluates and the gate re-runs.
   4. Iteration counts are checked before dispatch against `retry.qa_developer_max_iterations` and `retry.quality_gate_max_iterations`, and on exhaustion the run transitions to FAILED with every attempt and reason persisted.
 
-**Plans**: 5/5 plans executed (2 gap-closure plans added after verification)
+**Plans**: 6 plans (5 executed; 3 gap-closure plans added — 2 after verification, 1 after UAT)
 
 Plans:
 **Wave 1**
@@ -404,6 +404,10 @@ Plans:
 
 - [x] 09-04-PLAN.md — CR-01: a bounced attempt is write-scope-enforced exactly like a completed one — the ROLE-05 guard covers `Signal.ROLE_BOUNCED`, a violation clears the bounce's counter increment and reason, and a db-tier regression test proves an out-of-scope write cannot survive a bounce
 - [x] 09-05-PLAN.md — CR-02: the configured `quality_gate.commands` string is redacted against `known_secrets` before it is persisted, so a credential embedded in a gate command never reaches the committed `verification/quality_gate.json`
+
+**Gap closure** *(from 09-UAT.md; wave 1, test-only, no overlap with 09-04/09-05)*
+
+- [ ] 09-06-PLAN.md — G-09-6 + G-09-7: the Developer attempt-2 `RoleContext` rebuild in `tests/db/test_feedback_reaches_developer.py` derives the run's worktree via `ensure_worktree` from the persisted branch columns instead of reading artifacts under the config repo root, plus a DB-free AST guard against the regression
 
 **Invariants**: verdicts from exit codes and machine JSON, never prose; the real failure payload is persisted, not just a boolean.
 
