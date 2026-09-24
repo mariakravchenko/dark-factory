@@ -1,9 +1,9 @@
 ---
-status: complete
+status: diagnosed
 phase: 09-independent-quality-gate-bounded-feedback-loops
 source: [09-VERIFICATION.md]
 started: 2026-09-23T12:15:00Z
-updated: 2026-09-24T09:00:00Z
+updated: 2026-09-24T09:15:00Z
 ---
 
 ## Current Test
@@ -70,17 +70,23 @@ blocked: 0
   reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_qa_fail_delivers_structured_issues_to_developer_attempt_2 FAILED with dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Test-fixture defect, zero production impact. tests/db/test_feedback_reaches_developer.py's _CapturingWorker (lines 189-191) calls build_role_context(fresh_session, self._repo_root, ...) directly to rebuild the DEVELOPMENT attempt-2 context, but self._repo_root is set to repo_root=root (the config_root_factory tree, <tmp>/repo) at lines 275/373 -- NOT the git worktree runner.py itself always passes (work_dir, from ensure_worktree). worktree_path() makes the worktree a sibling of repo_root (<repo_root.parent>/dark-factory-runs/<run_id>/), so the two roots never coincide and read_artifact_text looks under the wrong tree entirely. design.md just happens to be the first required input DEVELOPMENT declares, so it's the first read to fail -- ARCHITECTURE's artifacts were committed correctly (confirmed: the DB lookups ahead of the failing read all succeeded). The only production call site of build_role_context (runner.py:866) always passes work_dir, so real advance()/resume() is unaffected. Confirmed by a real non-DB differential experiment (make_git_repo + ensure_worktree + write_role_artifacts): reading via repo_root reproduces the exact error shape, reading via work_dir succeeds."
+  artifacts:
+    - path: "tests/db/test_feedback_reaches_developer.py"
+      issue: "_CapturingWorker constructed with repo_root=root instead of repo_root=work_dir at lines 275 and 373 (the two call sites that construct it for the rebuild-at-attempt-2 scenario)"
+  missing:
+    - "Construct _CapturingWorker with repo_root=work_dir (already in scope at lines 262/358) instead of repo_root=root at both call sites"
+  debug_session: ".planning/debug/g-09-6-and-g-09-7-missing-architecture-design-md.md"
 - gap_id: G-09-7
   truth: "Developer attempt-2 RoleContext has a quality_gate.json entry whose produced_by is the gate and whose parsed content carries a non-zero exit_code and the sentinel stderr text"
   status: failed
   reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_gate_fail_delivers_real_command_output_to_developer_attempt_2 FAILED with the identical dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Identical root cause to G-09-6 -- same test module, same _CapturingWorker defect, same wrong-root bug (repo_root instead of work_dir), just triggered by the sibling test function (test_gate_fail_delivers_real_command_output_to_developer_attempt_2, lines 358-379) constructing the same worker class the same wrong way."
+  artifacts:
+    - path: "tests/db/test_feedback_reaches_developer.py"
+      issue: "_CapturingWorker constructed with repo_root=root instead of repo_root=work_dir at line 373 (this test's own call site)"
+  missing:
+    - "Same fix as G-09-6, applied at this test's call site (line 373)"
+  debug_session: ".planning/debug/g-09-6-and-g-09-7-missing-architecture-design-md.md"
