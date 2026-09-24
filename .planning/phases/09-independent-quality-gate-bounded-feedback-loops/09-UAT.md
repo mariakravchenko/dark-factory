@@ -1,61 +1,86 @@
 ---
-status: testing
+status: complete
 phase: 09-independent-quality-gate-bounded-feedback-loops
 source: [09-VERIFICATION.md]
 started: 2026-09-23T12:15:00Z
-updated: 2026-09-23T12:15:00Z
+updated: 2026-09-24T09:00:00Z
 ---
 
 ## Current Test
 
-number: 1
-name: GATE-02/GATE-03 — a gate whose commands produced a non-zero exit_code never reaches RunStatus.COMPLETED on that attempt, regardless of the worker's own success-claiming WorkerResult.summary
-expected: |
-  Run reaches RunStatus.FAILED, not COMPLETED, with both configured commands recorded and the QA role-execution row's error naming quality_gate_fail.
-  Run: `uv run pytest -m db -q tests/db/test_quality_gate_gates_the_run.py::test_gate_fail_keeps_the_run_out_of_completed_despite_a_success_summary`
-awaiting: user response
+[testing complete — 1 gap remains open, see ## Gaps]
 
 ## Tests
 
 ### 1. GATE-02/GATE-03: gate FAIL keeps the run out of COMPLETED
 expected: Run reaches RunStatus.FAILED, not COMPLETED, with both configured commands recorded and the QA role-execution row's error naming quality_gate_fail.
-result: [pending]
+result: pass
 
 ### 2. LOOP-03: iteration counter read/compared before the signal is chosen; exactly one counter incremented per attempt
 expected: runs.qa_developer_iterations / runs.quality_gate_iterations increment by exactly 1 on a bounce and the two counters never cross-contaminate.
-result: [pending]
+result: pass
+source: `tests/db/test_qa_bounce.py`, `tests/db/test_iteration_cap_exhaustion.py` — both green in the combined run
 
 ### 3. LOOP-04 (adjacency): failing role with no earlier role yields ROLE_FAILED reason no_earlier_role_to_bounce_to
 expected: A pipeline whose only role FAILs produces ROLE_FAILED immediately with the adjacency reason, never a call into transition() with ROLE_BOUNCED from the first node.
-result: [pending]
+result: pass
+source: manual one-role-pipeline check (thrown away after use, not a permanent test) — real drive() confirmed RunStatus.FAILED, zero ROLE_BOUNCED events, qa_developer_iterations stayed 0. The adjacency reason string itself lands on the ROLE_FAILED event's payload (confirmed by direct source read, runner.py:1319-1326), not RUN_FAILED's — the throwaway script's one failing assertion checked the wrong event, a script bug, not a product bug.
 
 ### 4. LOOP-04 (empty): a cap of 0 makes the first rejection terminal, no zero-value special case
 expected: Run ends FAILED with zero ROLE_BOUNCED events and runs.qa_developer_iterations still 0.
-result: [pending]
+result: pass
+source: `tests/db/test_iteration_cap_exhaustion.py` — green in the combined run
 
 ### 5. LOOP-04 (idempotency): re-driving an exhausted run adds no further events/increments
 expected: run_events row count and both counter columns are byte-identical before and after a second advance() call on a terminal run.
-result: [pending]
+result: pass
+source: `tests/db/test_iteration_cap_exhaustion.py` — green in the combined run
 
 ### 6. LOOP-01: a bounced Developer's next attempt receives verdict.json with QA's structured issues, end to end
 expected: Developer attempt-1 RoleContext has no verdict.json entry; attempt-2 RoleContext has one whose produced_by names QA and whose content carries the FAIL issue's severity/criterion/description.
-result: [pending]
+result: issue
+reported: "tests/db/test_feedback_reaches_developer.py::test_qa_fail_delivers_structured_issues_to_developer_attempt_2 FAILED — dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md, raised from context/builder.py:327 -> read_artifact_text. Reproduced twice (same failure both times the combined command was run)."
+severity: major
 
 ### 7. LOOP-02 (payload): a bounced Developer's next attempt receives quality_gate.json with the real per-command failure output, end to end
 expected: Developer attempt-2 RoleContext has a quality_gate.json entry whose produced_by is the gate and whose parsed content carries a non-zero exit_code and the sentinel stderr text.
-result: [pending]
+result: issue
+reported: "tests/db/test_feedback_reaches_developer.py::test_gate_fail_delivers_real_command_output_to_developer_attempt_2 FAILED — same root: dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md. Both failures in this module share the identical error, both raised from the same _resolve_input -> read_artifact_text call chain."
+severity: major
 
 ### 8. CR-01 (ROLE-05 on bounce): a real four-role drive() run where QA writes outside its declared write_scope on an attempt that would otherwise bounce ends FAILED
 expected: Zero ROLE_BOUNCED events, runs.qa_developer_iterations still 0, the planted path reverted from disk, exactly one role_executions row per role, and a RUN_FAILED event naming write_scope.
-result: [pending]
+result: pass
+source: `tests/db/test_write_scope_enforced_on_bounce.py::test_a_bounce_is_write_scope_enforced_exactly_like_a_completion` — green in the combined run. This is CR-01's own behavioral proof, the last item this phase's gap closure needed.
 
 ## Summary
 
 total: 8
-passed: 0
-issues: 0
-pending: 8
+passed: 6
+issues: 2
+pending: 0
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+- gap_id: G-09-6
+  truth: "Developer attempt-1 RoleContext has no verdict.json entry; attempt-2 RoleContext has one whose produced_by names QA and whose content carries the FAIL issue's severity/criterion/description"
+  status: failed
+  reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_qa_fail_delivers_structured_issues_to_developer_attempt_2 FAILED with dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
+  severity: major
+  test: 6
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
+- gap_id: G-09-7
+  truth: "Developer attempt-2 RoleContext has a quality_gate.json entry whose produced_by is the gate and whose parsed content carries a non-zero exit_code and the sentinel stderr text"
+  status: failed
+  reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_gate_fail_delivers_real_command_output_to_developer_attempt_2 FAILED with the identical dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
+  severity: major
+  test: 7
+  root_cause: ""
+  artifacts: []
+  missing: []
+  debug_session: ""
