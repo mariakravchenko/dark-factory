@@ -69,6 +69,10 @@ resume it; durability and observability are the same requirement.
 - ✓ `CodingWorker` contract proven across all three runtimes (Claude Code — Phase 7; Copilot and Hermes — Phase 8) — shared contract suite pins the invariant across all three, and plan 08-06 additionally executed the full negative/positive proof set against a real PostgreSQL instance for the first time
 - ✓ Any role can be assigned to any of the three workers via configuration with no workflow-code change — Phase 8 (WORK-09, ROADMAP SC2: shipped roles reassigned across all three runtimes, run still completes)
 - ✓ Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent — Phase 8 (QUAL-03)
+- ✓ After QA passes, Dark Factory independently runs the configured `quality_gate.commands` in the repo environment; agent self-validation is preserved but never accepted as final system truth — Phase 9 (GATE-01, GATE-02, GATE-03)
+- ✓ Quality-gate result written to `verification/quality_gate.json`, redacted against known secrets in both captured output and the command string itself (CR-02) — Phase 9 (GATE-04)
+- ✓ QA FAIL returns a structured issues artifact to the Developer; quality-gate FAIL returns the real command failure output; both feed the Developer's next attempt via `optional_inputs`/`ContextBuilder` — Phase 9 (LOOP-01, LOOP-02)
+- ✓ Retry limits from repo config (`retry.qa_developer_max_iterations`, `retry.quality_gate_max_iterations`) checked before dispatch; on exhaustion the run transitions to `FAILED` with every attempt and reason persisted — Phase 9 (LOOP-03, LOOP-04)
 
 ### Active
 
@@ -109,15 +113,9 @@ resume it; durability and observability are the same requirement.
 - [ ] Cross-process / cross-machine resume works (local → CI, webhook, delayed human answer)
 - [ ] Concurrency: two processes must not execute the same run simultaneously — Postgres transactions / row locking / conditional updates; no separate distributed-lock service
 
-**Feedback loops & retry policy**
-- [ ] QA FAIL returns a structured issues artifact to the Developer (severity, acceptance_criterion, description)
-- [ ] Quality-gate failure returns actual failure output to the Developer, then QA re-evaluates, then the gate re-runs
-- [ ] Retry limits from repo config (`retry.qa_developer_max_iterations`, `retry.quality_gate_max_iterations`); on exhaustion → `FAILED`, every attempt and reason persisted
+**Feedback loops & retry policy** — shipped Phase 9, see Validated above
 
-**Independent verification (Quality Gate)**
-- [ ] After QA passes, Dark Factory independently runs the configured `quality_gate.commands` in the repo environment (e.g. `pytest`, `ruff check .`, `mypy .`)
-- [ ] Agent self-validation (Developer/QA running their own tests/lint/build) is preserved and is *not* accepted as final system truth
-- [ ] Quality-gate result written to `verification/quality_gate.json`
+**Independent verification (Quality Gate)** — shipped Phase 9, see Validated above
 
 **Git lifecycle & GitHub integration**
 - [ ] Publishing occurs only when QA = PASS **and** Quality Gate = PASS → collect diff, commit, push, create PR, persist PR metadata → COMPLETED
@@ -205,6 +203,9 @@ resume it; durability and observability are the same requirement.
 | `enforce_artifact_scope` confines a role's `artifacts.write` grant to its own `artifacts/<role>/` subtree — a narrower, orchestrator-side, worker-agnostic control distinct from `enforce_write_scope` (ROLE-05's repo-wide boundary) — because Copilot's and Hermes's native tool surfaces expose no path-scoped read/write specifier to narrow at the adapter level | CR-01 (08-REVIEW.md): a granted `artifacts.write`, once native-tool-confined only by each adapter's own (uneven) capability, let one role overwrite another's committed artifact. Deny-by-default over the whole tree when the role holds no `artifacts.write` grant at all, matching D-14's zero-tolerance polarity | Shipped Phase 8 (plan 08-05); proven negatively on both Hermes and Copilot, positively on the untampered control |
 | A shared test harness's exit-code expectation must be stated per-caller with no default, never inherited from whichever caller was written first | G-08-2 (08-REVIEW.md, `.planning/debug/cli-exit-code-on-failed-run.md`): `_drive_shipped_config` asserted a positive-path exit code unconditionally, contradicting the two negative-path tests it also served — committed and never executed against a real database, so the contradiction shipped silently | Fixed Phase 8 (plan 08-06); zero production change, `src/dark_factory/cli.py`'s D-05 mapping unchanged |
 | A `FakeWorker`-scripted multi-role fixture must write each role's artifact files at `execute()` time, never all up front | Front-loading (the original `four_role_script` shape) is invisible to `enforce_write_scope`/exit-code checks but trips `enforce_artifact_scope` (08-05) the moment it exists: a later role's not-yet-run files are already on disk when an earlier role's own scope check runs. `LazyFourRoleWorker` is now the shared pattern for any db test driving a real multi-role `drive()` call | Found and fixed Phase 8 (plan 08-06, out of that plan's declared scope, fixed at user request); `tests/db/test_artifact_commit_per_role.py` had already independently discovered the same fix for the same reason |
+| `enforce_write_scope`'s guard widened to fire on both `Signal.ROLE_COMPLETED` and `Signal.ROLE_BOUNCED` (one call site, not a parallel second check) | CR-01 (09-REVIEW.md): the guard originally covered only completion, so a bounced attempt's out-of-scope write bypassed the ROLE-05 authorization boundary entirely | Shipped Phase 9 (plan 09-04); proved by `tests/db/test_write_scope_enforced_on_bounce.py` |
+| `run_quality_gate`'s command-text field is redacted identically to its stdout/stderr, at construction time, before `GateCommandResult` exists | CR-02 (09-REVIEW.md): only the two output streams were redacted; a secret embedded in the configured command string itself reached the committed `quality_gate.json` unredacted | Shipped Phase 9 (plan 09-05); single choke point, no second redaction call site |
+| The Developer's attempt-2 `RoleContext` rebuild in test fixtures must derive the run's worktree via `ensure_worktree(base_branch, working_branch)` from the freshly loaded `RunState`, never from a pre-computed `repo_root` | G-09-6/G-09-7: `_CapturingWorker` passed the config repo root instead of the git worktree to `build_role_context`, making LOOP-01/LOOP-02's db-tier proofs unconditionally red for a whole phase — a test-fixture defect, zero production impact (`runner.py:866` always passed the correct value). Root cause: `.planning/debug/resolved/g-09-6-and-g-09-7-missing-architecture-design-md.md` | Fixed Phase 9 (plan 09-06); new DB-free AST guard (`tests/unit/test_role_context_rebuild_uses_the_worktree.py`) restores detection; behaviorally confirmed against real PostgreSQL 17 (2 passed) |
 
 ## Evolution
 
@@ -224,4 +225,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-22 after Phase 8*
+*Last updated: 2026-09-26 after Phase 9*
