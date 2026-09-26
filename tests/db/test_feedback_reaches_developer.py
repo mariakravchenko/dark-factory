@@ -25,6 +25,20 @@ the worker (before QA's own second attempt has even been entered), proving
 D-07's durability guarantee: a fresh process reconstructing the run right
 then, from only what is already committed, resolves the identical
 `RoleContext`.
+
+The rebuild derives the run's worktree the same way a fresh process does --
+by calling `ensure_worktree` with the `base_branch` / `working_branch` read
+off the freshly loaded `RunState`, exactly as `_advance_once`
+(runner.py:854-866) does -- rather than resolving artifacts against the
+config repo root. The run tree and the role context always resolve against
+the worktree, never against the config repo root: `worktree_path` places the
+worktree at `<repo_root.parent>/dark-factory-runs/<run_id>/`, a SIBLING of
+`repo_root`, never the same directory or an ancestor/descendant of it. Gaps
+G-09-6 and G-09-7 (09-UAT.md) were exactly this: the rebuild passed the
+stored `repo_root` instead, so every declared input read resolved against a
+directory nothing was ever written into (see
+`.planning/debug/g-09-6-and-g-09-7-missing-architecture-design-md.md`). Do
+not simplify this derivation back to a stored path -- that is the bug.
 """
 
 from __future__ import annotations
@@ -186,8 +200,14 @@ class _CapturingWorker(CodingWorker):
             role_def = next(
                 r for r in fresh_state.workflow["roles"] if r["name"] == context.role
             )
+            work_dir = ensure_worktree(
+                self._repo_root,
+                self._run_id,
+                base_branch=fresh_state.base_branch,
+                working_branch=fresh_state.working_branch,
+            )
             self._rebuilt[key] = build_role_context(
-                fresh_session, self._repo_root, self._run_id, fresh_state, role_def
+                fresh_session, work_dir, self._run_id, fresh_state, role_def
             )
 
     def execute(self, context: object) -> WorkerResult:
