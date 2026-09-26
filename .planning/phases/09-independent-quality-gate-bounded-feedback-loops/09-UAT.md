@@ -1,23 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 09-independent-quality-gate-bounded-feedback-loops
 source: [09-VERIFICATION.md, 09-06-SUMMARY.md]
 started: 2026-09-23T12:15:00Z
-updated: 2026-09-26T09:35:00Z
+updated: 2026-09-26T10:05:00Z
 ---
 
 ## Current Test
 
-number: 6-7
-name: LOOP-01/LOOP-02 db-tier re-proof (G-09-6, G-09-7 — one command closes both)
-expected: |
-  Gap-closure plan 09-06 fixed the shared test-fixture root cause (see ## Gaps below) and
-  added a DB-free AST guard, but the actual db-tier scenarios have not been re-executed
-  against a real PostgreSQL 17 since the fix landed (structural fix confirmed this sandbox;
-  end-to-end behavior cannot run here per the sandbox's documented PostgreSQL 17 limitation).
-  Run: `uv run pytest -m db -q tests/db/test_feedback_reaches_developer.py`
-  Expect: 2 passed, 0 skipped, 0 failed — neither scenario raises MissingArtifactContentError.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -47,14 +38,14 @@ source: `tests/db/test_iteration_cap_exhaustion.py` — green in the combined ru
 
 ### 6. LOOP-01: a bounced Developer's next attempt receives verdict.json with QA's structured issues, end to end
 expected: Developer attempt-1 RoleContext has no verdict.json entry; attempt-2 RoleContext has one whose produced_by names QA and whose content carries the FAIL issue's severity/criterion/description.
-result: pending
-previously: "issue (see history below) — root cause fixed by 09-06-PLAN.md (commit 8df8f06), structurally AST-guarded (tests/unit/test_role_context_rebuild_uses_the_worktree.py, 3 passed), but the db-tier scenario itself has not been re-run since the fix. Awaiting the re-run in ## Current Test."
+result: pass
+source: "User ran `uv run pytest -m db -q tests/db/test_feedback_reaches_developer.py` against real PostgreSQL 17: `2 passed in 129.17s (0:02:09)`. Root cause fixed by 09-06-PLAN.md (commit 8df8f06), structurally AST-guarded (tests/unit/test_role_context_rebuild_uses_the_worktree.py, 3 passed), now behaviorally confirmed end-to-end."
 history: "Originally reported: tests/db/test_feedback_reaches_developer.py::test_qa_fail_delivers_structured_issues_to_developer_attempt_2 FAILED — dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md, raised from context/builder.py:327 -> read_artifact_text. Reproduced twice (same failure both times the combined command was run). severity: major"
 
 ### 7. LOOP-02 (payload): a bounced Developer's next attempt receives quality_gate.json with the real per-command failure output, end to end
 expected: Developer attempt-2 RoleContext has a quality_gate.json entry whose produced_by is the gate and whose parsed content carries a non-zero exit_code and the sentinel stderr text.
-result: pending
-previously: "issue (see history below) — same shared root cause as test 6, fixed by the same 09-06-PLAN.md commit; awaiting the same db-tier re-run."
+result: pass
+source: "Same db-tier run as test 6 (2 tests in the module, both passed: `2 passed in 129.17s`). Same shared root cause, same 09-06-PLAN.md fix commit, now behaviorally confirmed end-to-end."
 history: "Originally reported: tests/db/test_feedback_reaches_developer.py::test_gate_fail_delivers_real_command_output_to_developer_attempt_2 FAILED — same root: dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md. Both failures in this module share the identical error, both raised from the same _resolve_input -> read_artifact_text call chain. severity: major"
 
 ### 8. CR-01 (ROLE-05 on bounce): a real four-role drive() run where QA writes outside its declared write_scope on an attempt that would otherwise bounce ends FAILED
@@ -65,9 +56,9 @@ source: `tests/db/test_write_scope_enforced_on_bounce.py::test_a_bounce_is_write
 ## Summary
 
 total: 8
-passed: 6
+passed: 8
 issues: 0
-pending: 2
+pending: 0
 skipped: 0
 blocked: 0
 
@@ -75,7 +66,7 @@ blocked: 0
 
 - gap_id: G-09-6
   truth: "Developer attempt-1 RoleContext has no verdict.json entry; attempt-2 RoleContext has one whose produced_by names QA and whose content carries the FAIL issue's severity/criterion/description"
-  status: fix_applied_pending_verification
+  status: resolved
   reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_qa_fail_delivers_structured_issues_to_developer_attempt_2 FAILED with dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
   severity: major
   test: 6
@@ -91,11 +82,11 @@ blocked: 0
     commit: "8df8f06 (feat), da0147f (test), 26c6074 (docs)"
     approach: "Route 2 from the debug session: _record_and_maybe_rebuild now calls ensure_worktree(base_branch=fresh_state.base_branch, working_branch=fresh_state.working_branch) itself and passes the returned work_dir to build_role_context, instead of the constructor handing it a pre-computed path. Both _CapturingWorker construction sites unchanged (repo_root=root is correct under this route). New DB-free AST guard: tests/unit/test_role_context_rebuild_uses_the_worktree.py (3 passed)."
     verified_structurally: true
-    verified_behaviorally: false
-    remaining: "Run `uv run pytest -m db -q tests/db/test_feedback_reaches_developer.py` against real PostgreSQL 17 — see ## Current Test. Not claimed resolved until that command shows 2 passed, 0 failed."
+    verified_behaviorally: true
+    behavioral_evidence: "User ran `uv run pytest -m db -q tests/db/test_feedback_reaches_developer.py` against real PostgreSQL 17: 2 passed in 129.17s (0:02:09), 0 failed, 0 skipped. Confirmed 2026-09-26."
 - gap_id: G-09-7
   truth: "Developer attempt-2 RoleContext has a quality_gate.json entry whose produced_by is the gate and whose parsed content carries a non-zero exit_code and the sentinel stderr text"
-  status: fix_applied_pending_verification
+  status: resolved
   reason: "User reported: tests/db/test_feedback_reaches_developer.py::test_gate_fail_delivers_real_command_output_to_developer_attempt_2 FAILED with the identical dark_factory.artifacts.MissingArtifactContentError: artifact file not found: .../artifacts/ARCHITECTURE/design.md"
   severity: major
   test: 7
@@ -111,5 +102,5 @@ blocked: 0
     commit: "8df8f06 (feat), da0147f (test), 26c6074 (docs)"
     approach: "Same fix as G-09-6 — shared call site, shared commit."
     verified_structurally: true
-    verified_behaviorally: false
-    remaining: "Same re-run as G-09-6 — a single command closes both gaps. See ## Current Test."
+    verified_behaviorally: true
+    behavioral_evidence: "Same db-tier run as G-09-6 (same command, same module, both scenarios green): 2 passed in 129.17s (0:02:09), 0 failed, 0 skipped. Confirmed 2026-09-26."
