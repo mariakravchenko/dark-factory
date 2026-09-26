@@ -56,7 +56,9 @@ class _Loader(Protocol):
     ) -> NormalizedTask: ...
 
 
-def _load_text(locator: str, *, repository: Mapping[str, Any] | None = None) -> NormalizedTask:
+def _load_text(
+    locator: str, *, repository: Mapping[str, Any] | None = None
+) -> NormalizedTask:
     """Build a :class:`NormalizedTask` from a plain-text task body.
 
     Surrounding double quotes and outer whitespace are stripped so
@@ -89,7 +91,9 @@ def _strip_heading_marker(first_line: str) -> str:
     return stripped.strip()
 
 
-def _load_spec(locator: str, *, repository: Mapping[str, Any] | None = None) -> NormalizedTask:
+def _load_spec(
+    locator: str, *, repository: Mapping[str, Any] | None = None
+) -> NormalizedTask:
     """Build a :class:`NormalizedTask` from a Markdown spec file on disk.
 
     Mirrors :func:`_load_text`'s shape: the locator's outer whitespace and
@@ -151,7 +155,62 @@ def _load_github(
     *from* the issue's content, only from its identity (owner/repo/number)
     and structure (labels/comment count).
     """
-    raise NotImplementedError("TODO 10-01: _load_github")
+    raw = locator.strip().strip('"')
+    if not _POSITIVE_INTEGER_LOCATOR.fullmatch(raw):
+        raise UnresolvableSourceError(
+            f"github: locator is not a positive integer: {locator!r}"
+        )
+    issue_number = int(raw)
+
+    if repository is None:
+        raise UnresolvableSourceError(
+            "github: no repository configuration is available "
+            "(github_owner/github_repo are not set)"
+        )
+    owner = repository.get("github_owner")
+    repo = repository.get("github_repo")
+    missing = [
+        name
+        for name, value in (("github_owner", owner), ("github_repo", repo))
+        if not value
+    ]
+    if missing:
+        raise UnresolvableSourceError(
+            f"github: repository config is missing: {', '.join(missing)}"
+        )
+    assert isinstance(owner, str)  # narrowed by the `missing` check above
+    assert isinstance(repo, str)
+
+    try:
+        client = GitHubClient.from_settings(get_settings())
+        issue = client.fetch_issue(owner, repo, issue_number=issue_number)
+    except GitHubError as exc:
+        raise UnresolvableSourceError(f"github: {exc}") from exc
+
+    title = _strip_heading_marker(issue.title)[:_TITLE_MAX_LEN]
+    base_body = issue.body if issue.body else issue.title
+    segments = [base_body]
+    for comment in issue.comments:
+        segments.append(
+            f"\n\n--- comment by {comment.author} (id={comment.id}) ---\n{comment.body}"
+        )
+    body = "".join(segments)
+
+    source_ref = f"{owner}/{repo}#{issue_number}"
+    metadata: dict[str, Any] = {
+        "owner": owner,
+        "repo": repo,
+        "issue_number": issue_number,
+        "labels": issue.labels,
+        "comment_count": len(issue.comments),
+    }
+    return NormalizedTask(
+        source_kind="github",
+        source_ref=source_ref,
+        title=title,
+        body=body,
+        metadata=metadata,
+    )
 
 
 _LOADERS: dict[SourceKind, _Loader] = {

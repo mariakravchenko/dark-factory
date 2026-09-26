@@ -121,7 +121,12 @@ class _StubIssuesClient:
         self.calls.append(
             (
                 "create_comment",
-                {"owner": owner, "repo": repo, "issue_number": issue_number, "body": body},
+                {
+                    "owner": owner,
+                    "repo": repo,
+                    "issue_number": issue_number,
+                    "body": body,
+                },
             )
         )
         if self._raise_exc is not None:
@@ -219,7 +224,9 @@ def _make_stub_github(
     *, issues_client: _StubIssuesClient, pulls_client: _StubPullsClient
 ) -> type:
     class _StubGitHub:
-        def __init__(self, token: str, *, timeout: float | None = None, **_: Any) -> None:
+        def __init__(
+            self, token: str, *, timeout: float | None = None, **_: Any
+        ) -> None:
             self.token = token
             self.timeout = timeout
             self.rest = _StubRest(issues_client, pulls_client)
@@ -259,7 +266,9 @@ def test_from_settings_with_a_token_builds_a_working_client(
     issues_client = _StubIssuesClient(issue=issue, comment_pages=[[]])
     _patch_sdk(monkeypatch, issues_client=issues_client)
 
-    client = GitHubClient.from_settings(_settings(github_token="ghp_faketoken1234567890"))
+    client = GitHubClient.from_settings(
+        _settings(github_token="ghp_faketoken1234567890")
+    )
     result = client.fetch_issue("o", "r", issue_number=1)
 
     assert result.number == 1
@@ -337,7 +346,9 @@ def test_api_error_message_omits_a_known_secret_value(
 ) -> None:
     token = "ghp_realfaketoken1234567890abcdef"
     issues_client = _StubIssuesClient(
-        raise_exc=_StubGitHubException(status_code=401, text=f"Bad credentials: {token}")
+        raise_exc=_StubGitHubException(
+            status_code=401, text=f"Bad credentials: {token}"
+        )
     )
     _patch_sdk(monkeypatch, issues_client=issues_client)
 
@@ -380,13 +391,22 @@ def test_create_pull_request_passes_title_head_base_body_through_unchanged(
     _patch_sdk(monkeypatch, pulls_client=pulls_client)
 
     client = GitHubClient(token="ghp_faketoken1234567890")
-    result = client.create_pull_request("o", "r", title="T", head="h", base="b", body="B")
+    result = client.create_pull_request(
+        "o", "r", title="T", head="h", base="b", body="B"
+    )
 
     assert result.number == 7
     assert result.url == "https://github.com/o/r/pull/7"
     assert pulls_client.calls[-1] == (
         "create",
-        {"owner": "o", "repo": "r", "title": "T", "head": "h", "base": "b", "body": "B"},
+        {
+            "owner": "o",
+            "repo": "r",
+            "title": "T",
+            "head": "h",
+            "base": "b",
+            "body": "B",
+        },
     )
 
 
@@ -403,14 +423,21 @@ def test_find_pull_request_for_branch_returns_the_scripted_match(
     _patch_sdk(monkeypatch, pulls_client=pulls_client)
 
     client = GitHubClient(token="ghp_faketoken1234567890")
-    result = client.find_pull_request_for_branch("o", "r", head_branch="dark-factory/run-abc")
+    result = client.find_pull_request_for_branch(
+        "o", "r", head_branch="dark-factory/run-abc"
+    )
 
     assert result is not None
     assert result.number == 9
     assert pulls_client.calls == [
         (
             "list",
-            {"owner": "o", "repo": "r", "head": "o:dark-factory/run-abc", "state": "all"},
+            {
+                "owner": "o",
+                "repo": "r",
+                "head": "o:dark-factory/run-abc",
+                "state": "all",
+            },
         )
     ]
     assert not any(name == "create" for name, _ in pulls_client.calls)

@@ -1,10 +1,11 @@
 """The ``dark_factory.github`` package -- the ONLY place in ``dark_factory``
-that constructs a ``githubkit`` client (D-03).
+that constructs a GitHub REST SDK client (D-03).
 
 Mirrors ``dark_factory.git``'s structure and voice: nothing outside
-``dark_factory/github/client.py`` imports ``githubkit`` directly (verified
-by ``grep -rl githubkit src/dark_factory`` returning exactly that one
-path), so a future GitHub SDK swap stays a one-file change.
+``dark_factory/github/client.py`` imports the third-party GitHub SDK
+directly (verified structurally: a grep for its package name across
+``src/dark_factory`` returns exactly that one path), so a future GitHub
+SDK swap stays a one-file change.
 
 Error hierarchy:
 
@@ -59,9 +60,7 @@ class GitHubApiError(GitHubError):
     :func:`~dark_factory.events.redaction.redact`.
     """
 
-    def __init__(
-        self, message: str, *, status_code: int | None, endpoint: str
-    ) -> None:
+    def __init__(self, message: str, *, status_code: int | None, endpoint: str) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.endpoint = endpoint
@@ -74,7 +73,7 @@ class MissingGitHubCredentialError(GitHubError):
 # Import the submodule after the error hierarchy is declared, so its own
 # ``from dark_factory.github import <ErrorClass>`` succeeds against this
 # module's already-populated namespace (mirrors dark_factory/git/__init__.py).
-from dark_factory.github.client import (  # noqa: E402
+from dark_factory.github.client import (
     GitHubClient,
     GitHubComment,
     GitHubIssue,

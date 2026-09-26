@@ -34,7 +34,9 @@ class _StubClientFactory:
         return self._client
 
 
-def _patch_client(monkeypatch: pytest.MonkeyPatch, fake_client: FakeGitHubClient) -> None:
+def _patch_client(
+    monkeypatch: pytest.MonkeyPatch, fake_client: FakeGitHubClient
+) -> None:
     monkeypatch.setattr(loaders, "get_settings", lambda: object())
     monkeypatch.setattr(loaders, "GitHubClient", _StubClientFactory(fake_client))
 

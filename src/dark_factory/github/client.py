@@ -154,21 +154,92 @@ class GitHubClient:
         ) from exc
 
     def fetch_issue(self, owner: str, repo: str, *, issue_number: int) -> GitHubIssue:
-        """One issue read plus a fully paginated comment read."""
-        raise NotImplementedError("TODO 10-01: fetch_issue")
+        """One issue read plus a fully paginated comment read.
+
+        Uses the SDK's own ``rest.paginate`` helper rather than a
+        hand-rolled page loop, so an issue with more than one page of
+        comments is read whole. A null ``body`` maps to the empty string
+        here; the loader, not this client, decides the title-fallback.
+        """
+        try:
+            issue = self._client.rest.issues.get(owner, repo, issue_number).parsed_data
+            # ``rest.paginate``'s return type parameter cannot be inferred
+            # without a ``map_func`` (it resolves to ``Paginator[Never]``);
+            # an explicit ``Any`` here is the only annotation mypy accepts,
+            # and every attribute this wrapper reads off each page item is
+            # already duck-typed through ``_comment_author``/``getattr``.
+            comment_pages: Any = self._client.rest.paginate(
+                self._client.rest.issues.list_comments,
+                owner=owner,
+                repo=repo,
+                issue_number=issue_number,
+            )
+            comments: list[GitHubComment] = [
+                GitHubComment(
+                    id=comment.id,
+                    author=_comment_author(comment.user),
+                    body=comment.body or "",
+                )
+                for comment in comment_pages
+            ]
+        except GitHubException as exc:
+            self._raise_api_error(
+                exc, endpoint=f"issues.get {owner}/{repo}#{issue_number}"
+            )
+            raise  # pragma: no cover - _raise_api_error always raises
+        return GitHubIssue(
+            number=issue.number,
+            title=issue.title,
+            body=issue.body or "",
+            labels=[_label_name(label) for label in issue.labels],
+            comments=comments,
+        )
 
     def create_comment(
         self, owner: str, repo: str, *, issue_number: int, body: str
     ) -> GitHubComment:
-        raise NotImplementedError("TODO 10-01: create_comment")
+        try:
+            response = self._client.rest.issues.create_comment(
+                owner, repo, issue_number, body=body
+            )
+        except GitHubException as exc:
+            self._raise_api_error(
+                exc, endpoint=f"issues.create_comment {owner}/{repo}#{issue_number}"
+            )
+            raise  # pragma: no cover - _raise_api_error always raises
+        comment = response.parsed_data
+        return GitHubComment(
+            id=comment.id,
+            author=_comment_author(comment.user),
+            body=comment.body or "",
+        )
 
     def create_pull_request(
         self, owner: str, repo: str, *, title: str, head: str, base: str, body: str
     ) -> GitHubPullRequest:
-        raise NotImplementedError("TODO 10-01: create_pull_request")
+        try:
+            response = self._client.rest.pulls.create(
+                owner, repo, title=title, head=head, base=base, body=body
+            )
+        except GitHubException as exc:
+            self._raise_api_error(exc, endpoint=f"pulls.create {owner}/{repo}")
+            raise  # pragma: no cover - _raise_api_error always raises
+        pr = response.parsed_data
+        return GitHubPullRequest(number=pr.number, url=pr.html_url)
 
     def find_pull_request_for_branch(
         self, owner: str, repo: str, *, head_branch: str
     ) -> GitHubPullRequest | None:
         """A pure read -- issues no write of any kind."""
-        raise NotImplementedError("TODO 10-01: find_pull_request_for_branch")
+        try:
+            response = self._client.rest.pulls.list(
+                owner, repo, head=f"{owner}:{head_branch}", state="all"
+            )
+        except GitHubException as exc:
+            self._raise_api_error(exc, endpoint=f"pulls.list {owner}/{repo}")
+            raise  # pragma: no cover - _raise_api_error always raises
+        matches = response.parsed_data
+        if not matches:
+            return None
+        first = matches[0]
+        return GitHubPullRequest(number=first.number, url=first.html_url)
