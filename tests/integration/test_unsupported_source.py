@@ -1,11 +1,14 @@
 """Unsupported and unresolvable sources exit 2 with nothing persisted (D-23).
 
-``github:`` classifies successfully but its loader raises
-``SourceNotSupportedError`` (the last remaining deferred source kind, until
-Phase 10); an unresolvable prefix and an empty ``text:`` body raise
-``UnresolvableSourceError``. In every case the process exits 2 and the ``runs``
-row count is unchanged -- exit 2 is reserved for failures *before* anything is
-persisted.
+``github:`` classifies successfully and its loader is real as of Plan
+10-01 -- but the CLI's ``start_run`` does not yet thread a ``repository``
+config through to it (that wiring lands in plan 10-06), so ``github:<n>``
+still exits 2 in this phase's state: now because no repository config
+reaches the loader (``UnresolvableSourceError``), not because the loader is
+unimplemented. An unresolvable prefix and an empty ``text:`` body also
+raise ``UnresolvableSourceError``. In every case the process exits 2 and
+the ``runs`` row count is unchanged -- exit 2 is reserved for failures
+*before* anything is persisted.
 """
 
 from __future__ import annotations
@@ -47,18 +50,18 @@ def _run_count(engine: Engine) -> int:
 
 
 @pytest.mark.parametrize(
-    ("source", "phase_marker"),
+    ("source", "expected_stderr_substring"),
     [
-        ("github:152", "Phase 10"),
+        ("github:152", "repository"),
     ],
 )
-def test_unsupported_source_exits_2_names_its_phase_and_persists_nothing(
-    source: str, phase_marker: str, pg_url: str, engine: Engine
+def test_unresolvable_source_exits_2_names_the_reason_and_persists_nothing(
+    source: str, expected_stderr_substring: str, pg_url: str, engine: Engine
 ) -> None:
     before = _run_count(engine)
     proc = _cli(["run", source], pg_url)
     assert proc.returncode == 2
-    assert phase_marker in proc.stderr
+    assert expected_stderr_substring in proc.stderr
     assert _run_count(engine) == before
 
 
