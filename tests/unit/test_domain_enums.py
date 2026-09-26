@@ -112,15 +112,15 @@ def test_event_type_contains_the_six_phase_one_members() -> None:
     assert required <= {m.name for m in EventType}
 
 
-def test_event_type_has_exactly_sixteen_members_with_the_phase_two_five_six_and_nine_types() -> (
+def test_event_type_has_exactly_nineteen_members_with_the_phase_two_five_six_nine_and_ten_types() -> (
     None
 ):
     # Exactly the six Phase 1 members plus the four Phase 2 writes plus the one
-    # Phase 5 write plus the one Phase 6 write plus the four Phase 9 writes --
-    # the exact count is what stops a future contributor from pre-declaring the
-    # Phase 12 members, which would advertise transitions that are never
-    # emitted.
-    assert len(list(EventType)) == 16
+    # Phase 5 write plus the one Phase 6 write plus the four Phase 9 writes
+    # plus the three Phase 10 writes -- the exact count is what stops a future
+    # contributor from pre-declaring the Phase 12 members, which would
+    # advertise transitions that are never emitted.
+    assert len(list(EventType)) == 19
     phase_two = {
         "QUESTION_CREATED",
         "RUN_PAUSED",
@@ -139,6 +139,8 @@ def test_event_type_has_exactly_sixteen_members_with_the_phase_two_five_six_and_
         "ROLE_BOUNCED",
     }
     assert phase_nine <= {m.name for m in EventType}
+    phase_ten = {"PUBLISH_STARTED", "PR_CREATED", "PUBLISH_FAILED"}
+    assert phase_ten <= {m.name for m in EventType}
 
 
 def test_event_type_value_equals_name_for_every_member() -> None:
