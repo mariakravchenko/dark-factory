@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 09
 current_phase_name: Independent Quality Gate & Bounded Feedback Loops
 status: executing
-stopped_at: Completed 09-05-PLAN.md (gap CR-02 closed) — Phase 09 gap closure complete, both CR-01 and CR-02 resolved
-last_updated: "2026-09-23T11:42:42.054Z"
-last_activity: 2026-09-23
+stopped_at: Completed 09-06-PLAN.md (gaps G-09-6/G-09-7 closed) — Phase 09 all 6 plans complete
+last_updated: "2026-09-26T06:05:54.915Z"
+last_activity: 2026-09-26
 last_activity_desc: Phase 09 execution started
-state_head: 2b29ad8f50123a5b33b37becb123623b589f7e96
+state_head: 8df8f0600def530a85dbc4f923afea9ca1f8e4e7
 progress:
   total_phases: 12
   completed_phases: 0
-  total_plans: 50
-  completed_plans: 50
+  total_plans: 51
+  completed_plans: 51
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-22)
 ## Current Position
 
 Phase: 09 (Independent Quality Gate & Bounded Feedback Loops) — EXECUTING
-Plan: 5 of 5 complete (09-01, 09-02, 09-03, 09-04 have SUMMARY.md; 09-05 gap-closure CR-02 still pending)
-Status: 09-04 (gap CR-01) closed this session; 09-05 (gap CR-02) queued next, no file overlap
-Last activity: 2026-09-23 — Completed 09-04-PLAN.md
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-09-26 — Phase 09 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -103,6 +103,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 08 P06 | 90min | 2 tasks | 21 files |
 | Phase 09 P04 | 35min | 2 tasks | 4 files |
 | Phase 09 P05 | 25min | 1 tasks | 2 files |
+| Phase 09 P06 | 20min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -200,6 +201,7 @@ Recent decisions affecting current work:
 - [Phase 07]: 07-04: --allowedTools derived from context.tools via NATIVE_TOOL_CONTRACT's first real consumer; artifacts.write kept out of the flat _TOOL_NAMES map and emitted as a path-scoped Edit(<glob>/**) specifier instead of a bare tool name; contract's claude_code prose corrected to name cwd=<worktree> (WORKTREE_CONFINEMENT_NOTE) as the real confinement mechanism, replacing a nonexistent --permission-mode claim; reference guard narrowed to a 3-path _ALLOWED_CONSUMERS allowlist, not deleted
 - [Phase 09]: [Phase 09]: 09-04: widened enforce_write_scope to cover Signal.ROLE_BOUNCED alongside ROLE_COMPLETED (gap CR-01); WriteScopeViolation handler clears counter_increments/bounce_reason on downgrade but leaves gate_events untouched since the gate artifact is already durably committed by the time the check runs
 - [Phase 09]: [Phase 09]: 09-05: applied redact(command, known_secrets=known_secrets) to GateCommandResult.command in run_quality_gate (gap CR-02) — the configured quality_gate.commands text is now redacted before persistence/commit, closing the last gap from 09-VERIFICATION.md; docstring citation fixed from '.claude/CLAUDE.md' to bare 'CLAUDE.md' to satisfy the worker-runtime-name leak guard
+- [Phase 09]: 09-06: rebuild derives worktree via ensure_worktree(base_branch, working_branch) from freshly loaded RunState (route 2), mirroring _advance_once, instead of resolving against the config repo root — Extends D-07 durability proof to path resolution itself; avoids a repo_root-named parameter ever holding a worktree path; adds a DB-free AST guard restoring detection for a defect class that previously required real PostgreSQL 17 to surface
 
 ### Pending Todos
 
@@ -225,6 +227,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-23T11:42:41.973Z
-Stopped at: Completed 09-05-PLAN.md (gap CR-02 closed) — Phase 09 gap closure complete, both CR-01 and CR-02 resolved
+Last session: 2026-09-26T06:05:54.843Z
+Stopped at: Completed 09-06-PLAN.md (gaps G-09-6/G-09-7 closed) — Phase 09 all 6 plans complete
 Resume file: None

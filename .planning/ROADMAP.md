@@ -385,7 +385,7 @@ Plans:
   3. A QA FAIL returns a structured issues artifact (severity, acceptance criterion, description) to the Developer; a gate FAIL returns the actual command failure output, after which QA re-evaluates and the gate re-runs.
   4. Iteration counts are checked before dispatch against `retry.qa_developer_max_iterations` and `retry.quality_gate_max_iterations`, and on exhaustion the run transitions to FAILED with every attempt and reason persisted.
 
-**Plans**: 6 plans (5 executed; 3 gap-closure plans added — 2 after verification, 1 after UAT)
+**Plans**: 6/6 plans executed (5 executed; 3 gap-closure plans added — 2 after verification, 1 after UAT)
 
 Plans:
 **Wave 1**
@@ -407,7 +407,7 @@ Plans:
 
 **Gap closure** *(from 09-UAT.md; wave 1, test-only, no overlap with 09-04/09-05)*
 
-- [ ] 09-06-PLAN.md — G-09-6 + G-09-7: the Developer attempt-2 `RoleContext` rebuild in `tests/db/test_feedback_reaches_developer.py` derives the run's worktree via `ensure_worktree` from the persisted branch columns instead of reading artifacts under the config repo root, plus a DB-free AST guard against the regression
+- [x] 09-06-PLAN.md — G-09-6 + G-09-7: the Developer attempt-2 `RoleContext` rebuild in `tests/db/test_feedback_reaches_developer.py` derives the run's worktree via `ensure_worktree` from the persisted branch columns instead of reading artifacts under the config repo root, plus a DB-free AST guard against the regression
 
 **Invariants**: verdicts from exit codes and machine JSON, never prose; the real failure payload is persisted, not just a boolean.
 
@@ -474,7 +474,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
-| 9. Independent Quality Gate & Bounded Feedback Loops | 5/5 | In Progress|  |
+| 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | In Progress|  |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
