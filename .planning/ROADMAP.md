@@ -59,7 +59,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Tools, Permissions & the Credential Boundary** - Roles get only granted capabilities; workers never see an infrastructure credential (completed 2026-09-20)
 - [x] **Phase 7: Claude Code — the First Real Worker** - A real agent runtime performs a role and resumes, with the orchestrator runtime-agnostic (completed 2026-09-21)
 - [x] **Phase 8: Copilot & Hermes — Worker Independence Proven** - The same role runs unchanged on three genuinely different runtimes, chosen in config (completed 2026-09-22)
-- [ ] **Phase 9: Independent Quality Gate & Bounded Feedback Loops** - The platform re-runs the repo's own commands and bounds every retry
+- [x] **Phase 9: Independent Quality Gate & Bounded Feedback Loops** - The platform re-runs the repo's own commands and bounds every retry (completed 2026-09-26)
 - [ ] **Phase 10: GitHub — Issue Intake, Idempotent Publishing, Comment Resume** - An issue starts a run, the run asks on the issue, and a verified result becomes exactly one PR
 - [ ] **Phase 11: One Orchestrator, Many Triggers — Cross-Machine Resume** - A run started locally finishes in CI through Neon alone, proven by the FakeWorker suite
 - [ ] **Phase 12: Observability & Audit Surface** - For any run, Dark Factory can explain exactly where it is and everything that happened to it
@@ -425,7 +425,15 @@ Plans:
   4. A GitHub-sourced run posts exactly one clarification comment and stays `WAITING_HUMAN`; a duplicate webhook delivery of the reply stores exactly one answer.
   5. An issue comment answering a pending interaction resumes the same `RoleExecution`, and a comment that matches no pending interaction creates no run.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 10-01-PLAN.md — Tracer: a GitHub issue becomes exactly one pull request — the `githubkit` wrapper, real `_load_github`, migration 0006's five persisted identifiers, the three publish events and the publish step wired into the terminal-role block (wave 1)
+- [ ] 10-02-PLAN.md — Publishing is idempotent: the three-way persisted-identifier fast path plus GitHub's own state as the crash-safety net, proved against the kill-after-API-call window (wave 2)
+- [ ] 10-03-PLAN.md — A GitHub-sourced run asks its question on the issue: one fresh comment per pending interaction, its id recorded, no internal state on the wire (wave 2)
+- [ ] 10-04-PLAN.md — A signed issue-comment reply resumes the same `RoleExecution`: the separate webhook receiver, the resolution rules, and comment-id dedup (wave 2)
+- [ ] 10-05-PLAN.md — Boundaries enforced, not documented: `githubkit` lives in one module and the receiver cannot run the pipeline (wave 3)
+
 **Invariants**: every external side effect is idempotent, keyed on a persisted identifier; the webhook path takes the same lease as the CLI path.
 
 ### Phase 11: One Orchestrator, Many Triggers — Cross-Machine Resume
@@ -474,7 +482,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 6. Tools, Permissions & the Credential Boundary | 4/4 | Complete    | 2026-09-20 |
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
-| 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | In Progress|  |
+| 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 0/TBD | Not started | - |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
