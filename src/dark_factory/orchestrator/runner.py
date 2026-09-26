@@ -71,6 +71,7 @@ from dark_factory.domain.signal import Signal, signal_from_result
 from dark_factory.domain.status import STOP_STATUSES, RunStatus, VerdictStatus
 from dark_factory.domain.worker import WorkerResult
 from dark_factory.events.catalog import EventType
+from dark_factory.events.redaction import redact
 from dark_factory.git import (
     ArtifactScopeViolation,
     DetachedHeadError,
@@ -85,10 +86,13 @@ from dark_factory.git.scope import (
     enforce_write_scope,
 )
 from dark_factory.git.worktree import ensure_worktree, remove_worktree
+from dark_factory.github import GitHubError
+from dark_factory.github.client import GitHubClient
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
+from dark_factory.orchestrator.publish import PublishResult, run_publish_step
 from dark_factory.orchestrator.quality_gate import (
     run_quality_gate,
     write_quality_gate_result,
@@ -99,6 +103,7 @@ from dark_factory.persistence.mutations import (
     EventWrite,
     HumanInteractionWrite,
     LeaseLost,
+    PublishFieldsWrite,
     RoleExecutionWrite,
     apply_transition,
     create_run,
@@ -123,8 +128,10 @@ from dark_factory.workflows.pipeline import (
 
 __all__ = [
     "DriveLoopExhausted",
+    "GitHubClientFactory",
     "RunNotFoundError",
     "advance",
+    "default_github_client_factory",
     "drive",
     "run_state",
     "start_run",
@@ -154,6 +161,18 @@ _CRASH_EXIT_STATUS = 137
 
 SessionFactory = Callable[[], Session]
 TransitionCallback = Callable[[RunStatus, RunStatus], None]
+# GIT-05/GIT-06 enabler: the injection seam plan 10-02 (existing-PR check) and
+# plan 10-03 (clarification comment) both reuse rather than inventing a
+# second one. Threaded through exactly like ``tool_registry`` /
+# ``action_registry`` are, and called lazily -- only on the branch that
+# actually needs a client -- so a run that publishes nothing and asks nothing
+# never constructs one and works with ``github_token`` unset.
+GitHubClientFactory = Callable[[], GitHubClient]
+
+
+def default_github_client_factory() -> GitHubClient:
+    """The production factory: a real client from the process's own settings."""
+    return GitHubClient.from_settings(get_settings())
 
 
 class RunNotFoundError(LookupError):
@@ -273,9 +292,14 @@ def start_run(
     anything is persisted; the CLI turns either into exit 2 (as it does the
     ``ConfigError`` from the pre-``start_run`` config resolution). Once this
     returns, a ``runs`` row exists and the outcome is 0 or 1.
+
+    Phase 10 (INTAKE-03 wiring half): the snapshot's ``repository`` block is
+    passed straight into ``load`` so a ``github:`` locator can resolve --
+    ``start_run`` still reads no live config itself, it only forwards the
+    already-resolved snapshot value.
     """
     kind, locator = classify(source)
-    task = load(kind, locator)
+    task = load(kind, locator, repository=snapshot.get("repository"))
     session = session_factory()
     try:
         return create_run(session, task=task, workflow=dict(snapshot))
@@ -309,6 +333,7 @@ def advance(
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
     tool_registry: ToolRegistry = tool_default_registry,
+    github_client_factory: GitHubClientFactory = default_github_client_factory,
 ) -> RunStatus:
     """Reconstruct from Neon, execute exactly one committed step under the lease,
     return the new status.
@@ -318,6 +343,12 @@ def advance(
     :func:`_run_current_role`, exactly mirroring how ``action_registry`` is
     already threaded -- the test injection seam for a synthetic capability
     (TOOL-02, SC3).
+
+    ``github_client_factory`` defaults to :func:`default_github_client_factory`
+    and is threaded straight through the same way, mirroring ``tool_registry``
+    -- the test injection seam plans 10-02/10-03 reuse for
+    :class:`~tests.support.fake_github.FakeGitHubClient`. Called lazily,
+    only on the branch that actually needs a client.
 
     A run already in a **stop** status -- terminal *or* ``WAITING_HUMAN`` -- is
     returned immediately, without claiming a lease and without writing anything
@@ -357,6 +388,7 @@ def advance(
             action_registry=action_registry,
             repo_root=repo_root,
             tool_registry=tool_registry,
+            github_client_factory=github_client_factory,
         )
 
 
@@ -370,6 +402,7 @@ def _advance_once(
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
     tool_registry: ToolRegistry = tool_default_registry,
+    github_client_factory: GitHubClientFactory = default_github_client_factory,
 ) -> RunStatus:
     """One reconstruct-and-commit step. **Assumes the lease is already held** and
     never claims it -- ``drive`` claims once for the whole loop, ``advance``
@@ -388,7 +421,7 @@ def _advance_once(
 
     ``tool_registry`` defaults to :data:`~dark_factory.tools.default_registry`
     and is threaded straight through to :func:`_run_current_role`, mirroring
-    ``action_registry``.
+    ``action_registry``. ``github_client_factory`` is threaded the same way.
     """
     read_session = session_factory()
     try:
@@ -430,6 +463,7 @@ def _advance_once(
             action_registry=action_registry,
             repo_root=resolved_repo_root,
             tool_registry=tool_registry,
+            github_client_factory=github_client_factory,
         )
     finally:
         unbind_contextvars("run_id", "role", "attempt")
@@ -701,6 +735,7 @@ def _run_current_role(
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
     tool_registry: ToolRegistry = tool_default_registry,
+    github_client_factory: GitHubClientFactory = default_github_client_factory,
 ) -> RunStatus:
     """Run the current role's worker outside any transaction, then commit the outcome.
 
@@ -839,6 +874,19 @@ def _run_current_role(
     with the chosen counter's increment riding the same ``apply_transition``
     call every other write in this function already commits through -- no new
     locking site is introduced for these two columns.
+
+    GIT-03, D-07, D-09 (Phase 10, plan 10-06): immediately after a PASS gate
+    result, still inside the terminal-role block and still gated on
+    ``state.workflow["publishing"]["create_pr"]`` (default ``True``), this
+    calls :func:`~dark_factory.orchestrator.publish.run_publish_step`.
+    ``github_client_factory`` is called lazily -- only when ``create_pr`` is
+    true -- so a run that publishes nothing never constructs a client and
+    never needs ``github_token`` configured. A publish failure sets
+    ``signal = Signal.ROLE_FAILED`` and folds the redacted error into
+    ``outcome``, in the same shape the ``GitError`` catch below already uses,
+    so a run whose PR was never created does not reach ``COMPLETED`` (T-10-32).
+    The chosen ``PublishResult`` rides into the single ``apply_transition``
+    call at the end of this function as ``publish_fields=PublishFieldsWrite(...)``.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -963,6 +1011,15 @@ def _run_current_role(
     # ``gate_events`` is.
     counter_increments: dict[str, int] = {}
     bounce_reason: str | None = None
+    # GIT-03 (Phase 10, plan 10-06): populated only inside the terminal-role
+    # gate-PASS block below, by ``run_publish_step`` -- stays ``None`` for
+    # every other role, for a run that never reaches the terminal role's gate
+    # PASS, and for a run whose ``publishing.create_pr`` is false (no publish
+    # attempt is ever made). Declared here, unconditionally, so the
+    # ``apply_transition`` call at the bottom of this function can build its
+    # ``publish_fields`` keyword with no NameError regardless of which branch
+    # above actually ran.
+    publish_result: PublishResult | None = None
     # D-01/D-06: read once from the persisted snapshot -- ``.get`` with an
     # empty-list default means a legacy snapshot entry with no ``tools`` key
     # at all grants nothing (deny-by-default, never allow-by-omission).
@@ -1135,6 +1192,83 @@ def _run_current_role(
                                     },
                                 )
                             )
+                            # GIT-03, D-07, D-09 (Phase 10, plan 10-06):
+                            # publishing is gated solely on
+                            # ``publishing.create_pr`` (default true) -- when
+                            # false, no client is ever constructed and no
+                            # publish attempt (and no PUBLISH_* event) is
+                            # made at all, so a run with no GitHub
+                            # configuration keeps completing exactly as it
+                            # did before this phase.
+                            publishing_config = state.workflow.get("publishing") or {}
+                            if publishing_config.get("create_pr", True):
+                                gate_events.append(
+                                    EventWrite(
+                                        type=EventType.PUBLISH_STARTED,
+                                        payload={"role": node.name},
+                                    )
+                                )
+                                # A construction failure (most commonly
+                                # MissingGitHubCredentialError -- no
+                                # `github_token` configured for a repository
+                                # that publishes) is folded into the same
+                                # PublishResult.error shape run_publish_step
+                                # itself returns for a create_pull_request
+                                # failure, rather than propagating uncaught.
+                                try:
+                                    publish_client = github_client_factory()
+                                except GitHubError as exc:
+                                    publish_result = PublishResult(
+                                        published_commit_sha=None,
+                                        pr_number=None,
+                                        pr_url=None,
+                                        error=str(
+                                            redact(
+                                                str(exc),
+                                                known_secrets=(
+                                                    gate_settings.known_secret_values()
+                                                ),
+                                            )
+                                        ),
+                                    )
+                                else:
+                                    publish_result = run_publish_step(
+                                        run_id=run_id,
+                                        state=state,
+                                        work_dir=work_dir,
+                                        client=publish_client,
+                                        create_pr=True,
+                                        known_secrets=(
+                                            gate_settings.known_secret_values()
+                                        ),
+                                    )
+                                if publish_result.error is None:
+                                    gate_events.append(
+                                        EventWrite(
+                                            type=EventType.PR_CREATED,
+                                            payload={
+                                                "pr_number": (publish_result.pr_number),
+                                                "pr_url": publish_result.pr_url,
+                                            },
+                                        )
+                                    )
+                                else:
+                                    gate_events.append(
+                                        EventWrite(
+                                            type=EventType.PUBLISH_FAILED,
+                                            payload={"error": publish_result.error},
+                                        )
+                                    )
+                                    # T-10-32: a run whose PR was never
+                                    # created must not reach COMPLETED --
+                                    # fold the error into `outcome` in the
+                                    # same shape the GitError catch below
+                                    # already uses.
+                                    signal = Signal.ROLE_FAILED
+                                    outcome = {
+                                        **outcome,
+                                        "error": publish_result.error,
+                                    }
                         else:
                             gate_events.append(
                                 EventWrite(
@@ -1153,16 +1287,14 @@ def _run_current_role(
                             # ever touched in a single attempt, because the
                             # verdict FAIL branch above already short-circuits
                             # before the gate ever runs.
-                            signal, counter_increments, bounce_error = (
-                                _bounce_or_fail(
-                                    current_value=state.quality_gate_iterations,
-                                    cap=quality_gate_max_iterations,
-                                    counter_name="quality_gate_iterations",
-                                    exhaustion_reason=(
-                                        "quality_gate_max_iterations_exhausted"
-                                    ),
-                                    bounce_target=bounce_target,
-                                )
+                            signal, counter_increments, bounce_error = _bounce_or_fail(
+                                current_value=state.quality_gate_iterations,
+                                cap=quality_gate_max_iterations,
+                                counter_name="quality_gate_iterations",
+                                exhaustion_reason=(
+                                    "quality_gate_max_iterations_exhausted"
+                                ),
+                                bounce_target=bounce_target,
                             )
                             if signal is Signal.ROLE_BOUNCED:
                                 bounce_reason = "quality_gate_fail"
@@ -1380,7 +1512,7 @@ def _run_current_role(
                     # loaded at the top of this step, before the decision.
                     "value": getattr(state, bounced_counter_name),
                     "cap": _counter_caps[bounced_counter_name],
-                }
+                },
             )
         )
         assert bounced_counter_delta == 1  # _bounce_or_fail's only shape
@@ -1406,6 +1538,21 @@ def _run_current_role(
     else:  # pragma: no cover - transition() already rejects any other signal
         raise IllegalTransitionError(f"runner cannot act on {signal.value}")
 
+    # GIT-03/GIT-04, D-06 (Phase 10, plan 10-06): non-None only when the
+    # terminal-role gate-PASS block above actually attempted a publish --
+    # ``None`` (a no-op patch) for every other role and for a run whose
+    # ``publishing.create_pr`` is false, so a run that never publishes leaves
+    # every publish-identifier column untouched.
+    publish_fields = (
+        PublishFieldsWrite(
+            pr_number=publish_result.pr_number,
+            pr_url=publish_result.pr_url,
+            published_commit_sha=publish_result.published_commit_sha,
+        )
+        if publish_result is not None
+        else None
+    )
+
     session = session_factory()
     try:
         new_status = apply_transition(
@@ -1430,6 +1577,7 @@ def _run_current_role(
             expected_owner_token=lease.token,
             human_interaction=human_interaction,
             artifact_references=artifact_writes,
+            publish_fields=publish_fields,
         )
         _maybe_crash_after(state.status, new_status)
         if new_status is RunStatus.COMPLETED:
@@ -1455,6 +1603,7 @@ def drive(
     action_registry: ActionRegistry = action_default_registry,
     repo_root: Path | None = None,
     tool_registry: ToolRegistry = tool_default_registry,
+    github_client_factory: GitHubClientFactory = default_github_client_factory,
 ) -> RunStatus:
     """Loop one step until the run reaches a stop status; return that status.
 
@@ -1473,7 +1622,8 @@ def drive(
 
     ``tool_registry`` defaults to :data:`~dark_factory.tools.default_registry`
     and is threaded straight through to every ``_advance_once`` call in the
-    loop, mirroring ``action_registry``.
+    loop, mirroring ``action_registry``. ``github_client_factory`` is
+    threaded the same way.
     """
     read_session = session_factory()
     try:
@@ -1500,6 +1650,7 @@ def drive(
                 action_registry=action_registry,
                 repo_root=repo_root,
                 tool_registry=tool_registry,
+                github_client_factory=github_client_factory,
             )
             if new_status != status and on_transition is not None:
                 on_transition(status, new_status)

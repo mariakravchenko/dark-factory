@@ -74,6 +74,10 @@ def _state(*, workflow: dict[str, Any], latest_role: str | None = None) -> RunSt
         pending_answer=None,
         base_branch="main",
         working_branch=f"dark-factory/run-{run_id}",
+        pr_number=None,
+        pr_url=None,
+        published_commit_sha=None,
+        pending_clarification_comment_id=None,
     )
 
 

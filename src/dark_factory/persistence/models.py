@@ -132,6 +132,15 @@ class Run(Base):
     )
     pr_number: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     pr_url: Mapped[str | None] = mapped_column(sa.String, nullable=True)
+    # published_commit_sha (Phase 10, GIT-03/GIT-04, migration 0006, D-06): the
+    # SHA of the commit the publish step pushed immediately before opening the
+    # pull request, or NULL when the run has not yet published. Deliberately
+    # distinct from ``RoleExecution.wip_commit_sha`` above -- that column is
+    # WIP-recovery-specific and must never be repurposed as the publish SHA,
+    # and this column is never read or written by the WIP-recovery path.
+    # Written at most once per run, by ``apply_transition``'s ``publish_fields``
+    # patch (the one mutation path).
+    published_commit_sha: Mapped[str | None] = mapped_column(sa.String, nullable=True)
     qa_developer_iterations: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -269,6 +278,19 @@ class HumanInteraction(Base):
     )
     question: Mapped[str] = mapped_column(sa.Text, nullable=False)
     answer: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    # clarification_comment_id / github_comment_id (Phase 10, GIT-04/GIT-05,
+    # migration 0006, D-05): the GitHub comment ids this interaction ties to --
+    # the id of the clarification comment Dark Factory itself posted when it
+    # asked (``ask`` mode, plan 10-03), and the id of the inbound comment that
+    # answered it (``answer`` mode, plan 10-04). Both ``sa.BigInteger``, not
+    # ``sa.Integer``: GitHub comment ids already exceed the 32-bit range, and
+    # ``sa.Integer`` would silently overflow/truncate one. Both nullable, no
+    # server default, no backfill -- the same posture as every other Phase 10
+    # column added in this migration.
+    clarification_comment_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, nullable=True
+    )
+    github_comment_id: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
     status: Mapped[InteractionStatus] = mapped_column(
         _INTERACTION_STATUS, nullable=False
     )

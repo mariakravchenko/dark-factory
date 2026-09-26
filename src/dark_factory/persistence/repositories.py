@@ -91,6 +91,20 @@ class RunState(BaseModel):
     git identifiers ``create_run`` wrote before any git command ran; the
     orchestrator reads them back from these columns and never re-derives them
     at use time.
+
+    ``pr_number`` / ``pr_url`` / ``published_commit_sha`` (Phase 10,
+    GIT-03/GIT-04, D-06) are the run's persisted publish identifiers, read
+    straight off ``runs`` -- STATE-08's "fully reconstructable from these
+    columns alone" applied to publishing: plan 10-02's idempotency check reads
+    them from here, so there is no second query path and no module re-deriving
+    them from git or GitHub at use time.
+
+    ``pending_clarification_comment_id`` (Phase 10, GIT-04/GIT-05, D-05) is
+    the exact sibling of ``pending_answer`` above, read from the same
+    ``human_interactions`` row bound to ``latest_execution`` -- plan 10-03
+    reads it to skip re-posting a clarification comment, and plan 10-04
+    compares it against an inbound comment id so Dark Factory never answers
+    its own question.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -107,6 +121,10 @@ class RunState(BaseModel):
     pending_answer: str | None
     base_branch: str | None
     working_branch: str | None
+    pr_number: int | None
+    pr_url: str | None
+    published_commit_sha: str | None
+    pending_clarification_comment_id: int | None
 
 
 def load_run_state(session: Session, run_id: UUID) -> RunState | None:
@@ -157,18 +175,37 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
         else None
     )
 
+    # pending_answer / pending_clarification_comment_id (Phase 10, GIT-04/
+    # GIT-05, D-05) both come off the SAME human_interactions row bound to
+    # latest_row.id -- one ask ("ask" mode) inserts exactly one row per
+    # attempt, and a later "answer" call updates that same row rather than
+    # inserting a second one, so no status filter is needed to disambiguate
+    # WAITING from ANSWERED: the row is unique by role_execution_id alone.
+    # ``answer`` genuinely is NULL until the row is answered, so dropping the
+    # old ``status == ANSWERED`` filter changes nothing about when
+    # ``pending_answer`` becomes non-None; it does let
+    # ``pending_clarification_comment_id`` -- set at ask time, while the row
+    # is still WAITING -- be read from the same single query, per plan
+    # 10-06's "extend the existing pending_answer select rather than adding a
+    # second query" instruction.
     pending_answer: str | None = None
+    pending_clarification_comment_id: int | None = None
     if latest_row is not None:
-        pending_answer = session.scalar(
-            select(HumanInteraction.answer)
+        interaction = session.execute(
+            select(
+                HumanInteraction.answer,
+                HumanInteraction.clarification_comment_id,
+            )
             .where(
                 HumanInteraction.run_id == run_id,
                 HumanInteraction.role_execution_id == latest_row.id,
-                HumanInteraction.status == InteractionStatus.ANSWERED,
             )
             .order_by(HumanInteraction.answered_at.desc())
             .limit(1)
-        )
+        ).first()
+        if interaction is not None:
+            pending_answer = interaction.answer
+            pending_clarification_comment_id = interaction.clarification_comment_id
 
     return RunState(
         run_id=run.id,
@@ -183,6 +220,10 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
         pending_answer=pending_answer,
         base_branch=run.base_branch,
         working_branch=run.working_branch,
+        pr_number=run.pr_number,
+        pr_url=run.pr_url,
+        published_commit_sha=run.published_commit_sha,
+        pending_clarification_comment_id=pending_clarification_comment_id,
     )
 
 

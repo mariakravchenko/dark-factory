@@ -68,6 +68,7 @@ __all__ = [
     "EventWrite",
     "HumanInteractionWrite",
     "LeaseLost",
+    "PublishFieldsWrite",
     "RoleExecutionWrite",
     "apply_transition",
     "create_run",
@@ -141,10 +142,21 @@ class HumanInteractionWrite(BaseModel):
     ``apply_transition`` at the single call site, never in the caller.
 
     * ``ask`` — requires ``role_execution_id`` and ``question``; inserts a
-      ``WAITING`` row.
+      ``WAITING`` row. ``clarification_comment_id`` (Phase 10, plan 10-03,
+      D-05) is the id of the GitHub comment Dark Factory itself posted
+      alongside the question, or ``None`` when no comment was posted (a
+      non-GitHub-sourced run, or ``create_comment`` failing).
     * ``answer`` — requires ``answer``; the target row is the run's single
       ``WAITING`` interaction, located inside the transaction (not by a caller
-      id) so the find and the write are one atomic step.
+      id) so the find and the write are one atomic step. ``github_comment_id``
+      (Phase 10, plan 10-04, D-05) is the id of the inbound GitHub comment
+      that answered the question, or ``None`` when the answer arrived through
+      a different channel; assigned only when supplied, so an ``answer`` call
+      that does not carry one never clears an already-recorded value.
+
+    ``clarification_comment_id`` / ``github_comment_id`` are numeric GitHub
+    identifiers, not free text -- like ``base_branch`` / ``working_branch`` on
+    ``create_run`` above, they do not pass through ``redact()``.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -153,6 +165,8 @@ class HumanInteractionWrite(BaseModel):
     role_execution_id: UUID | None = None
     question: str | None = None
     answer: str | None = None
+    clarification_comment_id: int | None = None
+    github_comment_id: int | None = None
 
 
 class ArtifactReferenceWrite(BaseModel):
@@ -168,6 +182,27 @@ class ArtifactReferenceWrite(BaseModel):
     path: str
     checksum: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class PublishFieldsWrite(BaseModel):
+    """Patch-spec for the three publish-identifier columns on ``runs``
+    (Phase 10, GIT-03/GIT-04, D-06). 10-RESEARCH.md Open Question 1's
+    resolution: a typed write-spec model matching this file's established
+    one-model-per-write-target convention, not a generic ``Mapping[str, Any]``.
+
+    Every field defaults to ``None`` and ``apply_transition`` applies only the
+    non-``None`` fields supplied -- patch semantics, not replace -- so a
+    second publish attempt can record a fresh ``pr_number`` without
+    blind-clearing an already-recorded ``published_commit_sha``. None of the
+    three fields is free text (a PR number/URL/commit SHA), so none passes
+    through ``redact()``.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    pr_number: int | None = None
+    pr_url: str | None = None
+    published_commit_sha: str | None = None
 
 
 def _known_secrets() -> Mapping[str, str]:
@@ -264,6 +299,7 @@ def apply_transition(
     expected_owner_token: UUID | None = None,
     human_interaction: HumanInteractionWrite | None = None,
     artifact_references: Sequence[ArtifactReferenceWrite] = (),
+    publish_fields: PublishFieldsWrite | None = None,
 ) -> RunStatus:
     """Apply one lifecycle transition atomically and return the new status.
 
@@ -292,8 +328,13 @@ def apply_transition(
        columns — the release must be atomic with the state change that stopped
        the run, so a crash between the two is impossible (which is why the
        *clear* lives here and not in ``orchestrator/lease.py``)
-    8. apply each ``counter_increments`` entry to its column
-    9. append one ``RunEvent`` per ``EventWrite``
+    8. apply each non-``None`` field of ``publish_fields`` to its matching
+       ``runs`` column (Phase 10, GIT-03/GIT-04, D-06), when supplied — patch
+       semantics deliberately, exactly like the ``role_executions`` ``patch``
+       mode above: a second publish attempt can record a fresh ``pr_number``
+       without blind-clearing an already-recorded ``published_commit_sha``
+    9. apply each ``counter_increments`` entry to its column
+    10. append one ``RunEvent`` per ``EventWrite``
 
     ``result`` / ``error`` / ``question`` / ``answer`` / every event ``payload``
     pass through ``redact()`` immediately before assignment — the single
@@ -347,6 +388,14 @@ def apply_transition(
         if next_status in STOP_STATUSES:
             run.owner_token = None
             run.lock_expires_at = None
+
+        if publish_fields is not None:
+            if publish_fields.pr_number is not None:
+                run.pr_number = publish_fields.pr_number
+            if publish_fields.pr_url is not None:
+                run.pr_url = publish_fields.pr_url
+            if publish_fields.published_commit_sha is not None:
+                run.published_commit_sha = publish_fields.published_commit_sha
 
         for name, delta in increments.items():
             setattr(run, name, getattr(run, name) + delta)
@@ -467,6 +516,7 @@ def _write_human_interaction(
                 role_execution_id=spec.role_execution_id,
                 question=redact(spec.question, known_secrets=known),
                 status=InteractionStatus.WAITING,
+                clarification_comment_id=spec.clarification_comment_id,
             )
         )
         return
@@ -486,6 +536,8 @@ def _write_human_interaction(
     row.answer = redact(spec.answer, known_secrets=known)
     row.status = InteractionStatus.ANSWERED
     row.answered_at = func.now()
+    if spec.github_comment_id is not None:
+        row.github_comment_id = spec.github_comment_id
 
 
 def _write_artifact_reference(

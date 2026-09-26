@@ -29,13 +29,20 @@ quality-gate FAIL sends the run back to the Developer under its
 configured iteration cap: deliberately **not** the ``ROLE_FAILED`` /
 ``RUN_FAILED`` pair, because those two specifically mean the run is dead,
 and a bounce is a run that is still alive and looping. The remainder
-listed in PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED,
-PUBLISH_STARTED, PR_CREATED -- still arrive in Phase 12; Phase 9 having
-already shipped ``QUALITY_GATE_FAILED/PASSED``/``ROLE_BOUNCED`` above
-means Phase 12 must not re-add them. A member present in the enum but
-never written is a false signal in the audit surface, so the
-not-yet-reachable types are deliberately not pre-declared here; that rule
-is what keeps the Phase 12 observability claim honest.
+listed in PROJECT.md -- ARTIFACT_CREATED, QA_FAILED/PASSED -- still
+arrive in Phase 12; Phase 9 having already shipped
+``QUALITY_GATE_FAILED/PASSED``/``ROLE_BOUNCED`` above means Phase 12 must
+not re-add them. Phase 10 adds exactly three more --
+PUBLISH_STARTED, PR_CREATED, PUBLISH_FAILED (D-07) -- the
+idempotent-publishing audit tie ``orchestrator/publish.py`` /
+``orchestrator/runner.py`` genuinely write: the publish step has no
+``role_executions`` row of its own (mirroring the quality gate's D-01
+posture), so these three are the only durable trace that a publish
+attempt ran at all. Phase 12 is now a *consumer* of these three events,
+never their origin. A member present in the enum but never written is a
+false signal in the audit surface, so the not-yet-reachable types are
+deliberately not pre-declared here; that rule is what keeps the Phase 12
+observability claim honest.
 """
 
 from enum import StrEnum
@@ -72,3 +79,8 @@ class EventType(StrEnum):
 
     # Phase 9 -- the bounded-feedback-loop bounce audit tie (D-04).
     ROLE_BOUNCED = "ROLE_BOUNCED"
+
+    # Phase 10 -- the idempotent-publishing audit tie (D-07).
+    PUBLISH_STARTED = "PUBLISH_STARTED"
+    PR_CREATED = "PR_CREATED"
+    PUBLISH_FAILED = "PUBLISH_FAILED"

@@ -37,6 +37,7 @@ RUN_COLUMNS = {
     "lock_expires_at",
     "pr_number",
     "pr_url",
+    "published_commit_sha",
     "qa_developer_iterations",
     "quality_gate_iterations",
     "created_at",
