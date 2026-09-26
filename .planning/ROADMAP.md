@@ -425,14 +425,31 @@ Plans:
   4. A GitHub-sourced run posts exactly one clarification comment and stays `WAITING_HUMAN`; a duplicate webhook delivery of the reply stores exactly one answer.
   5. An issue comment answering a pending interaction resumes the same `RoleExecution`, and a comment that matches no pending interaction creates no run.
 
-**Plans**: 5 plans
+**Plans**: 6 plans
+
+> Plan numbers are not execution order here. `10-01` was split during plan review (it exceeded
+> the per-plan scope ceiling), and its second half became `10-06`, which runs in **wave 2** —
+> before `10-02`/`10-03`/`10-04`. Execution order is the wave order below.
 
 Plans:
-- [ ] 10-01-PLAN.md — Tracer: a GitHub issue becomes exactly one pull request — the `githubkit` wrapper, real `_load_github`, migration 0006's five persisted identifiers, the three publish events and the publish step wired into the terminal-role block (wave 1)
-- [ ] 10-02-PLAN.md — Publishing is idempotent: the three-way persisted-identifier fast path plus GitHub's own state as the crash-safety net, proved against the kill-after-API-call window (wave 2)
-- [ ] 10-03-PLAN.md — A GitHub-sourced run asks its question on the issue: one fresh comment per pending interaction, its id recorded, no internal state on the wire (wave 2)
-- [ ] 10-04-PLAN.md — A signed issue-comment reply resumes the same `RoleExecution`: the separate webhook receiver, the resolution rules, and comment-id dedup (wave 2)
-- [ ] 10-05-PLAN.md — Boundaries enforced, not documented: `githubkit` lives in one module and the receiver cannot run the pipeline (wave 3)
+
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — The GitHub edge: the `githubkit` wrapper and its typed errors, `repository.github_owner`/`github_repo` + `Settings.github_webhook_secret`, a real `_load_github`, `FakeGitHubClient`, and every dependency declaration for the phase in one lock regeneration
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 10-06-PLAN.md — Tracer: a GitHub issue becomes exactly one pull request — migration 0006's five persisted identifiers, the three publish events, `PublishFieldsWrite`, the publish step and the client-factory seam wired into the terminal-role block
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 10-02-PLAN.md — Publishing is idempotent: the three-way persisted-identifier fast path plus GitHub's own state as the crash-safety net, proved against the kill-after-API-call window
+- [ ] 10-03-PLAN.md — A GitHub-sourced run asks its question on the issue: one fresh comment per pending interaction, its id recorded, no internal state on the wire
+- [ ] 10-04-PLAN.md — A signed issue-comment reply resumes the same `RoleExecution`: the separate webhook receiver, the resolution rules, and comment-id dedup
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 10-05-PLAN.md — Boundaries enforced, not documented: `githubkit` lives in one module and the receiver cannot run the pipeline
 
 **Invariants**: every external side effect is idempotent, keyed on a persisted identifier; the webhook path takes the same lease as the CLI path.
 
