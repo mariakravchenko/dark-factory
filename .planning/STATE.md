@@ -1,44 +1,44 @@
 ---
 gsd_state_version: "1.0"
-current_phase: 09
-current_phase_name: Independent Quality Gate & Bounded Feedback Loops
-status: executing
-stopped_at: Completed 09-06-PLAN.md (gaps G-09-6/G-09-7 closed) — Phase 09 all 6 plans complete
-last_updated: "2026-09-26T06:05:54.915Z"
+current_phase: 10
+current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
+status: planning
+stopped_at: Phase 09 complete, ready to plan Phase 10
+last_updated: "2026-09-26T07:53:50.862Z"
 last_activity: 2026-09-26
-last_activity_desc: Phase 09 execution started
-state_head: 8df8f0600def530a85dbc4f923afea9ca1f8e4e7
+last_activity_desc: Phase 09 complete, transitioned to Phase 10
+state_head: 773e5201f54172a7f726f0f8426d296a0d00ab51
 progress:
   total_phases: 12
-  completed_phases: 0
+  completed_phases: 9
   total_plans: 51
   completed_plans: 51
-  percent: 0
+  percent: 75
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-22)
+See: .planning/PROJECT.md (updated 2026-09-26)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 09 — Independent Quality Gate & Bounded Feedback Loops
+**Current focus:** Phase 10 — GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 
 ## Current Position
 
-Phase: 09 (Independent Quality Gate & Bounded Feedback Loops) — EXECUTING
-Plan: 2 of 6
-Status: Ready to execute
-Last activity: 2026-09-26 — Phase 09 execution started
+Phase: 10 — GitHub — Issue Intake, Idempotent Publishing, Comment Resume
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-26 — Phase 09 complete, transitioned to Phase 10
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [████████░░] 75% (9/12 phases)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 45
+- Total plans completed: 51
 - Average duration: -
 - Total execution time: 0.0 hours
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 | 06 | 4 | - | - |
 | 07 | 4 | - | - |
 | 08 | 6 | - | - |
+| 09 | 6 | - | - |
 
 **Recent Trend:**
 
@@ -211,11 +212,10 @@ None yet.
 
 ### Blockers/Concerns
 
-One research-flagged decision remains open, scheduled inside the phase that first needs it:
+- ⚠️ [Phase 9] `tests/db/test_manual_check_loop04_adjacency.py` is an untracked, already-served throwaway script — the only behavioral evidence LOOP-04's adjacency case (a failing role with no earlier role) was ever proven. A future `git clean` would silently lose it. Not phase-blocking (the invariant is independently confirmed by direct code read), but should be either deleted per its own docstring or promoted to a committed `tests/db/` test.
+- ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 
-- Exact non-interactive flag/env matrix for the Copilot and Hermes CLIs → hands-on spike in Phase 8; can be spiked earlier to de-risk.
-
-Resolved this phase: artifact-content durability for cross-machine resume (Phase 5 — commit artifacts to the run's working branch, proven via cross-clone tests, ART-04). Resolved earlier: lease TTL vs. unpredictable agent step duration (Phase 2).
+Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
 ## Deferred Items
 
@@ -227,6 +227,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-26T06:05:54.843Z
-Stopped at: Completed 09-06-PLAN.md (gaps G-09-6/G-09-7 closed) — Phase 09 all 6 plans complete
+Last session: 2026-09-26T10:35:00.000Z
+Stopped at: Phase 09 complete (UAT 8/8, verification passed 22/22, security threat-secure), ready to plan Phase 10
 Resume file: None
