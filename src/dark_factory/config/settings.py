@@ -77,6 +77,16 @@ class Settings(BaseSettings):
     for this environment (D-02 defers the live spike to whenever the CLI is
     actually installed), so the CLI's own default model is used unless an
     operator configures one.
+
+    ``github_webhook_secret`` (Plan 10-01, D-04) is Dark Factory's own
+    infrastructure credential for verifying inbound GitHub webhook
+    deliveries (consumed by plan 10-04's receiver). It is distinct from
+    ``github_token``: the webhook secret authenticates deliveries *arriving
+    at* Dark Factory, while ``github_token`` authenticates calls Dark
+    Factory *makes to* GitHub. Declared as ``SecretStr | None`` exactly
+    like every other optional credential on this object, so
+    ``known_secret_values()``'s ``model_fields`` walk covers it with zero
+    additional code.
     """
 
     model_config = SettingsConfigDict(
@@ -88,6 +98,7 @@ class Settings(BaseSettings):
     database_url: SecretStr
     database_url_direct: SecretStr
     github_token: SecretStr | None = None
+    github_webhook_secret: SecretStr | None = None
     log_level: str = "INFO"
     lease_ttl_seconds: int = 900
     lease_heartbeat_seconds: int = 300

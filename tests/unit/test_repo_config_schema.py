@@ -20,7 +20,7 @@ from dark_factory.config.loader import (
     _safe_load_mapping,
     load_effective_config,
 )
-from dark_factory.config.repo_config import RepoConfig
+from dark_factory.config.repo_config import RepoConfig, RepositoryConfig
 
 pytestmark = pytest.mark.unit
 
@@ -88,6 +88,33 @@ def test_valid_repo_config_round_trips_to_a_plain_dict() -> None:
     assert dumped["workflow"]["roles"] == ["BA", "QA"]
     assert dumped["repository"]["base_branch"] == "main"
     assert dumped["roles_dir"] == ".dark-factory/roles"
+
+
+def test_repository_config_round_trips_github_owner_and_repo() -> None:
+    cfg = RepoConfig.model_validate(
+        {
+            "repository": {
+                "base_branch": "main",
+                "github_owner": "o",
+                "github_repo": "r",
+            },
+            "workflow": {"roles": ["BA"]},
+        }
+    )
+    dumped = cfg.model_dump(mode="json")
+    assert dumped["repository"]["github_owner"] == "o"
+    assert dumped["repository"]["github_repo"] == "r"
+
+
+def test_repository_config_github_owner_and_repo_default_to_none() -> None:
+    cfg = RepositoryConfig()
+    assert cfg.github_owner is None
+    assert cfg.github_repo is None
+
+
+def test_repository_config_rejects_a_typo_d_github_owner_key() -> None:
+    with pytest.raises(ValidationError):
+        RepositoryConfig.model_validate({"github_onwer": "o"})
 
 
 def _string_constants(tree: ast.AST) -> set[str]:

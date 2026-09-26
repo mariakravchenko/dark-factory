@@ -1,8 +1,12 @@
 """Unit coverage for ``input.loaders`` (INTAKE-05).
 
-``text:`` (Phase 1) and ``spec:`` (Phase 4) are real loaders; ``github:``
-still raises :class:`SourceNotSupportedError` naming Phase 10. Dispatch is a
-mapping keyed by every :class:`SourceKind` member.
+``text:`` (Phase 1), ``spec:`` (Phase 4) and ``github:`` (Phase 10) are all
+real loaders. Dispatch is a mapping keyed by every :class:`SourceKind`
+member. ``github:``'s own validate-then-fetch behavior (locator validation,
+repository-config refusal, the built `NormalizedTask` shape) is covered in
+``tests/unit/test_load_github.py``; this module only proves the loader is
+real and that `load`'s new `repository` keyword does not disturb the other
+two loaders.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from dark_factory.input import loaders
-from dark_factory.input.loaders import SourceNotSupportedError, load
+from dark_factory.input.loaders import load
 from dark_factory.input.resolver import SourceKind, UnresolvableSourceError
 
 pytestmark = pytest.mark.unit
@@ -121,10 +125,28 @@ def test_spec_loader_refuses_an_empty_or_whitespace_only_file(tmp_path: Path) ->
     assert str(spec_file.resolve()) in str(excinfo.value)
 
 
-def test_github_loader_names_phase_10() -> None:
-    with pytest.raises(SourceNotSupportedError) as excinfo:
+def test_github_loader_is_real_and_requires_a_repository() -> None:
+    """``github:`` is no longer the not-yet-supported kind: its loader is
+    real (see ``tests/unit/test_load_github.py`` for its own behavior),
+    and calling it with no ``repository`` refuses before any network call
+    -- the exact validate-then-fetch shape ``_load_spec`` established."""
+    with pytest.raises(UnresolvableSourceError) as excinfo:
         load(SourceKind.GITHUB, "152")
-    assert "Phase 10" in str(excinfo.value)
+    assert "repository" in str(excinfo.value)
+
+
+def test_text_and_spec_loaders_still_work_with_no_repository_argument(
+    tmp_path: Path,
+) -> None:
+    """``load``'s new ``repository`` keyword is optional -- the two
+    pre-existing loaders are unchanged and untouched by it."""
+    text_task = load(SourceKind.TEXT, "hi")
+    assert text_task.body == "hi"
+
+    spec_file = tmp_path / "task.md"
+    spec_file.write_text("Ship it\n", encoding="utf-8")
+    spec_task = load(SourceKind.SPEC, str(spec_file))
+    assert spec_task.title == "Ship it"
 
 
 def test_loader_mapping_covers_every_source_kind() -> None:

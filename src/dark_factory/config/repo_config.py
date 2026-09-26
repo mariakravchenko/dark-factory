@@ -62,11 +62,23 @@ class WorkflowConfig(BaseModel):
 
 
 class RepositoryConfig(BaseModel):
-    """``repository:`` -- the target repo's Git conventions."""
+    """``repository:`` -- the target repo's Git conventions.
+
+    ``github_owner`` / ``github_repo`` (Plan 10-01, D-04) identify the
+    repository a GitHub-sourced run's issue and pull request belong to.
+    Both default to ``None`` so a repository using neither GitHub intake
+    nor GitHub publishing needs no config change -- the same
+    "stored now, used by the phase that needs it" posture
+    ``PublishingConfig.create_pr`` already documents. These come from
+    config only, never from a CLI locator, so a crafted locator can never
+    redirect a fetch at another repository.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     base_branch: str = "main"
+    github_owner: str | None = None
+    github_repo: str | None = None
 
 
 class QualityGateConfig(BaseModel):

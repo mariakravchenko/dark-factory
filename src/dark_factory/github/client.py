@@ -1,0 +1,174 @@
+"""The one ``githubkit`` wrapper (D-03).
+
+This is the only module in ``dark_factory`` that constructs a ``githubkit``
+client. ``Settings.github_token`` is the only credential that ever reaches
+it: the token is unwrapped from ``SecretStr`` at the single construction
+frame (:meth:`GitHubClient.from_settings`) and never placed in an exception
+message, log field or event payload. Every error message this module
+raises passes through :func:`dark_factory.events.redaction.redact` before
+it is raised -- the same defense-in-depth
+:func:`~dark_factory.git.diff.push_working_branch` already applies,
+because a GitHub error response can echo request headers.
+
+Real ``githubkit`` 0.16.1 API surface (introspected against the installed
+package -- 10-RESEARCH.md Assumptions A1/A2 confirmed correct, no
+divergence from the researched OpenAPI-convention names):
+
+* ``GitHub(token, timeout=...)`` -- the client constructor; ``token`` is a
+  plain ``str`` accepted as the positional ``auth`` argument.
+* ``gh.rest.issues.get(owner, repo, issue_number)`` ->
+  ``Response[Issue]``; the parsed model is ``response.parsed_data``.
+* ``gh.rest.issues.list_comments(owner, repo, issue_number, page=..., per_page=...)``
+  -> ``Response[list[IssueComment]]``.
+* ``gh.rest.paginate(gh.rest.issues.list_comments, owner=..., repo=..., issue_number=...)``
+  -- the non-deprecated pagination helper (``GitHub.paginate`` itself is
+  deprecated in 0.16.1 in favour of ``rest.paginate``); returns an
+  iterator over every page's items, not just the first.
+* ``gh.rest.issues.create_comment(owner, repo, issue_number, body=...)``
+  -> ``Response[IssueComment]`` (keyword args merge directly into the
+  request JSON body when ``data=`` is not given).
+* ``gh.rest.pulls.create(owner, repo, title=..., head=..., base=..., body=...)``
+  -> ``Response[PullRequest]``.
+* ``gh.rest.pulls.list(owner, repo, head=f"{owner}:{branch}", state="all")``
+  -> ``Response[list[PullRequestSimple]]``.
+* Failures raise ``githubkit.exception.GitHubException`` subclasses (most
+  commonly ``RequestFailed``), carrying ``.response.status_code`` and
+  ``.response.text`` when the failure reached a real HTTP response.
+* An issue's ``labels`` field is ``list[str | LabelObject]`` -- GitHub
+  returns either a bare label name or an object carrying a ``.name``
+  attribute depending on the endpoint/media type, so both shapes are
+  normalized here.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from githubkit import GitHub
+from githubkit.exception import GitHubException
+from pydantic import BaseModel, ConfigDict
+
+from dark_factory.events.redaction import redact
+from dark_factory.github import GitHubApiError, MissingGitHubCredentialError
+
+if TYPE_CHECKING:
+    from dark_factory.config.settings import Settings
+
+__all__ = ["GitHubClient", "GitHubComment", "GitHubIssue", "GitHubPullRequest"]
+
+
+class GitHubComment(BaseModel):
+    """One comment on a GitHub issue."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: int
+    author: str
+    body: str
+
+
+class GitHubIssue(BaseModel):
+    """A GitHub issue, normalized to the fields Dark Factory needs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    number: int
+    title: str
+    body: str
+    labels: list[str]
+    comments: list[GitHubComment]
+
+
+class GitHubPullRequest(BaseModel):
+    """A GitHub pull request, normalized to the fields Dark Factory needs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    number: int
+    url: str
+
+
+def _label_name(label: Any) -> str:
+    """A label arrives as either a bare string or an object carrying ``.name``."""
+    if isinstance(label, str):
+        return label
+    name = getattr(label, "name", None)
+    return name if isinstance(name, str) else str(label)
+
+
+def _comment_author(user: Any) -> str:
+    """A comment's ``user`` is ``SimpleUser | None`` -- fall back to a
+    stable placeholder rather than raise when GitHub reports a
+    deleted/ghost user."""
+    login = getattr(user, "login", None)
+    return login if isinstance(login, str) else "ghost"
+
+
+class GitHubClient:
+    """The one wrapper for GitHub's REST API this project uses."""
+
+    def __init__(
+        self,
+        *,
+        token: str,
+        timeout: int = 30,
+        known_secrets: dict[str, str] | None = None,
+    ) -> None:
+        self._token = token
+        self._timeout = timeout
+        self._known_secrets = (
+            known_secrets
+            if known_secrets is not None
+            else ({token: "github_token"} if len(token) >= 8 else {})
+        )
+        self._client = GitHub(token, timeout=float(timeout))
+
+    @classmethod
+    def from_settings(cls, settings: Settings) -> GitHubClient:
+        """Build a client from ``Settings.github_token`` -- the single
+        frame where the token is unwrapped from ``SecretStr``."""
+        if settings.github_token is None:
+            raise MissingGitHubCredentialError(
+                "GITHUB_TOKEN is not configured (Settings.github_token is None)"
+            )
+        return cls(
+            token=settings.github_token.get_secret_value(),
+            known_secrets=settings.known_secret_values(),
+        )
+
+    def _raise_api_error(self, exc: Exception, *, endpoint: str) -> None:
+        status_code: int | None = None
+        detail = str(exc)
+        response = getattr(exc, "response", None)
+        if response is not None:
+            status_code = getattr(response, "status_code", None)
+            text = getattr(response, "text", None)
+            if isinstance(text, str) and text:
+                detail = text
+        message = redact(
+            f"GitHub API call failed ({endpoint}): {detail}",
+            known_secrets=self._known_secrets,
+        )
+        raise GitHubApiError(
+            message, status_code=status_code, endpoint=endpoint
+        ) from exc
+
+    def fetch_issue(self, owner: str, repo: str, *, issue_number: int) -> GitHubIssue:
+        """One issue read plus a fully paginated comment read."""
+        raise NotImplementedError("TODO 10-01: fetch_issue")
+
+    def create_comment(
+        self, owner: str, repo: str, *, issue_number: int, body: str
+    ) -> GitHubComment:
+        raise NotImplementedError("TODO 10-01: create_comment")
+
+    def create_pull_request(
+        self, owner: str, repo: str, *, title: str, head: str, base: str, body: str
+    ) -> GitHubPullRequest:
+        raise NotImplementedError("TODO 10-01: create_pull_request")
+
+    def find_pull_request_for_branch(
+        self, owner: str, repo: str, *, head_branch: str
+    ) -> GitHubPullRequest | None:
+        """A pure read -- issues no write of any kind."""
+        raise NotImplementedError("TODO 10-01: find_pull_request_for_branch")
