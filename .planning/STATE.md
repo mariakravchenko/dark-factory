@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 10
-current_phase_name: github-issue-intake-idempotent-publishing-comment-resume
+current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
-stopped_at: Phase 10 context gathered
-last_updated: "2026-09-26T15:46:33.282Z"
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-09-26T16:31:03.462Z"
 last_activity: 2026-09-26
-last_activity_desc: Phase 09 complete, transitioned to Phase 10
-state_head: 6b4497636cc272a0ec26ea7ae8c8eedbfbf1c524
+last_activity_desc: Phase 10 execution started
+state_head: 46222d14f2d0e7787dff919321ba9964ae7eb658
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 57
-  completed_plans: 51
+  completed_plans: 52
   percent: 8
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 
 ## Current Position
 
-Phase: 10 (github-issue-intake-idempotent-publishing-comment-resume) — READY TO EXECUTE
-Plan: Not started
+Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
+Plan: 2 of 6
 Status: Ready to execute
-Last activity: 2026-09-26 — Phase 09 complete, transitioned to Phase 10
+Last activity: 2026-09-26 — Phase 10 execution started
 
 Progress: [█░░░░░░░░░] 8% (9/12 phases)
 
@@ -105,6 +105,7 @@ Progress: [█░░░░░░░░░] 8% (9/12 phases)
 | Phase 09 P04 | 35min | 2 tasks | 4 files |
 | Phase 09 P05 | 25min | 1 tasks | 2 files |
 | Phase 09 P06 | 20min | 1 tasks | 2 files |
+| Phase 10 P01 | 55min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,9 @@ Recent decisions affecting current work:
 - [Phase 09]: [Phase 09]: 09-04: widened enforce_write_scope to cover Signal.ROLE_BOUNCED alongside ROLE_COMPLETED (gap CR-01); WriteScopeViolation handler clears counter_increments/bounce_reason on downgrade but leaves gate_events untouched since the gate artifact is already durably committed by the time the check runs
 - [Phase 09]: [Phase 09]: 09-05: applied redact(command, known_secrets=known_secrets) to GateCommandResult.command in run_quality_gate (gap CR-02) — the configured quality_gate.commands text is now redacted before persistence/commit, closing the last gap from 09-VERIFICATION.md; docstring citation fixed from '.claude/CLAUDE.md' to bare 'CLAUDE.md' to satisfy the worker-runtime-name leak guard
 - [Phase 09]: 09-06: rebuild derives worktree via ensure_worktree(base_branch, working_branch) from freshly loaded RunState (route 2), mirroring _advance_once, instead of resolving against the config repo root — Extends D-07 durability proof to path resolution itself; avoids a repo_root-named parameter ever holding a worktree path; adds a DB-free AST guard restoring detection for a defect class that previously required real PostgreSQL 17 to surface
+- [Phase 10]: [Phase 10] 10-01: Task 1 checkpoint approved installing githubkit>=0.16,<0.17 despite the SUS package-legitimacy flag (driven only by unknown-downloads, no other red flag, name matches the project's locked tech-stack decision)
+- [Phase 10]: [Phase 10] 10-01: Task 2 checkpoint selected option A1 -- source_ref = "{owner}/{repo}#{issue_number}", metadata = {owner, repo, issue_number, labels, comment_count} -- for how a GitHub-sourced run records which issue it came from
+- [Phase 10]: [Phase 10] 10-01: webhook optional extra pinned to starlette>=0.42,<1 + uvicorn>=0.34,<1 -- smallest surface with exact raw-request-body access for the webhook HMAC check (plan 10-04), TestClient built on httpx already pulled in by githubkit
 
 ### Pending Todos
 
@@ -227,6 +231,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-26T08:19:34.843Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/phases/10-github-issue-intake-idempotent-publishing-comment-resume/10-CONTEXT.md
+Last session: 2026-09-26T16:31:03.383Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 10
 waived_count: 0
 fixed_count: 2
-total_count: 10
-last_updated: 2026-09-20T18:31:31.040Z
+total_count: 12
+last_updated: 2026-09-26T16:30:21.672Z
 ---
 
 # Broken Windows Ledger
@@ -25,6 +25,8 @@ last_updated: 2026-09-20T18:31:31.040Z
 | 8 | 06 | unrun-verify | tests/integration/test_capability_denial_no_secret_leak.py |  | SEC-01/SC4 sweep and its 5 tests: not run this session -- no Docker/initdb 17 reachable and .env sourcing blocked by the secret-read guard. Logic verified standalone (control arm, shell.execute arm, structural guard, config-tree round-trip). User should run 'set -a; . .env; set +a; uv run pytest -q tests/integration/test_capability_denial_no_secret_leak.py' and report back. | open |  | 2026-09-19T06:07:55.859Z |  |
 | 9 | 06 | unrun-verify | tests/integration/test_phase6_acceptance.py |  | Phase 6 acceptance gate: presence/non-empty checks verified standalone without pytest's DB-provisioning marker; the pytest-collected run itself (17 tests) and the full-suite 'set -a; . .env; set +a; uv run pytest -q' were not run this session for the same .env-sourcing constraint. | open |  | 2026-09-19T06:07:55.977Z |  |
 | 10 | 07 | stub | src/dark_factory/workers/claude_code.py | 388 | ClaudeCodeWorker.resume() raises NotImplementedError until plan 07-03 lands the native --resume <session_id> branch (execute() is fully implemented and proven this plan) | fixed |  | 2026-09-20T18:05:11.961Z | 2026-09-20T18:31:31.040Z |
+| 11 | 10 | unrun-verify | tests/integration/test_unsupported_source.py |  | github:152 case updated for real _load_github but not executed against real PostgreSQL in this environment (integration tier, needs pg_url/engine fixtures) | open |  | 2026-09-26T16:30:21.545Z |  |
+| 12 | 10 | deviation | src/dark_factory/input/loaders.py |  | Live smoke test of _load_github against a real GitHub issue deferred -- GITHUB_TOKEN absent from environment/.env in this session; unit tier (fakes only) fully proven and gates this plan's <verify> | open |  | 2026-09-26T16:30:21.672Z |  |
 
 ````json
 [
@@ -147,6 +149,30 @@ last_updated: 2026-09-20T18:31:31.040Z
     "reason": "",
     "recorded_at": "2026-09-20T18:05:11.961Z",
     "resolved_at": "2026-09-20T18:31:31.040Z"
+  },
+  {
+    "id": 11,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "tests/integration/test_unsupported_source.py",
+    "line": null,
+    "description": "github:152 case updated for real _load_github but not executed against real PostgreSQL in this environment (integration tier, needs pg_url/engine fixtures)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-26T16:30:21.545Z",
+    "resolved_at": null
+  },
+  {
+    "id": 12,
+    "kind": "deviation",
+    "phase": "10",
+    "file": "src/dark_factory/input/loaders.py",
+    "line": null,
+    "description": "Live smoke test of _load_github against a real GitHub issue deferred -- GITHUB_TOKEN absent from environment/.env in this session; unit tier (fakes only) fully proven and gates this plan's <verify>",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-26T16:30:21.672Z",
+    "resolved_at": null
   }
 ]
 ````
