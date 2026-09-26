@@ -4,16 +4,16 @@ current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
 stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-09-26T16:31:03.462Z"
+last_updated: "2026-09-26T18:35:14.271Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: 46222d14f2d0e7787dff919321ba9964ae7eb658
+state_head: cb2f325c9e6ed7b9c844308702c7e0b59058f07a
 progress:
   total_phases: 12
-  completed_phases: 1
+  completed_phases: 0
   total_plans: 57
   completed_plans: 52
-  percent: 8
+  percent: 0
 ---
 
 # Project State
@@ -32,7 +32,7 @@ Plan: 2 of 6
 Status: Ready to execute
 Last activity: 2026-09-26 — Phase 10 execution started
 
-Progress: [█░░░░░░░░░] 8% (9/12 phases)
+Progress: [░░░░░░░░░░] 0% (9/12 phases)
 
 ## Performance Metrics
 
@@ -220,6 +220,8 @@ None yet.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
+
+- Phase 10 plan 06 Task 2 (db-tier proof) is blocked: no PostgreSQL 17 reachable in this environment (no Docker, no local initdb, DARK_FACTORY_TEST_DATABASE_URL unset). Task 1 (tracer: schema/events/mutation-path/publish-step/runner wiring) is fully implemented and committed (commits 17e8c37 test, cb2f325 feat), unit+contract tier green (724 passed), mypy/ruff clean. Task 2 needs a human to either start Docker, install a local PostgreSQL 17 initdb, or set DARK_FACTORY_TEST_DATABASE_URL, then resume 10-06 to write/run tests/db/test_github_publishing_columns_schema.py, tests/db/test_publish_step.py and extend tests/db/test_load_run_state.py. NOTE for the human: this plan's default publishing.create_pr=true means every existing db-tier test reaching the terminal role with default config (no github_owner/github_repo, no GITHUB_TOKEN) will now attempt to publish and fail with a PUBLISH_FAILED/ROLE_FAILED outcome instead of reaching COMPLETED -- check tests/db/test_quality_gate_gates_the_run.py, tests/db/test_artifact_commit_per_role.py, tests/db/test_four_role_pipeline.py and similar four-role-pipeline db tests for this regression when Task 2 runs, and add publishing:\n  create_pr: false to their config overwrites if so.
 
 ## Deferred Items
 
