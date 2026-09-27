@@ -4,10 +4,12 @@ against ORM metadata.
 
 Two concerns share this module:
 
-1. **``human_interactions`` shape** (revision ``0003``) — the eight declared
-   columns and their nullability, the three-value ``interaction_status`` CHECK
-   enforced by PostgreSQL (not the ORM), the partial unique index that makes "at
-   most one open question per run" a database invariant, and both foreign keys.
+1. **``human_interactions`` shape** (revision ``0003``, widened by ``0006``) —
+   the ten declared columns and their nullability (the original eight plus
+   ``clarification_comment_id``/``github_comment_id``, Phase 10, GIT-04/GIT-05),
+   the three-value ``interaction_status`` CHECK enforced by PostgreSQL (not the
+   ORM), the partial unique index that makes "at most one open question per
+   run" a database invariant, and both foreign keys.
 
 2. **The ``runs`` lease columns behave as a database-clock lease** — before any
    ``orchestrator/lease.py`` exists. Claim-don't-check is shown as a single
@@ -57,6 +59,11 @@ _INTERACTION_COLUMNS = {
     "status",
     "created_at",
     "answered_at",
+    # Phase 10, migration 0006 (GIT-04/GIT-05): the two GitHub comment-id
+    # columns plan 10-06 added -- clarification_comment_id's first real
+    # writer is plan 10-03, github_comment_id's is plan 10-04.
+    "clarification_comment_id",
+    "github_comment_id",
 }
 
 
@@ -147,14 +154,19 @@ def test_metadata_owns_exactly_the_five_tables() -> None:
     assert sorted(Base.metadata.tables) == _OWNED_TABLES
 
 
-def test_human_interactions_has_the_eight_declared_columns_with_expected_nullability(
+def test_human_interactions_has_the_ten_declared_columns_with_expected_nullability(
     engine: Engine,
 ) -> None:
     cols = {c["name"]: c for c in inspect(engine).get_columns("human_interactions")}
     assert set(cols) == _INTERACTION_COLUMNS
     for name in ("question", "status", "run_id", "role_execution_id", "created_at"):
         assert cols[name]["nullable"] is False, name
-    for name in ("answer", "answered_at"):
+    for name in (
+        "answer",
+        "answered_at",
+        "clarification_comment_id",
+        "github_comment_id",
+    ):
         assert cols[name]["nullable"] is True, name
 
 
