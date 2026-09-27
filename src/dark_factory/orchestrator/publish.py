@@ -142,8 +142,10 @@ def run_publish_step(
     ``state.published_commit_sha`` / ``state.pr_number`` / ``state.pr_url``.
     Also confirms ``state.working_branch`` is exactly
     ``working_branch_name(run_id)`` -- a mismatch is a programming error, not
-    a recoverable state, so this asserts rather than silently re-publishing
-    onto a different branch. When both ``published_commit_sha`` and
+    a recoverable state, so this raises ``RuntimeError`` (WR-01, 10-REVIEW.md
+    -- an explicit raise survives ``-O``/``PYTHONOPTIMIZE=1``, unlike a plain
+    ``assert``) rather than silently re-publishing onto a different branch.
+    When both ``published_commit_sha`` and
     ``pr_number`` are set, returns them verbatim with
     ``adopted_existing_pr=True`` and issues **no git command and no GitHub
     API call at all** -- the common case on every retry, made free.
@@ -232,14 +234,25 @@ def run_publish_step(
             error=None,
             adopted_existing_pr=False,
         )
-    assert client is not None  # caller's contract: non-None whenever create_pr
+    # WR-01 (10-REVIEW.md): explicit ``raise``, not ``assert`` -- Python's
+    # ``assert`` statement compiles to a no-op under ``-O``/
+    # ``PYTHONOPTIMIZE=1``, which would silently disable both of these
+    # deliberate runtime safety nets (a mismatch is a programming error, not
+    # a recoverable state) in any deployment packaged with optimizations on.
+    if client is None:
+        raise RuntimeError(
+            "run_publish_step: client is None but create_pr is True -- "
+            "caller's contract is to construct a client whenever create_pr "
+            "is True"
+        )
 
     working_branch = working_branch_name(run_id)
-    assert state.working_branch == working_branch, (
-        f"run {run_id}: persisted working_branch {state.working_branch!r} does "
-        f"not match the deterministic working_branch_name {working_branch!r} -- "
-        "refusing to publish onto a mismatched branch"
-    )
+    if state.working_branch != working_branch:
+        raise RuntimeError(
+            f"run {run_id}: persisted working_branch {state.working_branch!r} does "
+            f"not match the deterministic working_branch_name {working_branch!r} -- "
+            "refusing to publish onto a mismatched branch"
+        )
 
     # Stage 2: the fast path over persisted identifiers (D-06). Free on every
     # ordinary retry -- no git command, no GitHub API call.
