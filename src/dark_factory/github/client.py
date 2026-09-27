@@ -31,6 +31,9 @@ divergence from the researched OpenAPI-convention names):
   -> ``Response[PullRequest]``.
 * ``gh.rest.pulls.list(owner, repo, head=f"{owner}:{branch}", state="all")``
   -> ``Response[list[PullRequestSimple]]``.
+* ``gh.rest.users.get_authenticated()`` -> ``Response[PrivateUser | PublicUser]``;
+  the parsed model's ``.login`` is the token's own identity (Phase 10, plan
+  10-04, 10-RESEARCH.md Assumption A4/Pitfall 2).
 * Failures raise ``githubkit.exception.GitHubException`` subclasses (most
   commonly ``RequestFailed``), carrying ``.response.status_code`` and
   ``.response.text`` when the failure reached a real HTTP response.
@@ -122,6 +125,11 @@ class GitHubClient:
             else ({token: "github_token"} if len(token) >= 8 else {})
         )
         self._client = GitHub(token, timeout=float(timeout))
+        # A plain instance attribute, not a module-level cache (Phase 10,
+        # plan 10-04): a module cache would be shared across every token and
+        # every test in the process, which is exactly wrong once more than
+        # one ``GitHubClient`` -- or more than one test -- exists.
+        self._authenticated_login: str | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> GitHubClient:
@@ -226,6 +234,26 @@ class GitHubClient:
             raise  # pragma: no cover - _raise_api_error always raises
         pr = response.parsed_data
         return GitHubPullRequest(number=pr.number, url=pr.html_url)
+
+    def authenticated_login(self) -> str:
+        """The login of the identity behind the configured token (Phase 10,
+        GIT-06, 10-RESEARCH.md Pitfall 2/Assumption A4).
+
+        Issues exactly one API call even when invoked repeatedly on the same
+        client instance -- the result is cached on ``self`` after the first
+        call. The webhook resolver (``dark_factory.webhook.resolve``) compares
+        an inbound comment's commenter login against this value to filter out
+        Dark Factory's own posted comments, so this must be genuinely stable
+        for the lifetime of one client / one token.
+        """
+        if self._authenticated_login is None:
+            try:
+                user = self._client.rest.users.get_authenticated().parsed_data
+            except GitHubException as exc:
+                self._raise_api_error(exc, endpoint="users.get_authenticated")
+                raise  # pragma: no cover - _raise_api_error always raises
+            self._authenticated_login = user.login
+        return self._authenticated_login
 
     def find_pull_request_for_branch(
         self, owner: str, repo: str, *, head_branch: str
