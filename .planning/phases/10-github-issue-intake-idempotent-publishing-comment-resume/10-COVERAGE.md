@@ -21,7 +21,7 @@
 | `issues.create_comment` — post a clarification comment | `INTEGRATE` | |
 | `users.get_authenticated` (`GET /user`) — Dark Factory's own login | `INTEGRATE` | The self-comment-loop filter (10-RESEARCH Pitfall 2) needs the token's own identity. |
 | `pulls.create` — open the pull request | `INTEGRATE` | |
-| `pulls.list` filtered by `head` — find an existing PR for this run's branch | `INTEGRATE` | The GIT-04 crash-safety net: the only check that distinguishes "never attempted" from "succeeded on GitHub, crashed before the commit". |
+| `pulls.list` filtered by `head` — find existing PR for run's branch | `INTEGRATE` | The GIT-04 crash-safety net: the only check that distinguishes "never attempted" from "succeeded on GitHub, crashed before the commit". |
 | `webhooks.verify` — HMAC-SHA256 signature check | `INTEGRATE` | |
 | `webhooks.parse` — typed `issue_comment` event model | `INTEGRATE` | |
 | built-in retry / rate-limit handling on the client | `INTEGRATE` | Bounded retry on idempotent reads; wired through the one `GitHubClient` wrapper so no call site re-invents it. |
@@ -37,7 +37,7 @@
 | `git.create_ref` — create the working branch via the REST API | `OPT-OUT` | GIT-01/GIT-02 already own branch creation through the `git` CLI (`git/worktree.py` + `push_working_branch`); a second branch-creation path would split ownership of a durability-critical side effect. |
 | `repos.create_webhook` — register the webhook programmatically | `OPT-OUT` | Webhook registration is repo-admin setup, declared as `user_setup` in plan 10-04, not orchestration behaviour. |
 | webhook `issue_comment` actions `edited` / `deleted` / `pinned` / `unpinned` | `OPT-OUT` | Only `action == "created"` can answer a pending question; an edited or deleted comment cannot un-answer an interaction that is already `ANSWERED` (D-05's dedup key is the comment id). |
-| webhook events other than `issue_comment` (`push`, `pull_request`, `check_run`, `workflow_run`) | `OPT-OUT` | No Phase 10 requirement consumes them; trigger generalization across CLI/CI/webhook is explicitly Phase 11's job (TRIG-01/TRIG-04). |
+| webhook events other than `issue_comment` (`push`, `pull_request`, etc.) | `OPT-OUT` | No Phase 10 requirement consumes them; trigger generalization across CLI/CI/webhook is explicitly Phase 11's job (TRIG-01/TRIG-04). |
 | comments on pull requests (`issue.pull_request` present in the payload) | `OPT-OUT` | Dark Factory only ever asks its questions on issues (GIT-05), so a PR-thread comment can never be the answer to a pending interaction; filtered out before resolution. |
 | GraphQL API (`githubkit.graphql`) | `OPT-OUT` | Every call above exists in the typed REST namespace; adding a second transport would duplicate auth, pagination and error-redaction discipline for no capability gain. |
 | GitHub App installation auth / OAuth flows | `OPT-OUT` | D-04 reuses the existing `Settings.github_token` PAT as Dark Factory's own identity and introduces no new token type; App identity is an unrelated future migration (10-RESEARCH Assumption A3). |
