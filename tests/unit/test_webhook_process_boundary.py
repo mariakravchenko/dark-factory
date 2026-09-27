@@ -207,9 +207,7 @@ def test_no_webhook_module_imports_or_calls_advance_or_drive() -> None:
     offenders: list[str] = []
     for path in _webhook_modules():
         rel = str(path.relative_to(_SRC_ROOT / _PKG))
-        offenders.extend(
-            _name_level_violations(path.read_text(encoding="utf-8"), rel)
-        )
+        offenders.extend(_name_level_violations(path.read_text(encoding="utf-8"), rel))
     assert not offenders, (
         "advance/drive import or call found under src/dark_factory/webhook/:\n  "
         + "\n  ".join(offenders)
@@ -252,8 +250,7 @@ def test_webhook_packages_direct_imports_stay_inside_the_named_allowlist() -> No
                 offenders.append(f"{rel} imports {module}")
     assert not offenders, (
         "src/dark_factory/webhook/ reaches beyond its named direct-import "
-        f"allowlist ({sorted(_WEBHOOK_DIRECT_ALLOWED)}):\n  "
-        + "\n  ".join(offenders)
+        f"allowlist ({sorted(_WEBHOOK_DIRECT_ALLOWED)}):\n  " + "\n  ".join(offenders)
     )
 
 
@@ -290,9 +287,7 @@ def test_synthetic_bare_call_to_drive_is_detected() -> None:
 
 
 def test_a_docstring_mention_of_drive_is_not_a_violation() -> None:
-    source = (
-        '"""This module must never import advance or drive."""\n' "x = 1\n"
-    )
+    source = '"""This module must never import advance or drive."""\nx = 1\n'
     assert _name_level_violations(source, "synthetic.py") == []
 
 
