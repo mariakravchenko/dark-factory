@@ -114,6 +114,16 @@ def build_app(
     :class:`GitHubClient` construction entirely -- the unit tier injects a
     stub callable and never constructs a real client or needs
     ``GITHUB_TOKEN``.
+
+    WR-02 (10-REVIEW.md): on the production path (``authenticated_login`` is
+    ``None``), logs a loud ``ERROR`` -- but does not raise -- when
+    ``GITHUB_TOKEN`` and/or ``GITHUB_WEBHOOK_SECRET`` are unconfigured, so a
+    misconfigured deployment is visible in this process's own startup logs
+    rather than only discoverable per-request (and, before CR-02, not even
+    logged then). Deliberately does not raise: ``GITHUB_TOKEN`` stays
+    legitimately unset in environments that never run this receiver
+    (10-02-SUMMARY.md), so refusing to construct the Starlette app at all
+    would be a bigger behaviour change than this fix is scoped to make.
     """
     # A one-element list, not a bare ``nonlocal``-mutated variable: closed
     # over by ``_login_provider`` below and scoped to *this* ``build_app()``
@@ -121,6 +131,26 @@ def build_app(
     # cached client -- the exact reason ``GitHubClient.authenticated_login``
     # itself caches on the instance rather than a module global.
     _client_cache: list[GitHubClient] = []
+
+    if authenticated_login is None:
+        _startup_settings = settings_factory()
+        if _startup_settings.github_token is None:
+            _log.error(
+                "webhook.build_app.missing_github_token",
+                detail=(
+                    "GITHUB_TOKEN is not configured -- every inbound "
+                    "issue_comment delivery will fail once this process "
+                    "tries to construct a GitHubClient"
+                ),
+            )
+        if _startup_settings.github_webhook_secret is None:
+            _log.error(
+                "webhook.build_app.missing_github_webhook_secret",
+                detail=(
+                    "GITHUB_WEBHOOK_SECRET is not configured -- every "
+                    "inbound delivery will be rejected with 401"
+                ),
+            )
 
     def _login_provider() -> Callable[[], str]:
         if authenticated_login is not None:

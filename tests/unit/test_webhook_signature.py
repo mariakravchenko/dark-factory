@@ -37,6 +37,7 @@ from dark_factory.webhook.resolve import (
     ResolvedAnswer,
     UnresolvableComment,
 )
+from tests.support.log_sink import real_log_sink
 from tests.support.webhook_events import build_issue_comment_payload, sign_payload
 
 pytestmark = pytest.mark.unit
@@ -93,9 +94,20 @@ class _FakeSecretStr:
 
 
 class _FakeSettings:
-    def __init__(self, secret: str | None) -> None:
+    def __init__(
+        self,
+        secret: str | None,
+        *,
+        github_token: str | None = "ghp_fake0000000000000000",
+    ) -> None:
         self.github_webhook_secret = (
             _FakeSecretStr(secret) if secret is not None else None
+        )
+        # WR-02 (10-REVIEW.md): defaults to a configured value so every
+        # pre-existing test -- none of which cared about github_token -- is
+        # unaffected; only the new WR-02 tests below override it.
+        self.github_token = (
+            _FakeSecretStr(github_token) if github_token is not None else None
         )
 
 
@@ -362,3 +374,56 @@ def test_an_unexpected_exception_from_resolve_returns_a_generic_server_error(
     response = _post(client, body, signature=signature)
     assert response.status_code == 500
     assert "boom from resolve" not in response.text
+
+
+# --------------------------------------------------------------------------- #
+# WR-02: startup validation logs loudly, never raises
+# --------------------------------------------------------------------------- #
+
+
+def test_missing_github_token_logs_loudly_at_construction() -> None:
+    """WR-02 (10-REVIEW.md): on the production path (no injected
+    ``authenticated_login``), ``build_app()`` logs a loud ``ERROR`` at
+    construction time when ``GITHUB_TOKEN`` is unset -- rather than only
+    discovering the gap on the first inbound request."""
+    with real_log_sink() as buffer:
+        build_app(
+            session_factory=_RaisingSessionFactory(),
+            settings_factory=lambda: _FakeSettings(_SECRET, github_token=None),
+        )
+    output = buffer.getvalue()
+    assert "webhook.build_app.missing_github_token" in output
+
+
+def test_missing_github_webhook_secret_logs_loudly_at_construction() -> None:
+    with real_log_sink() as buffer:
+        build_app(
+            session_factory=_RaisingSessionFactory(),
+            settings_factory=lambda: _FakeSettings(None),
+        )
+    output = buffer.getvalue()
+    assert "webhook.build_app.missing_github_webhook_secret" in output
+
+
+def test_fully_configured_settings_log_no_startup_warning() -> None:
+    with real_log_sink() as buffer:
+        build_app(
+            session_factory=_RaisingSessionFactory(),
+            settings_factory=lambda: _FakeSettings(_SECRET),
+        )
+    output = buffer.getvalue()
+    assert "webhook.build_app.missing" not in output
+
+
+def test_injected_authenticated_login_skips_the_startup_check() -> None:
+    """The unit tier's own injection seam (``authenticated_login=``) must
+    never be forced to also configure ``GITHUB_TOKEN`` -- the startup check
+    only runs on the production path."""
+    with real_log_sink() as buffer:
+        build_app(
+            session_factory=_RaisingSessionFactory(),
+            settings_factory=lambda: _FakeSettings(_SECRET, github_token=None),
+            authenticated_login=lambda: _STUB_LOGIN,
+        )
+    output = buffer.getvalue()
+    assert "webhook.build_app.missing" not in output
