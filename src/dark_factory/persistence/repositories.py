@@ -185,20 +185,33 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
 
     # pending_answer / pending_clarification_comment_id (Phase 10, GIT-04/
     # GIT-05, D-05) both come off the SAME human_interactions row bound to
-    # latest_row.id -- one ask ("ask" mode) inserts exactly one row per
-    # attempt, and a later "answer" call updates that same row rather than
-    # inserting a second one, so no status filter is needed in the WHERE
-    # clause to find the row: it is unique by role_execution_id alone. The
-    # two fields still key off ``status`` in Python, one query rather than
-    # two, per plan 10-06's "extend the existing pending_answer select"
-    # instruction: ``pending_answer`` is meaningful once the row is
-    # ANSWERED (``answer`` genuinely is NULL before that, so this is
-    # unconditional); ``pending_clarification_comment_id`` is meaningful
-    # only while the row is still WAITING -- plan 10-03 reads it to decide
-    # whether it already posted a clarification comment for the *current*
-    # open question, and once that question is answered there is no more
-    # question left to be "pending" about, so an ANSWERED row deliberately
-    # does not populate it even though the column itself is never cleared.
+    # latest_row.id. WR-03 (10-REVIEW.md) correction: this query is **not**
+    # actually guaranteed unique by role_execution_id alone -- nothing in
+    # ``_write_human_interaction`` (persistence/mutations.py) enforces
+    # "exactly one row per attempt" (the partial unique index
+    # ``uq_one_waiting_interaction_per_run`` constrains at most one WAITING
+    # row per *run_id*, not per role_execution_id), so a role attempt that
+    # is resumed and then raises ``ROLE_NEEDS_INPUT`` a second time within
+    # the same attempt inserts a *second* row bound to the same
+    # role_execution_id. When that happens, this query still returns the
+    # correct row -- the currently-open WAITING one (``answered_at IS
+    # NULL``) if one exists, else the most-recently-ANSWERED one -- but only
+    # because ``NULLS FIRST`` is made explicit below rather than left to
+    # PostgreSQL's own default DESC-ordering behaviour: the currently open
+    # question, if any, must sort before every earlier answered one. Naming
+    # this explicitly (rather than relying on the implicit default) means a
+    # future "NULLS LAST looks more natural" edit cannot silently invert
+    # which row wins. The two fields still key off ``status`` in Python, one
+    # query rather than two, per plan 10-06's "extend the existing
+    # pending_answer select" instruction: ``pending_answer`` is meaningful
+    # once the row is ANSWERED (``answer`` genuinely is NULL before that, so
+    # this is unconditional); ``pending_clarification_comment_id`` is
+    # meaningful only while the row is still WAITING -- plan 10-03 reads it
+    # to decide whether it already posted a clarification comment for the
+    # *current* open question, and once that question is answered there is
+    # no more question left to be "pending" about, so an ANSWERED row
+    # deliberately does not populate it even though the column itself is
+    # never cleared.
     pending_answer: str | None = None
     pending_clarification_comment_id: int | None = None
     if latest_row is not None:
@@ -212,7 +225,7 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
                 HumanInteraction.run_id == run_id,
                 HumanInteraction.role_execution_id == latest_row.id,
             )
-            .order_by(HumanInteraction.answered_at.desc())
+            .order_by(HumanInteraction.answered_at.desc().nulls_first())
             .limit(1)
         ).first()
         if interaction is not None:
