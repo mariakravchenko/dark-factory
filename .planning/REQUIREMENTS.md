@@ -108,10 +108,10 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [x] **GIT-01**: Each run has an explicit working branch created from the configured base branch; all roles operate on the same run repository state
 - [x] **GIT-02**: Dark Factory owns delivery actions (create branch, commit, push, create PR); agents never own commit/push/PR policy
-- [ ] **GIT-03**: Publishing occurs only when QA = PASS and Quality Gate = PASS, then collects the final diff, commits, pushes, creates the PR, persists PR metadata, and transitions to COMPLETED
+- [x] **GIT-03**: Publishing occurs only when QA = PASS and Quality Gate = PASS, then collects the final diff, commits, pushes, creates the PR, persists PR metadata, and transitions to COMPLETED
 - [x] **GIT-04**: Publishing is idempotent — retrying with an existing `pr_number` does not open a second PR; branch, commit SHA, PR number/URL, and clarification-comment id are persisted and checked before acting
 - [x] **GIT-05**: For a GitHub-sourced run, Dark Factory can post a clarification comment on the issue and keep the run `WAITING_HUMAN` until an answer is associated with the pending interaction
-- [ ] **GIT-06**: A GitHub event handler receiving a new comment finds the associated run and pending interaction, stores the answer, and resumes the same `RoleExecution` — it never creates a new run
+- [x] **GIT-06**: A GitHub event handler receiving a new comment finds the associated run and pending interaction, stores the answer, and resumes the same `RoleExecution` — it never creates a new run
 
 ### Triggers & CLI
 
@@ -252,10 +252,10 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | GATE-04 | Phase 9 | Complete |
 | GIT-01 | Phase 5 | Complete |
 | GIT-02 | Phase 5 | Complete |
-| GIT-03 | Phase 10 | Pending |
+| GIT-03 | Phase 10 | Complete |
 | GIT-04 | Phase 10 | Complete |
 | GIT-05 | Phase 10 | Complete |
-| GIT-06 | Phase 10 | Pending |
+| GIT-06 | Phase 10 | Complete |
 | TRIG-01 | Phase 11 | Pending |
 | TRIG-02 | Phase 12 | Pending |
 | TRIG-03 | Phase 12 | Pending |

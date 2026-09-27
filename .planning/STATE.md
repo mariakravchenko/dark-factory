@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
-status: executing
-stopped_at: Completed 10-04-PLAN.md
-last_updated: "2026-09-27T12:44:16.568Z"
+status: verifying
+stopped_at: Completed 10-05-PLAN.md
+last_updated: "2026-09-27T13:05:46.985Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: 6920865833dcd20169684e24a2361e449e2deb2a
+state_head: a4c8a2f78001cdf08cd384a4c1573a06bb71189a
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 57
-  completed_plans: 56
+  completed_plans: 57
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-26 — Phase 10 execution started
 
 Progress: [░░░░░░░░░░] 0% (9/12 phases)
@@ -110,6 +110,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 10 P02 | 55min | 2 tasks | 3 files |
 | Phase 10 P03 | ~2h | 2 tasks | 4 files |
 | Phase 10 P04 | ~2h10min | 3 tasks | 11 files |
+| Phase 10 P05 | 55min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -219,6 +220,8 @@ Recent decisions affecting current work:
 - [Phase 10]: [Phase 10]: 10-03: GitHub-sourced ROLE_NEEDS_INPUT posts a fresh clarification comment via github_client_factory, threading the returned id into the same HumanInteractionWrite/apply_transition call that opens the WAITING interaction; guarded by RunState.pending_clarification_comment_id (D-05) and fail-soft on GitHubError (redacted text rides the existing QUESTION_CREATED payload, no new EventType) -- Reuses plan 10-06's seam and comment-id field rather than adding new ones; CLARIFICATION_COMMENT_PREFIX + build_clarification_comment take only the question list so no internal state can leak into the public comment
 - [Phase 10]: 10-04: webhook/app.py's build_app(*, session_factory, settings_factory, authenticated_login) is a factory, not a bare module object -- app = build_app() is the production default, and every keyword extends this codebase's session_factory/github_client_factory injection idiom to an ASGI route — So a test app never shares state (a lazily-constructed GitHubClient, a session factory) with another test's app; production stays app = build_app() with zero arguments
 - [Phase 10]: 10-04: the self-comment filter reads the commenter identity off comment.user.login (the comment's own author), not sender.login (who triggered the delivery) -- closes 10-RESEARCH.md Assumption A4 — Confirmed by introspecting the installed githubkit 0.16.1 / githubkit-schemas 26.9.21 package's own typed model before writing the call site, both self-comment checks (comment id and login) evaluated independently regardless
+- [Phase 10]: [Phase 10]: 10-05: githubkit allowed-module set has three entries, not the plan's anticipated two -- webhook/resolve.py's UNSET sentinel import is a third genuine call site, discovered by reading actual source rather than only the plan's read_first list; documented in the guard's own docstring, no production code touched
+- [Phase 10]: [Phase 10]: 10-05: D-02 guarded on names (advance/drive as import or bare call) rather than closure membership, since answers.py legitimately imports RunNotFoundError from runner.py making a closure-exclusion assertion false on landing; genuinely-optional proof for the webhook extra reuses test_no_mcp_import_in_core.py's own import-graph-only mechanism rather than inventing a subprocess-based check
 
 ### Pending Todos
 
@@ -243,6 +246,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-27T12:44:16.493Z
-Stopped at: Completed 10-04-PLAN.md
+Last session: 2026-09-27T13:05:46.897Z
+Stopped at: Completed 10-05-PLAN.md
 Resume file: None
