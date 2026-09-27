@@ -4,10 +4,10 @@ current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
 stopped_at: Completed 10-06-PLAN.md
-last_updated: "2026-09-27T07:57:40.607Z"
+last_updated: "2026-09-27T10:19:57.079Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: 30c74adc8d2dff9b92d9a0aca7faaf486a7225b5
+state_head: 05405bdef3832e95097221c53a406aa936cb5af1
 progress:
   total_phases: 12
   completed_phases: 0
@@ -224,6 +224,8 @@ None yet.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
+
+- Phase 10 plan 10-02 Task 2 precondition unmet: no PostgreSQL 17 reachable (no Docker, no local initdb, DARK_FACTORY_TEST_DATABASE_URL unset). Task 1 complete and committed (05405bd); Task 2's db-tier crash-window proof deferred until a human provisions PostgreSQL and resumes this plan.
 
 ## Deferred Items
 
