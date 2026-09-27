@@ -9,12 +9,14 @@ import inspect
 import uuid
 
 import pytest
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.events.catalog import EventType
-from dark_factory.persistence.models import RunEvent
+from dark_factory.persistence.models import HumanInteraction, Run, RunEvent
 from dark_factory.persistence.mutations import (
     EventWrite,
     RoleExecutionWrite,
@@ -72,6 +74,13 @@ def test_reconstructs_every_phase_one_resume_value(db_session: Session) -> None:
     assert state.latest_execution.worker == "fake"
     assert state.latest_execution.status == "RUNNING"
     assert state.latest_execution.attempt == 1
+    # Phase 10 (plan 10-06, GIT-03/GIT-04): a freshly seeded run has
+    # published nothing and has no open question -- all four new fields are
+    # None.
+    assert state.pr_number is None
+    assert state.pr_url is None
+    assert state.published_commit_sha is None
+    assert state.pending_clarification_comment_id is None
 
 
 def test_unknown_run_id_returns_none(db_session: Session) -> None:
@@ -131,3 +140,72 @@ def test_repositories_module_imports_nothing_from_events() -> None:
 
     src = inspect.getsource(repositories)
     assert "dark_factory.events" not in src
+
+
+# --------------------------------------------------------------------------- #
+# Phase 10 (plan 10-06, GIT-03/GIT-04): the three publish-identifier columns
+# and pending_clarification_comment_id.
+# --------------------------------------------------------------------------- #
+
+
+def test_load_run_state_reads_back_the_three_publish_identifiers_verbatim(
+    db_session: Session,
+) -> None:
+    run_id = _run_at_ba(db_session)
+    sha = "e" * 40
+    db_session.execute(
+        sa.update(Run)
+        .where(Run.id == run_id)
+        .values(
+            pr_number=42,
+            pr_url="https://example.invalid/pr/42",
+            published_commit_sha=sha,
+        )
+    )
+    db_session.flush()
+
+    state = load_run_state(db_session, run_id)
+
+    assert state is not None
+    assert state.pr_number == 42
+    assert state.pr_url == "https://example.invalid/pr/42"
+    assert state.published_commit_sha == sha
+
+
+def test_pending_clarification_comment_id_reads_from_a_waiting_row_but_not_an_answered_one(
+    db_session: Session,
+) -> None:
+    run_id = _run_at_ba(db_session)
+    latest = load_run_state(db_session, run_id)
+    assert latest is not None
+    assert latest.latest_execution is not None
+    role_execution_id = latest.latest_execution.id
+
+    db_session.add(
+        HumanInteraction(
+            run_id=run_id,
+            role_execution_id=role_execution_id,
+            question="what should the endpoint be named?",
+            status=InteractionStatus.WAITING,
+            clarification_comment_id=4503599627370496,
+        )
+    )
+    db_session.flush()
+
+    waiting_state = load_run_state(db_session, run_id)
+    assert waiting_state is not None
+    assert waiting_state.pending_clarification_comment_id == 4503599627370496
+
+    db_session.execute(
+        sa.update(HumanInteraction)
+        .where(HumanInteraction.role_execution_id == role_execution_id)
+        .values(answer="call it /health", status=InteractionStatus.ANSWERED)
+    )
+    db_session.flush()
+
+    answered_state = load_run_state(db_session, run_id)
+    assert answered_state is not None
+    assert answered_state.pending_clarification_comment_id is None
+    # ``pending_answer`` becomes populated the moment the row is answered --
+    # the exact sibling behavior this field always had.
+    assert answered_state.pending_answer == "call it /health"
