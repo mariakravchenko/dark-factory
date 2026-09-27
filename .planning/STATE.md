@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
-stopped_at: Completed 10-06-PLAN.md
-last_updated: "2026-09-27T10:19:57.079Z"
+stopped_at: Completed 10-02-PLAN.md
+last_updated: "2026-09-27T11:15:33.716Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: 05405bdef3832e95097221c53a406aa936cb5af1
+state_head: 659b3532fd28ae2a0f0e85cac6c9f518239e02ab
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 57
-  completed_plans: 53
+  completed_plans: 54
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 ## Current Position
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-09-26 — Phase 10 execution started
 
@@ -107,6 +107,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 09 P06 | 20min | 1 tasks | 2 files |
 | Phase 10 P01 | 55min | 3 tasks | 14 files |
 | Phase 10 P06 | ~2h40min | 2 tasks | 16 files |
+| Phase 10 P02 | 55min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -211,6 +212,8 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-06: publish step's own commit_run_artifacts runs inside the terminal role's gate-PASS arm, before the generic per-role commit -- it carries the role's artifacts plus quality_gate.json in one commit labelled 'publish'; the later generic commit safely no-ops — Placement matches the plan's literal instruction and avoids introducing a second, distinctly-labelled artifact commit
 - [Phase 10]: 10-06: publishing is gated solely on publishing.create_pr -- when false, github_client_factory is never called and no PUBLISH_* event is emitted at all — GIT-05/GIT-06 enabler: a run that publishes nothing must never construct a GitHub client or need github_token configured
 - [Phase 10]: 10-06: Rule 1 fix -- tests/conftest.py's shared _write_config_tree now defaults publishing.create_pr to false, not PublishingConfig's true default, to avoid breaking ~24 pre-existing db-tier tests that drive a run to COMPLETED with no repository/GITHUB_TOKEN configured — Confirmed by re-running all 7 previously-at-risk db test modules (23 tests) with zero per-test changes after the fix
+- [Phase 10]: 10-02: run_publish_step's Stage 2 (three-way persisted-identifier fast path) and Stage 3 (GitHub-side find_pull_request_for_branch existence check before every create) are sequential, not merged -- Stage 2 makes every ordinary retry free (zero git/GitHub calls); Stage 3 is the crash-safety net for the narrow 'Neon says no PR yet' branch
+- [Phase 10]: 10-02: adopted_existing_pr is a plain declared PublishResult field, not computed -- it records an observation (created now vs. found already existing) rather than a derivable fact; runner.py was left untouched per the plan's wave-safety instruction (plan 10-03 owns it in the same wave)
 
 ### Pending Todos
 
@@ -223,9 +226,7 @@ None yet.
 - ⚠️ [Phase 9] `tests/db/test_manual_check_loop04_adjacency.py` is an untracked, already-served throwaway script — the only behavioral evidence LOOP-04's adjacency case (a failing role with no earlier role) was ever proven. A future `git clean` would silently lose it. Not phase-blocking (the invariant is independently confirmed by direct code read), but should be either deleted per its own docstring or promoted to a committed `tests/db/` test.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 
-Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
-
-- Phase 10 plan 10-02 Task 2 precondition unmet: no PostgreSQL 17 reachable (no Docker, no local initdb, DARK_FACTORY_TEST_DATABASE_URL unset). Task 1 complete and committed (05405bd); Task 2's db-tier crash-window proof deferred until a human provisions PostgreSQL and resumes this plan.
+Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
 ## Deferred Items
 
@@ -237,6 +238,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-27T07:57:40.523Z
-Stopped at: Completed 10-06-PLAN.md
+Last session: 2026-09-27T11:15:33.587Z
+Stopped at: Completed 10-02-PLAN.md
 Resume file: None
