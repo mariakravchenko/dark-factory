@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
@@ -89,7 +89,7 @@ from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.github import GitHubError
 from dark_factory.github.client import GitHubClient
 from dark_factory.input.loaders import load
-from dark_factory.input.resolver import classify
+from dark_factory.input.resolver import SourceKind, classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
 from dark_factory.orchestrator.lifecycle import IllegalTransitionError, transition
 from dark_factory.orchestrator.publish import PublishResult, run_publish_step
@@ -127,10 +127,12 @@ from dark_factory.workflows.pipeline import (
 )
 
 __all__ = [
+    "CLARIFICATION_COMMENT_PREFIX",
     "DriveLoopExhausted",
     "GitHubClientFactory",
     "RunNotFoundError",
     "advance",
+    "build_clarification_comment",
     "default_github_client_factory",
     "drive",
     "run_state",
@@ -173,6 +175,61 @@ GitHubClientFactory = Callable[[], GitHubClient]
 def default_github_client_factory() -> GitHubClient:
     """The production factory: a real client from the process's own settings."""
     return GitHubClient.from_settings(get_settings())
+
+
+# GIT-05, D-08 (Phase 10, plan 10-03): the fixed, human-legible lead-in every
+# clarification comment carries, naming Dark Factory as the asker so a
+# maintainer scrolling the issue can tell at a glance that a machine asked
+# (T-10-14, spoofing). Kept a constant, not an f-string built at the call
+# site, so "the prefix is fixed" is checkable and plan 10-04's self-comment
+# filter can reference it if it ever needs to.
+CLARIFICATION_COMMENT_PREFIX = (
+    "**Dark Factory needs your input to continue this task.**"
+)
+
+
+def build_clarification_comment(questions: Sequence[str]) -> str:
+    """The exact text posted as a clarification comment (GIT-05, D-08).
+
+    Takes **only** the question list -- no run id, role name, attempt
+    number, worktree path or branch name: a parameter this function does
+    not receive is a value it cannot leak, which is the cheapest possible
+    enforcement of the no-internal-state prohibition (T-10-12). The result
+    is :data:`CLARIFICATION_COMMENT_PREFIX`, a blank line, then the exact
+    newline-join of ``questions`` -- the identical text
+    ``human_interactions.question`` stores, so the posted comment and the
+    persisted question can never disagree. No escaping, no normalization, no
+    truncation: the question text -- including emoji, CJK and Markdown -- is
+    posted verbatim.
+    """
+    return f"{CLARIFICATION_COMMENT_PREFIX}\n\n" + "\n".join(questions)
+
+
+def _github_issue_ref(state: RunState) -> tuple[str, str, int] | None:
+    """``(owner, repo, issue_number)`` when ``state`` is a GitHub-sourced run
+    whose task metadata carries the identifying triple plan 10-01's loader
+    populates, else ``None`` (GIT-05).
+
+    Structural, never a bare-string branch: ``source_kind`` is compared
+    against :class:`~dark_factory.input.resolver.SourceKind.GITHUB` and the
+    three metadata keys are read defensively, mirroring
+    ``orchestrator/publish.py``'s ``_pr_body`` precedent -- a non-GitHub run,
+    or a GitHub run whose metadata is somehow missing a key, both fold into
+    ``None`` rather than raising.
+    """
+    if state.normalized_task.source_kind != SourceKind.GITHUB:
+        return None
+    metadata = state.normalized_task.metadata
+    owner = metadata.get("owner")
+    repo = metadata.get("repo")
+    issue_number = metadata.get("issue_number")
+    if not isinstance(owner, str) or not owner:
+        return None
+    if not isinstance(repo, str) or not repo:
+        return None
+    if not isinstance(issue_number, int):
+        return None
+    return owner, repo, issue_number
 
 
 class RunNotFoundError(LookupError):
@@ -887,6 +944,21 @@ def _run_current_role(
     so a run whose PR was never created does not reach ``COMPLETED`` (T-10-32).
     The chosen ``PublishResult`` rides into the single ``apply_transition``
     call at the end of this function as ``publish_fields=PublishFieldsWrite(...)``.
+
+    GIT-05, D-05, D-08 (Phase 10, plan 10-03): inside the ``Signal.ROLE_NEEDS_INPUT``
+    arm, a GitHub-sourced run (:func:`_github_issue_ref` reads the owner/repo/
+    issue-number triple from the persisted task metadata) posts the question as
+    a fresh comment on the source issue via ``github_client_factory`` --
+    skipped entirely when ``state.pending_clarification_comment_id`` is already
+    set (D-05: check the persisted identifier before acting). The posted
+    comment's id threads into the same ``HumanInteractionWrite(mode="ask",
+    ...)`` that already builds, so the question and its comment id commit
+    together in the one ``apply_transition`` call below. A ``GitHubError`` is
+    caught, never propagated: the pause, the ``QUESTION_CREATED``/``RUN_PAUSED``
+    events and the ``ask`` write are unchanged, ``clarification_comment_id``
+    stays ``None``, and the redacted failure text rides the existing
+    ``QUESTION_CREATED`` payload rather than a new event type -- a GitHub
+    outage must never be able to lose a question a role actually asked.
     """
     resolved_root = repo_root if repo_root is not None else Path.cwd()
     node = current_node(pipeline, state.current_role)
@@ -1523,17 +1595,57 @@ def _run_current_role(
         re_status = _ROLE_WAITING_HUMAN
         re_result = outcome
         re_error = None
+        question_payload: dict[str, Any] = {
+            "role": node.name,
+            "questions": list(result.questions),
+        }
+
+        # GIT-05, D-05/D-08 (Phase 10, plan 10-03): give a GitHub-sourced run a
+        # voice on its own issue. The persisted-identifier check (D-05) comes
+        # first -- a pending interaction that already carries a
+        # ``clarification_comment_id`` is never re-posted, and issues zero
+        # GitHub calls. A non-GitHub run (``_github_issue_ref`` returns
+        # ``None``) never constructs a client and never calls
+        # ``github_client_factory`` at all.
+        clarification_comment_id = state.pending_clarification_comment_id
+        issue_ref = _github_issue_ref(state)
+        if issue_ref is not None and clarification_comment_id is None:
+            owner, repo, issue_number = issue_ref
+            try:
+                comment = github_client_factory().create_comment(
+                    owner,
+                    repo,
+                    issue_number=issue_number,
+                    body=build_clarification_comment(result.questions),
+                )
+            except GitHubError as exc:
+                # Fail soft, never silent (D-08): the pause, the events and
+                # the ``ask`` write still commit unchanged --
+                # ``clarification_comment_id`` simply stays ``None``, so
+                # ``resume --answer`` still works and a later attempt can
+                # post. The redacted failure text rides the existing
+                # QUESTION_CREATED payload rather than a new event type.
+                question_payload = {
+                    **question_payload,
+                    "clarification_comment_error": str(
+                        redact(
+                            str(exc),
+                            known_secrets=get_settings().known_secret_values(),
+                        )
+                    ),
+                }
+            else:
+                clarification_comment_id = comment.id
+
         events = [
-            EventWrite(
-                type=EventType.QUESTION_CREATED,
-                payload={"role": node.name, "questions": list(result.questions)},
-            ),
+            EventWrite(type=EventType.QUESTION_CREATED, payload=question_payload),
             EventWrite(type=EventType.RUN_PAUSED, payload={"role": node.name}),
         ]
         human_interaction = HumanInteractionWrite(
             mode="ask",
             role_execution_id=latest.id,
             question="\n".join(result.questions),
+            clarification_comment_id=clarification_comment_id,
         )
     else:  # pragma: no cover - transition() already rejects any other signal
         raise IllegalTransitionError(f"runner cannot act on {signal.value}")
