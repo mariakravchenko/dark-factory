@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
-stopped_at: Completed 10-02-PLAN.md
-last_updated: "2026-09-27T11:15:33.716Z"
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-09-27T11:56:45.519Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: 659b3532fd28ae2a0f0e85cac6c9f518239e02ab
+state_head: c0ed636cba280a4173051f7cc28373c314ed2c69
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 57
-  completed_plans: 54
+  completed_plans: 55
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 ## Current Position
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-09-26 — Phase 10 execution started
 
@@ -108,6 +108,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 10 P01 | 55min | 3 tasks | 14 files |
 | Phase 10 P06 | ~2h40min | 2 tasks | 16 files |
 | Phase 10 P02 | 55min | 2 tasks | 3 files |
+| Phase 10 P03 | ~2h | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -214,6 +215,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-06: Rule 1 fix -- tests/conftest.py's shared _write_config_tree now defaults publishing.create_pr to false, not PublishingConfig's true default, to avoid breaking ~24 pre-existing db-tier tests that drive a run to COMPLETED with no repository/GITHUB_TOKEN configured — Confirmed by re-running all 7 previously-at-risk db test modules (23 tests) with zero per-test changes after the fix
 - [Phase 10]: 10-02: run_publish_step's Stage 2 (three-way persisted-identifier fast path) and Stage 3 (GitHub-side find_pull_request_for_branch existence check before every create) are sequential, not merged -- Stage 2 makes every ordinary retry free (zero git/GitHub calls); Stage 3 is the crash-safety net for the narrow 'Neon says no PR yet' branch
 - [Phase 10]: 10-02: adopted_existing_pr is a plain declared PublishResult field, not computed -- it records an observation (created now vs. found already existing) rather than a derivable fact; runner.py was left untouched per the plan's wave-safety instruction (plan 10-03 owns it in the same wave)
+- [Phase 10]: [Phase 10]: 10-03: GitHub-sourced ROLE_NEEDS_INPUT posts a fresh clarification comment via github_client_factory, threading the returned id into the same HumanInteractionWrite/apply_transition call that opens the WAITING interaction; guarded by RunState.pending_clarification_comment_id (D-05) and fail-soft on GitHubError (redacted text rides the existing QUESTION_CREATED payload, no new EventType) -- Reuses plan 10-06's seam and comment-id field rather than adding new ones; CLARIFICATION_COMMENT_PREFIX + build_clarification_comment take only the question list so no internal state can leak into the public comment
 
 ### Pending Todos
 
@@ -238,6 +240,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-27T11:15:33.587Z
-Stopped at: Completed 10-02-PLAN.md
+Last session: 2026-09-27T11:56:45.383Z
+Stopped at: Completed 10-03-PLAN.md
 Resume file: None
