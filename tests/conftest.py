@@ -366,7 +366,22 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
         "retry:\n"
         "  qa_developer_max_iterations: 3\n"
         "  quality_gate_max_iterations: 2\n"
-        "publishing:\n  create_pr: true\n",
+        # Phase 10 (plan 10-06, GIT-03): defaults to false, not the
+        # `PublishingConfig` field's own `true` default. Every other db test
+        # in this suite drives a run to `COMPLETED` with no `github_owner` /
+        # `github_repo` / `GITHUB_TOKEN` configured; before this plan that
+        # was harmless (nothing read those fields), but plan 10-06's
+        # terminal-role gate-PASS block now attempts a real publish whenever
+        # `create_pr` is true, and a run with no repository config cannot
+        # open a pull request -- it would fold into `PUBLISH_FAILED` /
+        # `ROLE_FAILED` and never reach `COMPLETED`, breaking the ~40 other
+        # db tests that assert `RunStatus.COMPLETED` against this shared
+        # tree. `tests/db/test_publish_step.py` is the one test module that
+        # actually exercises publishing; it overwrites this block back to
+        # `true` (plus `repository.github_owner`/`github_repo`) using the
+        # same build-then-overwrite idiom `test_quality_gate_gates_the_run.py`
+        # already established for `quality_gate.commands` / `retry`.
+        "publishing:\n  create_pr: false\n",
         encoding="utf-8",
     )
     # Phase 5 (plan 05-03, D-10): collect_diff is real and git-only, added to

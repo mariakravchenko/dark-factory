@@ -179,15 +179,18 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
     # GIT-05, D-05) both come off the SAME human_interactions row bound to
     # latest_row.id -- one ask ("ask" mode) inserts exactly one row per
     # attempt, and a later "answer" call updates that same row rather than
-    # inserting a second one, so no status filter is needed to disambiguate
-    # WAITING from ANSWERED: the row is unique by role_execution_id alone.
-    # ``answer`` genuinely is NULL until the row is answered, so dropping the
-    # old ``status == ANSWERED`` filter changes nothing about when
-    # ``pending_answer`` becomes non-None; it does let
-    # ``pending_clarification_comment_id`` -- set at ask time, while the row
-    # is still WAITING -- be read from the same single query, per plan
-    # 10-06's "extend the existing pending_answer select rather than adding a
-    # second query" instruction.
+    # inserting a second one, so no status filter is needed in the WHERE
+    # clause to find the row: it is unique by role_execution_id alone. The
+    # two fields still key off ``status`` in Python, one query rather than
+    # two, per plan 10-06's "extend the existing pending_answer select"
+    # instruction: ``pending_answer`` is meaningful once the row is
+    # ANSWERED (``answer`` genuinely is NULL before that, so this is
+    # unconditional); ``pending_clarification_comment_id`` is meaningful
+    # only while the row is still WAITING -- plan 10-03 reads it to decide
+    # whether it already posted a clarification comment for the *current*
+    # open question, and once that question is answered there is no more
+    # question left to be "pending" about, so an ANSWERED row deliberately
+    # does not populate it even though the column itself is never cleared.
     pending_answer: str | None = None
     pending_clarification_comment_id: int | None = None
     if latest_row is not None:
@@ -195,6 +198,7 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
             select(
                 HumanInteraction.answer,
                 HumanInteraction.clarification_comment_id,
+                HumanInteraction.status,
             )
             .where(
                 HumanInteraction.run_id == run_id,
@@ -205,7 +209,8 @@ def load_run_state(session: Session, run_id: UUID) -> RunState | None:
         ).first()
         if interaction is not None:
             pending_answer = interaction.answer
-            pending_clarification_comment_id = interaction.clarification_comment_id
+            if interaction.status == InteractionStatus.WAITING:
+                pending_clarification_comment_id = interaction.clarification_comment_id
 
     return RunState(
         run_id=run.id,
