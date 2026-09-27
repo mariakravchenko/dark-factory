@@ -105,6 +105,7 @@ def _make_client(
     secret: str | None = _SECRET,
     session_factory: Any = None,
     resolve_result: ResolvedAnswer | UnresolvableComment | None = None,
+    resolve_raises: Exception | None = None,
     submit_answer_double: Any = None,
 ) -> TestClient:
     factory = (
@@ -119,6 +120,12 @@ def _make_client(
         monkeypatch.setattr(
             app_module, "resolve_issue_comment", lambda *a, **k: resolve_result
         )
+    if resolve_raises is not None:
+
+        def _raise(*_args: Any, **_kwargs: Any) -> Any:
+            raise resolve_raises
+
+        monkeypatch.setattr(app_module, "resolve_issue_comment", _raise)
     if submit_answer_double is not None:
         monkeypatch.setattr(app_module, "submit_answer", submit_answer_double)
     return TestClient(app)
@@ -332,3 +339,26 @@ def test_an_unexpected_exception_returns_a_generic_server_error(
     response = _post(client, body, signature=signature)
     assert response.status_code == 500
     assert "boom" not in response.text
+
+
+def test_an_unexpected_exception_from_resolve_returns_a_generic_server_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CR-02 (10-REVIEW.md): before this fix, an exception raised from
+    ``resolve_issue_comment`` (most plausibly ``MissingGitHubCredentialError``
+    from ``_login_provider()``'s own eager ``GitHubClient`` construction when
+    ``GITHUB_TOKEN`` is unset) propagated unhandled -- bypassing this
+    module's own "log + fixed 500" contract entirely. ``submit_answer`` is
+    never reached: proven here with no ``submit_answer_double`` supplied at
+    all, so a call would raise ``AttributeError`` from ``monkeypatch``'s own
+    absence rather than silently succeed."""
+    client = _make_client(
+        monkeypatch,
+        session_factory=lambda: _DummySession(),
+        resolve_raises=RuntimeError("boom from resolve"),
+    )
+    body = build_issue_comment_payload()
+    signature = sign_payload(_SECRET, body)
+    response = _post(client, body, signature=signature)
+    assert response.status_code == 500
+    assert "boom from resolve" not in response.text

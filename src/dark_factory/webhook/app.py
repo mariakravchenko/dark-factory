@@ -148,6 +148,20 @@ def build_app(
             outcome = resolve_issue_comment(
                 event, session=session, authenticated_login=_login_provider()
             )
+        except Exception:
+            # CR-02 (10-REVIEW.md): this used to be only a ``finally`` --
+            # any exception raised while resolving (including
+            # ``_login_provider()``'s own eager ``GitHubClient`` construction,
+            # which raises ``MissingGitHubCredentialError`` whenever
+            # ``GITHUB_TOKEN`` is unset) propagated unhandled, bypassing this
+            # module's own docstring promise ("any unexpected exception is
+            # logged ... and returns a fixed 500, never echoed") and this
+            # project's "durability and observability are the same
+            # requirement" posture. Mirrors the ``except Exception`` arm
+            # below, verbatim in shape, for the resolve-time half of this
+            # route.
+            _log.exception("webhook.issue_comment.unexpected_error")
+            return _SERVER_ERROR
         finally:
             session.close()
 
