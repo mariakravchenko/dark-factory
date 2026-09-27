@@ -69,10 +69,20 @@ def submit_answer(
     answer: str,
     *,
     session_factory: SessionFactory = new_session,
+    github_comment_id: int | None = None,
 ) -> RunStatus:
     """Record ``answer`` against the run's open question and move it from
     ``WAITING_HUMAN`` back to its retained current role, all in one
     ``apply_transition``. Returns the new status (the role status).
+
+    ``github_comment_id`` (Phase 10, plan 10-04, D-05) is the id of the
+    inbound GitHub comment that answered the question, threaded straight into
+    the ``HumanInteractionWrite`` this function already builds -- the
+    webhook receiver's durable, business-level dedup key. Every other caller
+    (the CLI's ``resume --answer``) omits it, leaving it ``None`` and
+    changing nothing about the existing precondition checks, lease, re-read
+    or ``expected_status`` guard: the webhook path is a *caller* of this
+    function, not a second mutation path (D-02).
 
     Raises :class:`RunNotFoundError` for an unknown id,
     :class:`NotWaitingForHuman` when the run is not paused,
@@ -141,7 +151,11 @@ def submit_answer(
                     ),
                 ],
                 expected_owner_token=lease.token,
-                human_interaction=HumanInteractionWrite(mode="answer", answer=answer),
+                human_interaction=HumanInteractionWrite(
+                    mode="answer",
+                    answer=answer,
+                    github_comment_id=github_comment_id,
+                ),
             )
         finally:
             write_session.close()
