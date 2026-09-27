@@ -425,7 +425,7 @@ Plans:
   4. A GitHub-sourced run posts exactly one clarification comment and stays `WAITING_HUMAN`; a duplicate webhook delivery of the reply stores exactly one answer.
   5. An issue comment answering a pending interaction resumes the same `RoleExecution`, and a comment that matches no pending interaction creates no run.
 
-**Plans**: 1/6 plans executed
+**Plans**: 2/6 plans executed
 
 > Plan numbers are not execution order here. `10-01` was split during plan review (it exceeded
 > the per-plan scope ceiling), and its second half became `10-06`, which runs in **wave 2** —
@@ -439,7 +439,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 10-06-PLAN.md — Tracer: a GitHub issue becomes exactly one pull request — migration 0006's five persisted identifiers, the three publish events, `PublishFieldsWrite`, the publish step and the client-factory seam wired into the terminal-role block
+- [x] 10-06-PLAN.md — Tracer: a GitHub issue becomes exactly one pull request — migration 0006's five persisted identifiers, the three publish events, `PublishFieldsWrite`, the publish step and the client-factory seam wired into the terminal-role block
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -500,7 +500,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
-| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 1/6 | In Progress|  |
+| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 2/6 | In Progress|  |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 

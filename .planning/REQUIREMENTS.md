@@ -11,7 +11,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 - [x] **INTAKE-01**: Operator can start a run from plain text — `dark-factory run text:"..."`
 - [x] **INTAKE-02**: Operator can start a run from a spec file — `dark-factory run spec:./path.md`
-- [ ] **INTAKE-03**: Operator can start a run from a GitHub issue — `dark-factory run github:152` — pulling issue title, body, comments, labels, and repository metadata
+- [x] **INTAKE-03**: Operator can start a run from a GitHub issue — `dark-factory run github:152` — pulling issue title, body, comments, labels, and repository metadata
 - [x] **INTAKE-04**: The input resolver classifies the task source deterministically (text vs path vs GitHub reference) with no LLM call, and does not inspect the repo, call GitHub, or create a run
 - [x] **INTAKE-05**: Every source is loaded through a source-specific loader and normalized to one internal `NormalizedTask` model, after which the orchestrator is agnostic to origin
 
@@ -188,7 +188,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 |-------------|-------|--------|
 | INTAKE-01 | Phase 1 | Complete |
 | INTAKE-02 | Phase 4 | Complete |
-| INTAKE-03 | Phase 10 | Pending |
+| INTAKE-03 | Phase 10 | Complete |
 | INTAKE-04 | Phase 1 | Complete |
 | INTAKE-05 | Phase 1 | Complete |
 | ORCH-01 | Phase 1 | Complete |

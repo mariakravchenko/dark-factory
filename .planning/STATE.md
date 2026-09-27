@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-09-26T18:35:14.271Z"
+stopped_at: Completed 10-06-PLAN.md
+last_updated: "2026-09-27T07:57:40.607Z"
 last_activity: 2026-09-26
 last_activity_desc: Phase 10 execution started
-state_head: cb2f325c9e6ed7b9c844308702c7e0b59058f07a
+state_head: 30c74adc8d2dff9b92d9a0aca7faaf486a7225b5
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 57
-  completed_plans: 52
+  completed_plans: 53
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 ## Current Position
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-09-26 — Phase 10 execution started
 
@@ -106,6 +106,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 09 P05 | 25min | 1 tasks | 2 files |
 | Phase 09 P06 | 20min | 1 tasks | 2 files |
 | Phase 10 P01 | 55min | 3 tasks | 14 files |
+| Phase 10 P06 | ~2h40min | 2 tasks | 16 files |
 
 ## Accumulated Context
 
@@ -207,6 +208,9 @@ Recent decisions affecting current work:
 - [Phase 10]: [Phase 10] 10-01: Task 1 checkpoint approved installing githubkit>=0.16,<0.17 despite the SUS package-legitimacy flag (driven only by unknown-downloads, no other red flag, name matches the project's locked tech-stack decision)
 - [Phase 10]: [Phase 10] 10-01: Task 2 checkpoint selected option A1 -- source_ref = "{owner}/{repo}#{issue_number}", metadata = {owner, repo, issue_number, labels, comment_count} -- for how a GitHub-sourced run records which issue it came from
 - [Phase 10]: [Phase 10] 10-01: webhook optional extra pinned to starlette>=0.42,<1 + uvicorn>=0.34,<1 -- smallest surface with exact raw-request-body access for the webhook HMAC check (plan 10-04), TestClient built on httpx already pulled in by githubkit
+- [Phase 10]: 10-06: publish step's own commit_run_artifacts runs inside the terminal role's gate-PASS arm, before the generic per-role commit -- it carries the role's artifacts plus quality_gate.json in one commit labelled 'publish'; the later generic commit safely no-ops — Placement matches the plan's literal instruction and avoids introducing a second, distinctly-labelled artifact commit
+- [Phase 10]: 10-06: publishing is gated solely on publishing.create_pr -- when false, github_client_factory is never called and no PUBLISH_* event is emitted at all — GIT-05/GIT-06 enabler: a run that publishes nothing must never construct a GitHub client or need github_token configured
+- [Phase 10]: 10-06: Rule 1 fix -- tests/conftest.py's shared _write_config_tree now defaults publishing.create_pr to false, not PublishingConfig's true default, to avoid breaking ~24 pre-existing db-tier tests that drive a run to COMPLETED with no repository/GITHUB_TOKEN configured — Confirmed by re-running all 7 previously-at-risk db test modules (23 tests) with zero per-test changes after the fix
 
 ### Pending Todos
 
@@ -221,8 +225,6 @@ None yet.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
-- Phase 10 plan 06 Task 2 (db-tier proof) is blocked: no PostgreSQL 17 reachable in this environment (no Docker, no local initdb, DARK_FACTORY_TEST_DATABASE_URL unset). Task 1 (tracer: schema/events/mutation-path/publish-step/runner wiring) is fully implemented and committed (commits 17e8c37 test, cb2f325 feat), unit+contract tier green (724 passed), mypy/ruff clean. Task 2 needs a human to either start Docker, install a local PostgreSQL 17 initdb, or set DARK_FACTORY_TEST_DATABASE_URL, then resume 10-06 to write/run tests/db/test_github_publishing_columns_schema.py, tests/db/test_publish_step.py and extend tests/db/test_load_run_state.py. NOTE for the human: this plan's default publishing.create_pr=true means every existing db-tier test reaching the terminal role with default config (no github_owner/github_repo, no GITHUB_TOKEN) will now attempt to publish and fail with a PUBLISH_FAILED/ROLE_FAILED outcome instead of reaching COMPLETED -- check tests/db/test_quality_gate_gates_the_run.py, tests/db/test_artifact_commit_per_role.py, tests/db/test_four_role_pipeline.py and similar four-role-pipeline db tests for this regression when Task 2 runs, and add publishing:\n  create_pr: false to their config overwrites if so.
-
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -233,6 +235,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-26T16:31:03.383Z
-Stopped at: Completed 10-01-PLAN.md
+Last session: 2026-09-27T07:57:40.523Z
+Stopped at: Completed 10-06-PLAN.md
 Resume file: None
