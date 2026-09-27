@@ -32,13 +32,14 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
+import dark_factory.orchestrator.runner as runner_module
 from dark_factory.config.loader import load_effective_config
 from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.git.worktree import ensure_worktree, working_branch_name
 from dark_factory.github import GitHubApiError
-from dark_factory.github.client import GitHubIssue
+from dark_factory.github.client import GitHubComment, GitHubIssue
 from dark_factory.input import loaders
 from dark_factory.orchestrator.answers import submit_answer
 from dark_factory.orchestrator.runner import (
@@ -190,7 +191,11 @@ def test_the_happy_path_posts_one_comment_and_records_its_id(
     root = _write_github_ba_tree(config_root_factory)
     run_id = _start_github_run(monkeypatch, root, real_session_factory)
     cleanup_runs.append(run_id)
-    fake_publish = FakeGitHubClient()
+    # CR-01: the existence check (fetch_issue + authenticated_login) runs
+    # before create_comment, so the ask-path fake must script an issue --
+    # even a comment-free one -- exactly like the intake-side fake already
+    # scripts one above.
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
 
     final = drive(
         run_id,
@@ -235,7 +240,11 @@ def test_re_entry_without_answering_posts_nothing_more(
     root = _write_github_ba_tree(config_root_factory)
     run_id = _start_github_run(monkeypatch, root, real_session_factory)
     cleanup_runs.append(run_id)
-    fake_publish = FakeGitHubClient()
+    # CR-01: the existence check (fetch_issue + authenticated_login) runs
+    # before create_comment, so the ask-path fake must script an issue --
+    # even a comment-free one -- exactly like the intake-side fake already
+    # scripts one above.
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
 
     first = drive(
         run_id,
@@ -314,11 +323,12 @@ def test_a_failed_post_still_pauses_and_the_question_survives(
     run_id = _start_github_run(monkeypatch, root, real_session_factory)
     cleanup_runs.append(run_id)
     fake_publish = FakeGitHubClient(
+        issue=_scripted_issue(),
         raises={
             "create_comment": GitHubApiError(
                 "service unavailable", status_code=503, endpoint="issues.create_comment"
             )
-        }
+        },
     )
 
     final = drive(
@@ -360,7 +370,11 @@ def test_the_comment_body_carries_no_internal_state(
     root = _write_github_ba_tree(config_root_factory)
     run_id = _start_github_run(monkeypatch, root, real_session_factory)
     cleanup_runs.append(run_id)
-    fake_publish = FakeGitHubClient()
+    # CR-01: the existence check (fetch_issue + authenticated_login) runs
+    # before create_comment, so the ask-path fake must script an issue --
+    # even a comment-free one -- exactly like the intake-side fake already
+    # scripts one above.
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
 
     final = drive(
         run_id,
@@ -395,3 +409,107 @@ def test_the_comment_body_carries_no_internal_state(
     assert str(role_execution_id) not in body
     assert working_branch not in body
     assert str(work_dir) not in body
+
+
+def test_crash_between_comment_creation_and_its_commit_yields_one_comment(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_worker_registry: Callable[..., Any],
+    force_lease_expiry: Callable[[UUID], None],
+) -> None:
+    """CR-01 (10-REVIEW.md): a process killed after ``create_comment``
+    succeeds on GitHub but before ``apply_transition`` commits
+    ``clarification_comment_id`` resumes to post no second comment -- the
+    existence check finds and adopts the already-posted comment. Mirrors
+    ``tests/db/test_publish_idempotency.py``'s identical in-process
+    crash-window proof for ``create_pull_request``: the module-level
+    ``apply_transition`` symbol ``orchestrator/runner.py`` calls is
+    monkeypatched to raise, but only for the call carrying a
+    ``human_interaction`` write whose ``mode`` is ``"ask"`` -- never the
+    earlier "enter BA" transition -- so this targets exactly the window
+    between GitHub returning success for ``create_comment`` and Neon
+    recording it."""
+    root = _write_github_ba_tree(config_root_factory)
+    run_id = _start_github_run(monkeypatch, root, real_session_factory)
+    cleanup_runs.append(run_id)
+
+    real_apply_transition = runner_module.apply_transition
+
+    class _CrashSwitch:
+        def __init__(self) -> None:
+            self.enabled = True
+
+    switch = _CrashSwitch()
+
+    def _crash_before_comment_commit(*args: Any, **kwargs: Any) -> RunStatus:
+        human_interaction = kwargs.get("human_interaction")
+        if (
+            switch.enabled
+            and human_interaction is not None
+            and human_interaction.mode == "ask"
+        ):
+            raise RuntimeError(
+                "simulated crash: create_comment returned, before its id was committed"
+            )
+        result: RunStatus = real_apply_transition(*args, **kwargs)
+        return result
+
+    monkeypatch.setattr(runner_module, "apply_transition", _crash_before_comment_commit)
+
+    first_client = FakeGitHubClient(issue=_scripted_issue())
+
+    with pytest.raises(RuntimeError):
+        drive(
+            run_id,
+            session_factory=real_session_factory,
+            registry=fake_worker_registry([_NEEDS_INPUT]),
+            repo_root=root,
+            github_client_factory=lambda: first_client,
+        )
+
+    # Nothing committed: the crash happened before apply_transition ran.
+    assert _the_interaction(engine, run_id) is None
+    create_calls = [c for c in first_client.calls if c[0] == "create_comment"]
+    assert len(create_calls) == 1, (
+        "the crashed attempt must have called create_comment exactly once "
+        f"before the simulated crash; calls={first_client.calls}"
+    )
+
+    # Resume, exactly as a fresh `dark-factory resume`/`drive()` call after a
+    # real process death would: GitHub already has the comment the first
+    # attempt posted, so the resumed attempt's existence check must find and
+    # adopt it rather than posting a second one.
+    switch.enabled = False
+    force_lease_expiry(run_id)
+    posted_body = build_clarification_comment(_QUESTIONS)
+    already_posted = GitHubComment(id=321, author="dark-factory-bot", body=posted_body)
+    resume_client = FakeGitHubClient(
+        issue=GitHubIssue(
+            number=_ISSUE_NUMBER,
+            title=_ISSUE_TITLE,
+            body="Retries sometimes double-fire under load.",
+            labels=["bug"],
+            comments=[already_posted],
+        )
+    )
+
+    final = drive(
+        run_id,
+        session_factory=real_session_factory,
+        registry=fake_worker_registry([_NEEDS_INPUT]),
+        repo_root=root,
+        github_client_factory=lambda: resume_client,
+    )
+    assert final is RunStatus.WAITING_HUMAN
+
+    interaction = _the_interaction(engine, run_id)
+    assert interaction is not None
+    assert interaction.clarification_comment_id == 321
+
+    total_create_calls = len(
+        [c for c in first_client.calls if c[0] == "create_comment"]
+    ) + len([c for c in resume_client.calls if c[0] == "create_comment"])
+    assert total_create_calls == 1

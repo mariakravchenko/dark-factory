@@ -87,7 +87,7 @@ from dark_factory.git.scope import (
 )
 from dark_factory.git.worktree import ensure_worktree, remove_worktree
 from dark_factory.github import GitHubError
-from dark_factory.github.client import GitHubClient
+from dark_factory.github.client import GitHubClient, GitHubComment
 from dark_factory.input.loaders import load
 from dark_factory.input.resolver import SourceKind, classify
 from dark_factory.orchestrator.lease import LeaseHandle, run_lease
@@ -230,6 +230,39 @@ def _github_issue_ref(state: RunState) -> tuple[str, str, int] | None:
     if not isinstance(issue_number, int):
         return None
     return owner, repo, issue_number
+
+
+def _find_own_clarification_comment(
+    client: GitHubClient, owner: str, repo: str, issue_number: int, *, body: str
+) -> GitHubComment | None:
+    """The clarification-comment analogue of ``publish.py``'s
+    ``find_pull_request_for_branch`` existence check (CR-01, 10-REVIEW.md).
+
+    A pure read, issued before ``create_comment`` ever runs: it answers "did
+    Dark Factory's own identity already post this exact question text to
+    this issue" so a process crash between a successful ``create_comment``
+    call and the transaction that persists ``clarification_comment_id`` can
+    self-heal on resume by adopting the already-posted comment instead of
+    duplicate-posting the question -- the same partial-completion hazard
+    ``run_publish_step`` closes for ``create_pull_request`` (10-RESEARCH.md
+    Pitfall 1), applied to the other GitHub side effect this phase
+    introduces.
+
+    Matches on **both** author identity (``client.authenticated_login()`` --
+    never spoofable by another commenter on the issue) and exact body
+    equality (the verbatim text ``build_clarification_comment`` would
+    produce for *this* attempt's question list) -- narrower than
+    ``find_pull_request_for_branch``'s branch-only match, because an issue's
+    comment list is not scoped to one Dark Factory run the way a branch name
+    is: two different questions from two different attempts on the same
+    issue must never be conflated.
+    """
+    issue = client.fetch_issue(owner, repo, issue_number=issue_number)
+    own_login = client.authenticated_login()
+    for comment in issue.comments:
+        if comment.author == own_login and comment.body == body:
+            return comment
+    return None
 
 
 class RunNotFoundError(LookupError):
@@ -1600,23 +1633,42 @@ def _run_current_role(
             "questions": list(result.questions),
         }
 
-        # GIT-05, D-05/D-08 (Phase 10, plan 10-03): give a GitHub-sourced run a
+        # GIT-05, D-05/D-08 (Phase 10, plan 10-03); crash-safety net CR-01
+        # (10-REVIEW.md, Phase 10, plan 10-fix): give a GitHub-sourced run a
         # voice on its own issue. The persisted-identifier check (D-05) comes
         # first -- a pending interaction that already carries a
         # ``clarification_comment_id`` is never re-posted, and issues zero
         # GitHub calls. A non-GitHub run (``_github_issue_ref`` returns
         # ``None``) never constructs a client and never calls
         # ``github_client_factory`` at all.
+        #
+        # Before ever calling ``create_comment`` -- an external, non-
+        # idempotent side effect -- ``_find_own_clarification_comment`` asks
+        # GitHub itself whether Dark Factory's own identity already posted
+        # this exact question text to this issue (mirrors
+        # ``orchestrator/publish.py``'s ``find_pull_request_for_branch``
+        # existence check before ``create_pull_request``). This closes the
+        # crash window between a successful ``create_comment`` call and the
+        # single ``apply_transition`` call below that persists
+        # ``clarification_comment_id``: a process killed in that window
+        # leaves nothing committed, so a resumed attempt that reaches this
+        # branch again finds the already-posted comment and adopts it
+        # instead of posting a duplicate.
         clarification_comment_id = state.pending_clarification_comment_id
         issue_ref = _github_issue_ref(state)
         if issue_ref is not None and clarification_comment_id is None:
             owner, repo, issue_number = issue_ref
+            comment_body = build_clarification_comment(result.questions)
             try:
-                comment = github_client_factory().create_comment(
+                client = github_client_factory()
+                existing_comment = _find_own_clarification_comment(
+                    client, owner, repo, issue_number, body=comment_body
+                )
+                comment = existing_comment or client.create_comment(
                     owner,
                     repo,
                     issue_number=issue_number,
-                    body=build_clarification_comment(result.questions),
+                    body=comment_body,
                 )
             except GitHubError as exc:
                 # Fail soft, never silent (D-08): the pause, the events and

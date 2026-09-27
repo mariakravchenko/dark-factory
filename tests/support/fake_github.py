@@ -28,6 +28,15 @@ class FakeGitHubClient:
     method's failure without affecting the others. ``calls`` records every
     invocation as ``(method_name, kwargs)`` so a test can assert exactly
     which calls happened and with what arguments.
+
+    ``login`` (CR-01, 10-REVIEW.md) is the fixed identity
+    :meth:`authenticated_login` returns -- mirrors
+    :meth:`~dark_factory.github.client.GitHubClient.authenticated_login`'s
+    real, cached-on-the-instance shape without a real API call. Defaults to
+    ``"dark-factory-bot"``, a value distinct from :meth:`create_comment`'s
+    own hardcoded ``author="dark-factory"`` fixture value, so a test that
+    scripts an "already posted by us" comment must say so explicitly
+    (``author=<the same login>``) rather than accidentally match.
     """
 
     def __init__(
@@ -36,6 +45,7 @@ class FakeGitHubClient:
         issue: GitHubIssue | list[GitHubIssue] | None = None,
         pull_request: GitHubPullRequest | None = None,
         existing_pull_request: GitHubPullRequest | None = None,
+        login: str = "dark-factory-bot",
         raises: dict[str, Exception] | None = None,
     ) -> None:
         self._issues: list[GitHubIssue] = (
@@ -44,6 +54,7 @@ class FakeGitHubClient:
         self._issue_index = 0
         self._pull_request = pull_request
         self._existing_pull_request = existing_pull_request
+        self._login = login
         self._raises = raises or {}
         self.calls: list[tuple[str, dict[str, object]]] = []
 
@@ -103,6 +114,11 @@ class FakeGitHubClient:
         if self._pull_request is None:
             raise LookupError("FakeGitHubClient: no scripted pull_request configured")
         return self._pull_request
+
+    def authenticated_login(self) -> str:
+        self.calls.append(("authenticated_login", {}))
+        self._maybe_raise("authenticated_login")
+        return self._login
 
     def find_pull_request_for_branch(
         self, owner: str, repo: str, *, head_branch: str

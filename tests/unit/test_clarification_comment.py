@@ -35,7 +35,7 @@ from dark_factory.domain.task import NormalizedTask
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from dark_factory.git.worktree import working_branch_name
 from dark_factory.github import GitHubApiError
-from dark_factory.github.client import GitHubClient
+from dark_factory.github.client import GitHubClient, GitHubComment, GitHubIssue
 from dark_factory.orchestrator.lease import LeaseHandle
 from dark_factory.orchestrator.runner import (
     CLARIFICATION_COMMENT_PREFIX,
@@ -54,6 +54,20 @@ _OWNER = "acme"
 _REPO = "widgets"
 _ISSUE_NUMBER = 42
 _QUESTIONS = ["why is this needed?", "which approach should I take?"]
+
+
+def _scripted_issue(comments: list[GitHubComment] | None = None) -> GitHubIssue:
+    """A minimal issue for the ask-path ``FakeGitHubClient`` -- CR-01's
+    existence check calls ``fetch_issue`` before ever posting, so every
+    scenario below that reaches the GitHub-sourced branch must script one,
+    even when it carries no pre-existing comments."""
+    return GitHubIssue(
+        number=_ISSUE_NUMBER,
+        title="issue title",
+        body="issue body",
+        labels=[],
+        comments=comments or [],
+    )
 
 
 class _NoOpSession:
@@ -224,7 +238,88 @@ def test_body_never_contains_run_role_worker_worktree_or_branch_values() -> None
 def test_github_sourced_run_posts_one_comment_and_threads_the_id(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    fake = FakeGitHubClient()
+    fake = FakeGitHubClient(issue=_scripted_issue())
+    new_status, calls = _drive_needs_input(
+        tmp_path,
+        monkeypatch,
+        source_kind="github",
+        metadata={
+            "owner": _OWNER,
+            "repo": _REPO,
+            "issue_number": _ISSUE_NUMBER,
+            "labels": [],
+            "comment_count": 0,
+        },
+        github_client_factory=lambda: fake,
+    )
+
+    assert new_status is RunStatus.WAITING_HUMAN
+    # CR-01: the existence check (fetch_issue + authenticated_login) runs
+    # before create_comment -- finds nothing on this scripted, comment-free
+    # issue, so exactly one create_comment call still follows.
+    fetch_calls = [c for c in fake.calls if c[0] == "fetch_issue"]
+    assert len(fetch_calls) == 1
+    create_calls = [c for c in fake.calls if c[0] == "create_comment"]
+    assert len(create_calls) == 1
+    kwargs = create_calls[0][1]
+    assert kwargs["owner"] == _OWNER
+    assert kwargs["repo"] == _REPO
+    assert kwargs["issue_number"] == _ISSUE_NUMBER
+    assert kwargs["body"] == build_clarification_comment(_QUESTIONS)
+
+    assert len(calls) == 1
+    human_interaction = calls[0]["human_interaction"]
+    assert human_interaction.mode == "ask"
+    assert human_interaction.question == "\n".join(_QUESTIONS)
+    assert human_interaction.clarification_comment_id == 1  # FakeGitHubClient's fixed id
+
+
+def test_an_already_posted_own_comment_is_adopted_without_a_second_post(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CR-01 (10-REVIEW.md): the crash-safety-net existence check finds a
+    comment Dark Factory's own identity already posted, carrying the exact
+    question text, and adopts it -- ``create_comment`` is never called a
+    second time. This is what closes the duplicate-post window between a
+    successful ``create_comment`` call and the transaction that persists
+    ``clarification_comment_id``: a resumed attempt that reaches this branch
+    again (because nothing was committed before the simulated crash) must
+    not re-post."""
+    body = build_clarification_comment(_QUESTIONS)
+    already_posted = GitHubComment(id=555, author="dark-factory-bot", body=body)
+    fake = FakeGitHubClient(issue=_scripted_issue(comments=[already_posted]))
+
+    new_status, calls = _drive_needs_input(
+        tmp_path,
+        monkeypatch,
+        source_kind="github",
+        metadata={
+            "owner": _OWNER,
+            "repo": _REPO,
+            "issue_number": _ISSUE_NUMBER,
+            "labels": [],
+            "comment_count": 0,
+        },
+        github_client_factory=lambda: fake,
+    )
+
+    assert new_status is RunStatus.WAITING_HUMAN
+    assert {name for name, _ in fake.calls} == {"fetch_issue", "authenticated_login"}
+    assert [name for name, _ in fake.calls if name == "create_comment"] == []
+    human_interaction = calls[0]["human_interaction"]
+    assert human_interaction.clarification_comment_id == 555
+
+
+def test_a_comment_from_someone_else_with_the_same_text_is_not_adopted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The existence check matches on author identity, not text alone -- a
+    look-alike comment posted by a different login (e.g. a human who quoted
+    the question) must never be mistaken for Dark Factory's own post."""
+    body = build_clarification_comment(_QUESTIONS)
+    someone_elses_comment = GitHubComment(id=777, author="a-human", body=body)
+    fake = FakeGitHubClient(issue=_scripted_issue(comments=[someone_elses_comment]))
+
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
@@ -242,17 +337,8 @@ def test_github_sourced_run_posts_one_comment_and_threads_the_id(
     assert new_status is RunStatus.WAITING_HUMAN
     create_calls = [c for c in fake.calls if c[0] == "create_comment"]
     assert len(create_calls) == 1
-    kwargs = create_calls[0][1]
-    assert kwargs["owner"] == _OWNER
-    assert kwargs["repo"] == _REPO
-    assert kwargs["issue_number"] == _ISSUE_NUMBER
-    assert kwargs["body"] == build_clarification_comment(_QUESTIONS)
-
-    assert len(calls) == 1
     human_interaction = calls[0]["human_interaction"]
-    assert human_interaction.mode == "ask"
-    assert human_interaction.question == "\n".join(_QUESTIONS)
-    assert human_interaction.clarification_comment_id == 1  # FakeGitHubClient's fixed id
+    assert human_interaction.clarification_comment_id == 1  # the newly created comment
 
 
 def test_pending_comment_id_already_set_skips_the_post(
@@ -307,11 +393,12 @@ def test_raising_create_comment_still_pauses_with_no_id_recorded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = FakeGitHubClient(
+        issue=_scripted_issue(),
         raises={
             "create_comment": GitHubApiError(
                 "service unavailable", status_code=503, endpoint="issues.create_comment"
             )
-        }
+        },
     )
 
     new_status, calls = _drive_needs_input(
@@ -350,9 +437,10 @@ def test_no_scenario_ever_calls_a_comment_update_method(
 ) -> None:
     """D-08: each ``ROLE_NEEDS_INPUT`` posts a fresh comment and never edits a
     prior one. ``GitHubClient`` (and its fake) expose no update/edit method at
-    all, so this is proven structurally: only ``create_comment`` ever appears
-    in the call log, across every scenario above."""
-    fake = FakeGitHubClient()
+    all, so this is proven structurally: the call log contains only the CR-01
+    existence-check reads (``fetch_issue``, ``authenticated_login``) plus
+    ``create_comment`` -- never an update/edit-shaped call."""
+    fake = FakeGitHubClient(issue=_scripted_issue())
     _drive_needs_input(
         tmp_path,
         monkeypatch,
@@ -366,6 +454,10 @@ def test_no_scenario_ever_calls_a_comment_update_method(
         },
         github_client_factory=lambda: fake,
     )
-    assert {name for name, _ in fake.calls} == {"create_comment"}
+    assert {name for name, _ in fake.calls} == {
+        "fetch_issue",
+        "authenticated_login",
+        "create_comment",
+    }
     assert not hasattr(GitHubClient, "update_comment")
     assert not hasattr(GitHubClient, "edit_comment")

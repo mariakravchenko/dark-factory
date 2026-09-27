@@ -226,7 +226,10 @@ def waiting_run(
     )
     cleanup_runs.append(run_id)
 
-    fake_publish = FakeGitHubClient()
+    # CR-01 (10-REVIEW.md): the existence check (fetch_issue +
+    # authenticated_login) runs before create_comment, so the ask-path fake
+    # must script an issue -- even a comment-free one.
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
     final = drive(
         run_id,
         session_factory=real_session_factory,
