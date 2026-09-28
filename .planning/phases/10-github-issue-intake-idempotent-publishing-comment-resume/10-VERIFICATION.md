@@ -26,7 +26,6 @@ covered_files:
   - ".planning/phases/10-github-issue-intake-idempotent-publishing-comment-resume/10-REVIEW-FIX.md"
   - ".planning/phases/10-github-issue-intake-idempotent-publishing-comment-resume/10-REVIEW.md"
   - ".planning/phases/10-github-issue-intake-idempotent-publishing-comment-resume/10-UAT.md"
-  - ".planning/phases/10-github-issue-intake-idempotent-publishing-comment-resume/10-VERIFICATION.md"
   - "migrations/versions/0006_github_publishing_columns.py"
   - "src/dark_factory/cli.py"
   - "src/dark_factory/config/repo_config.py"
@@ -54,7 +53,7 @@ covered_files:
   - "tests/support/shipped_config.py"
   - "tests/unit/test_shipped_config_harness.py"
 
-covered_digest: "v1:sha256:3e0aaa2b0b67c0f4a0af763e3f99cfe2840f207a1e4280543d8bcdf0de6d4464"
+covered_digest: "v1:sha256:2a02c3801cc12ac804ed2ee351dc3aba3a1720c8e9345695d786d64b7c9f4075"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
