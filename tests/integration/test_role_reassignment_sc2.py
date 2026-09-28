@@ -312,6 +312,28 @@ def test_shipped_config_with_no_fake_binaries_fails_visibly_not_silently(
             assert statuses_by_role.get("ARCHITECTURE") == "FAILED", (
                 f"expected ARCHITECTURE FAILED, got {statuses_by_role}"
             )
+            # 10-07 (G-10-1 masked-assertion finding): the terminal status
+            # and exit code alone are not the proof -- an unrelated
+            # terminal failure (e.g. gate exhaustion, which is exactly what
+            # happened here before 10-07) would look identical. Bind the
+            # persisted error and assert on its real content.
+            #
+            # Read via src/dark_factory/workers/copilot.py: the credential
+            # check (`settings.copilot_github_token is None`) runs BEFORE
+            # anything is spawned, so with COPILOT_GITHUB_TOKEN deleted
+            # above and no `.env` reachable from this throwaway repo's cwd
+            # (`Settings.model_config.env_file=".env"` is CWD-relative),
+            # `CopilotWorker.execute()` raises `MissingWorkerCredentialError`
+            # -- never reaching a `copilot`-binary spawn attempt at all. The
+            # persisted error therefore names the missing credential, not a
+            # process-not-found error; the assertion below is on the real
+            # substring that message contains, not a guess.
+            error_by_role = {e.role: e.error for e in executions}
+            architecture_error = error_by_role["ARCHITECTURE"]
+            assert architecture_error, "ARCHITECTURE execution has no persisted error"
+            architecture_error_blob = json.dumps(architecture_error)
+            assert "COPILOT_GITHUB_TOKEN" in architecture_error_blob
+            assert "not configured" in architecture_error_blob
 
             expected_worker = {
                 "BA": "fake",

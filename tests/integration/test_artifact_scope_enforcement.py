@@ -228,6 +228,12 @@ def test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_
         status_by_role = result["status_by_role"]
         assert isinstance(status_by_role, dict)
         assert status_by_role["QA"] == "FAILED"
+        # 10-07 (G-10-1 masked-assertion finding): the exit code alone is
+        # not the proof -- an unrelated terminal failure (e.g. gate
+        # exhaustion, which is exactly what happened here before 10-07)
+        # produces the same exit code 1. The persisted error naming the
+        # violating path is what distinguishes this case from any other
+        # terminal failure.
         error_by_role = result["error_by_role"]
         assert isinstance(error_by_role, dict)
         error_blob = json.dumps(error_by_role["QA"])
@@ -293,6 +299,16 @@ def test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and
                 "pipeline must stop at the failed role rather than "
                 "continuing past it"
             )
+        # 10-07 (G-10-1 masked-assertion finding): the exit code alone is
+        # not the proof -- an unrelated terminal failure (e.g. gate
+        # exhaustion, which is exactly what happened here before 10-07)
+        # produces the same exit code 1. The persisted error naming the
+        # violating path is what distinguishes this case from any other
+        # terminal failure -- mirrors the Hermes case above.
+        error_by_role = result["error_by_role"]
+        assert isinstance(error_by_role, dict)
+        error_blob = json.dumps(error_by_role["ARCHITECTURE"])
+        assert "artifacts/BA/acceptance_criteria.json" in error_blob
 
         working_branch = working_branch_name(run_id)
         committed = read_committed(
