@@ -20,10 +20,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-26)
+See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 10 — GitHub — Issue Intake, Idempotent Publishing, Comment Resume
+**Current focus:** Phase 11 — One Orchestrator, Many Triggers — Cross-Machine Resume
 
 ## Current Position
 
@@ -32,7 +32,7 @@ Plan: Not started
 Status: Ready to plan
 Last activity: 2026-09-28 — Phase 10 complete, transitioned to Phase 11
 
-Progress: [█░░░░░░░░░] 8% (9/12 phases)
+Progress: [████████░░] 83% (10/12 phases)
 
 ## Performance Metrics
 
@@ -238,11 +238,9 @@ None yet.
 ### Blockers/Concerns
 
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
+- ⚠️ [Phase 10] Discovered during live UAT (real Claude Code workers against a real external repo, `mariakravchenko/app-new`): two pre-existing worker/prompt-construction gaps, neither Phase 10 scope, both worth a future hardening pass. (1) `context_prompt_sections`'s "Expected outputs" prompt section tells a role to write under `artifacts/<ROLE>` but the actually-permitted path (per `--allowedTools`) requires a `.dark-factory/runs/<run-id>/` prefix that's silently omitted — a role has to discover the real path by trial and error against permission denials, and sometimes gives up instead of self-correcting. (2) The same prompt section gives a role only a bare output *filename*, never the JSON schema it must match — a role operating on a real target repo (with no access to Dark Factory's own `domain/artifacts.py` source) has no way to discover the exact pydantic shape and will invent a plausible-but-wrong one. Both worked around locally (in the target repo's own instructions.md, not Dark Factory's source) for this UAT session; not filed as Phase 10 gaps since neither is in this phase's scope.
 
-Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
-
-- [Phase 10] 10-07: DB-tier verification (real gate/publish path against reachable PostgreSQL) deferred -- no PostgreSQL reachable in this sandbox. Steps 1-4 of the plan's verification pass; step 5 and Task 3's human-check need a reachable PostgreSQL: uv run pytest -m integration -q tests/integration/test_real_pipeline_zero_config.py tests/integration/test_artifact_scope_enforcement.py tests/integration/test_artifact_cross_clone.py tests/integration/test_role_reassignment_sc2.py
-- [Phase 10] 10-08: DB-tier verification of both gap-closure fixes deferred -- no PostgreSQL reachable in this sandbox. `tests/db/test_loop04_adjacency.py` needs `uv run pytest -m db -q tests/db/test_loop04_adjacency.py`; the narrowed redaction guard needs `uv run pytest -m integration -q "tests/integration/test_redaction_interactions.py::test_the_interaction_writer_scrubs_at_the_one_mutation_path_call_site"` (its module-level `integration` marker forces the same DB-provisioning fixture even though the test itself requests no db fixtures). Both logged in WINDOWS.md (ids 15/16); both independently verified via static code reading / a standalone interpreter run of the assertion logic against real source.
+Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). [Phase 10] 10-07/10-08's deferred db-tier verification (no PostgreSQL reachable in the execution sandbox) — resolved: user ran the full unrestricted suite against real Neon PostgreSQL 17 during manual UAT (1171 passed, 1 skipped, 0 failed, no marker filter), confirming all four previously gate-exhausted integration tests reach `COMPLETED` and both gap-closure db-tier tests pass. Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
 ## Deferred Items
 
@@ -254,6 +252,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-28T09:02:51.440Z
+Last session: 2026-09-28T15:45:08.203Z
 Stopped at: Phase 10 complete, ready to plan Phase 11
 Resume file: None
