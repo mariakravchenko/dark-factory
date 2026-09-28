@@ -28,7 +28,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -39,43 +38,23 @@ import pytest
 from sqlalchemy import Engine, select
 from sqlalchemy.orm import Session
 
-from dark_factory.git.client import run_git
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, Run
 from tests.support.fake_claude_cli import write_fake_claude
 from tests.support.fake_copilot_cli import write_fake_copilot
 from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import clone_repo, make_git_repo
+from tests.support.shipped_config import copy_shipped_config_into
 
 pytestmark = pytest.mark.integration
 
-# tests/integration/test_artifact_cross_clone.py -> repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-_SHIPPED_CONFIG_PATHS: tuple[str, ...] = (
-    ".dark-factory.yaml",
-    ".dark-factory/roles",
-    ".dark-factory/instructions",
-)
-
-
-def _copy_shipped_config_into(root: Path) -> Path:
-    """Copy this repo's real shipped config set into ``root`` (already a real
-    git repository on ``main``) and commit it -- the same helper
-    ``test_real_pipeline_zero_config.py`` uses, duplicated per this repo's
-    existing convention of each integration module owning its own fixture
-    helper."""
-    for relative in _SHIPPED_CONFIG_PATHS:
-        source = _REPO_ROOT / relative
-        dest = root / relative
-        if source.is_dir():
-            shutil.copytree(source, dest)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, dest)
-    run_git(["add", "-A"], cwd=root)
-    run_git(["commit", "-m", "shipped config"], cwd=root)
-    return root
+# 10-07 (G-10-1): this module's own copy helper and the two constants that
+# existed only to feed it (`_copy_shipped_config_into`,
+# `_SHIPPED_CONFIG_PATHS`) were collapsed into the shared
+# `tests.support.shipped_config` harness -- see that module's docstring for
+# why `quality_gate`/`publishing` must be neutralized for a throwaway repo.
+# This module is rewired first, and alone, because it is the only one of the
+# four real-CLI-subprocess modules whose helper has no importers.
 
 
 def _run_cli_against_real_repo(
@@ -146,7 +125,7 @@ def _external_runtime_fakes(
 def test_fresh_clone_of_the_working_branch_carries_every_artifact_byte(
     pg_url: str, engine: Engine, tmp_path: Path, _external_runtime_fakes: Path
 ) -> None:
-    config_root = _copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
+    config_root = copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
     proc = _run_cli_against_real_repo(
         "text:prove the fresh-clone durability guarantee", pg_url, config_root
     )
