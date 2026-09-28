@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
 status: executing
-stopped_at: Completed 10-07-PLAN.md
-last_updated: "2026-09-28T08:07:42.566Z"
+stopped_at: Completed 10-08-PLAN.md
+last_updated: "2026-09-28T09:02:51.582Z"
 last_activity: 2026-09-28
 last_activity_desc: Phase 10 execution started
-state_head: f152345ae576a796147b766928954192349ddff3
+state_head: cd7a3759999ac3bd6a1a0b6393c126ceecf3c47b
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 59
-  completed_plans: 58
+  completed_plans: 59
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 ## Current Position
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-09-28 — Phase 10 execution started
 
@@ -112,6 +112,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 10 P04 | ~2h10min | 3 tasks | 11 files |
 | Phase 10 P05 | 55min | 2 tasks | 2 files |
 | Phase 10 P07 | 55min | 3 tasks | 6 files |
+| Phase 10 P08 | 55min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -224,6 +225,8 @@ Recent decisions affecting current work:
 - [Phase 10]: [Phase 10]: 10-05: githubkit allowed-module set has three entries, not the plan's anticipated two -- webhook/resolve.py's UNSET sentinel import is a third genuine call site, discovered by reading actual source rather than only the plan's read_first list; documented in the guard's own docstring, no production code touched
 - [Phase 10]: [Phase 10]: 10-05: D-02 guarded on names (advance/drive as import or bare call) rather than closure membership, since answers.py legitimately imports RunNotFoundError from runner.py making a closure-exclusion assertion false on landing; genuinely-optional proof for the webhook extra reuses test_no_mcp_import_in_core.py's own import-graph-only mechanism rather than inventing a subprocess-based check
 - [Phase 10]: 10-07: Collapsed four duplicated shipped-config copy helpers into tests/support/shipped_config.py; neutralize_repo_local_config rewrites only quality_gate/publishing on the parsed YAML document (never a duplicate-key append), closing G-10-1's two serial root causes
+- [Phase 10]: 10-08: Both runner.py GitHub-path redact() call sites unparse to identical 'str(exc)' text, so _RUNNER_PERMITTED_REDACT_ARGUMENTS is a one-entry allowlist naming both call sites (10-06/GIT-03, 10-03/GIT-05) rather than two distinguishable entries; guard proven non-vacuous by an inline counterexample assertion
+- [Phase 10]: 10-08: G-10-1's LOOP-04 evidence promoted from an untracked throwaway to committed tests/db/test_loop04_adjacency.py, reading the adjacency reason from the ROLE_FAILED event and role-execution error column (not RUN_FAILED), closing the STATE.md Blocker
 
 ### Pending Todos
 
@@ -233,12 +236,12 @@ None yet.
 
 ### Blockers/Concerns
 
-- ⚠️ [Phase 9] `tests/db/test_manual_check_loop04_adjacency.py` is an untracked, already-served throwaway script — the only behavioral evidence LOOP-04's adjacency case (a failing role with no earlier role) was ever proven. A future `git clean` would silently lose it. Not phase-blocking (the invariant is independently confirmed by direct code read), but should be either deleted per its own docstring or promoted to a committed `tests/db/` test.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 
-Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
+Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
 - [Phase 10] 10-07: DB-tier verification (real gate/publish path against reachable PostgreSQL) deferred -- no PostgreSQL reachable in this sandbox. Steps 1-4 of the plan's verification pass; step 5 and Task 3's human-check need a reachable PostgreSQL: uv run pytest -m integration -q tests/integration/test_real_pipeline_zero_config.py tests/integration/test_artifact_scope_enforcement.py tests/integration/test_artifact_cross_clone.py tests/integration/test_role_reassignment_sc2.py
+- [Phase 10] 10-08: DB-tier verification of both gap-closure fixes deferred -- no PostgreSQL reachable in this sandbox. `tests/db/test_loop04_adjacency.py` needs `uv run pytest -m db -q tests/db/test_loop04_adjacency.py`; the narrowed redaction guard needs `uv run pytest -m integration -q "tests/integration/test_redaction_interactions.py::test_the_interaction_writer_scrubs_at_the_one_mutation_path_call_site"` (its module-level `integration` marker forces the same DB-provisioning fixture even though the test itself requests no db fixtures). Both logged in WINDOWS.md (ids 15/16); both independently verified via static code reading / a standalone interpreter run of the assertion logic against real source.
 
 ## Deferred Items
 
@@ -250,6 +253,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-28T08:07:42.466Z
-Stopped at: Completed 10-07-PLAN.md
+Last session: 2026-09-28T09:02:51.440Z
+Stopped at: Completed 10-08-PLAN.md
 Resume file: None

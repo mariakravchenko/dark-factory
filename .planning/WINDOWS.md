@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 12
+open_count: 14
 waived_count: 0
 fixed_count: 2
-total_count: 14
-last_updated: 2026-09-28T08:08:44.277Z
+total_count: 16
+last_updated: 2026-09-28T09:00:58.039Z
 ---
 
 # Broken Windows Ledger
@@ -29,6 +29,8 @@ last_updated: 2026-09-28T08:08:44.277Z
 | 12 | 10 | deviation | src/dark_factory/input/loaders.py |  | Live smoke test of _load_github against a real GitHub issue deferred -- GITHUB_TOKEN absent from environment/.env in this session; unit tier (fakes only) fully proven and gates this plan's <verify> | open |  | 2026-09-26T16:30:21.672Z |  |
 | 13 | 10 | unrun-verify | tests/integration/test_real_pipeline_zero_config.py |  | 10-07 plan verification step 5 (real quality gate + four real-CLI-subprocess tests against reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox | open |  | 2026-09-28T08:08:39.359Z |  |
 | 14 | 10 | unrun-verify | tests/integration/test_artifact_scope_enforcement.py |  | 10-07 Task 3 human-check (confirm the two tamper cases and no-fake-binaries case still FAIL their run for their own condition against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox | open |  | 2026-09-28T08:08:44.277Z |  |
+| 15 | 10 | unrun-verify | tests/db/test_loop04_adjacency.py |  | 10-08 Task 1 verify step (db-tier run of the promoted LOOP-04 adjacency test against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox; logic verified by static code reading and a standalone interpreter check of the assertions against real runner.py source | open |  | 2026-09-28T09:00:57.930Z |  |
+| 16 | 10 | unrun-verify | tests/integration/test_redaction_interactions.py |  | 10-08 Task 2 verify step (pytest -m integration run of the narrowed redaction guard) not run -- the module's session-scoped autouse _schema_at_head fixture forces PostgreSQL provisioning for any collected integration-marked test regardless of whether the test itself requests db fixtures; no PostgreSQL reachable in the execution sandbox. Guard logic verified by a standalone interpreter run of the extraction helper against real runner.py source (both call sites resolve to str(exc), correctly allowlisted; counterexample correctly rejected) | open |  | 2026-09-28T09:00:58.039Z |  |
 
 ````json
 [
@@ -198,6 +200,30 @@ last_updated: 2026-09-28T08:08:44.277Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-28T08:08:44.277Z",
+    "resolved_at": null
+  },
+  {
+    "id": 15,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "tests/db/test_loop04_adjacency.py",
+    "line": null,
+    "description": "10-08 Task 1 verify step (db-tier run of the promoted LOOP-04 adjacency test against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox; logic verified by static code reading and a standalone interpreter check of the assertions against real runner.py source",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T09:00:57.930Z",
+    "resolved_at": null
+  },
+  {
+    "id": 16,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "tests/integration/test_redaction_interactions.py",
+    "line": null,
+    "description": "10-08 Task 2 verify step (pytest -m integration run of the narrowed redaction guard) not run -- the module's session-scoped autouse _schema_at_head fixture forces PostgreSQL provisioning for any collected integration-marked test regardless of whether the test itself requests db fixtures; no PostgreSQL reachable in the execution sandbox. Guard logic verified by a standalone interpreter run of the extraction helper against real runner.py source (both call sites resolve to str(exc), correctly allowlisted; counterexample correctly rejected)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T09:00:58.039Z",
     "resolved_at": null
   }
 ]
