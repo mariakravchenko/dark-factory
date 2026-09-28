@@ -38,14 +38,12 @@ from sqlalchemy.orm import Session
 
 from dark_factory.git.worktree import working_branch_name, worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
-from tests.integration.test_real_pipeline_zero_config import (
-    _copy_shipped_config_into,
-    _run_cli_against_real_repo,
-)
+from tests.integration.test_real_pipeline_zero_config import _run_cli_against_real_repo
 from tests.support.fake_claude_cli import write_fake_claude
 from tests.support.fake_copilot_cli import write_fake_copilot
 from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import make_git_repo, read_committed
+from tests.support.shipped_config import copy_shipped_config_into
 
 pytestmark = pytest.mark.integration
 
@@ -134,7 +132,7 @@ def _drive_shipped_config(
     reads from the database, so it fails loudly if the CLI's D-05 exit
     mapping and the observed run status ever disagree.
     """
-    config_root = _copy_shipped_config_into(make_git_repo(tmp_path / f"{label}-repo"))
+    config_root = copy_shipped_config_into(make_git_repo(tmp_path / f"{label}-repo"))
     fake_dir = tmp_path / f"{label}-fakebin"
     _install_fakes(
         fake_dir,

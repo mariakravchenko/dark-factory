@@ -76,42 +76,28 @@ from dark_factory.domain.artifacts import (
     TestReport,
     Verdict,
 )
-from dark_factory.git.client import run_git
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
 from tests.support.fake_claude_cli import write_fake_claude
 from tests.support.fake_copilot_cli import write_fake_copilot
 from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import make_git_repo, run_artifact_text
+from tests.support.shipped_config import copy_shipped_config_into
 
 pytestmark = pytest.mark.integration
 
-# tests/integration/test_real_pipeline_zero_config.py -> repo root.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-
-_SHIPPED_CONFIG_PATHS: tuple[str, ...] = (
-    ".dark-factory.yaml",
-    ".dark-factory/roles",
-    ".dark-factory/instructions",
-)
-
-
-def _copy_shipped_config_into(root: Path) -> Path:
-    """Copy this repo's real shipped config set into ``root`` (already a real
-    git repository) and commit it, so the CLI drives against the genuine
-    ``.dark-factory.yaml`` / role / instruction files without touching the
-    developer's own checkout."""
-    for relative in _SHIPPED_CONFIG_PATHS:
-        source = _REPO_ROOT / relative
-        dest = root / relative
-        if source.is_dir():
-            shutil.copytree(source, dest)
-        else:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, dest)
-    run_git(["add", "-A"], cwd=root)
-    run_git(["commit", "-m", "shipped config"], cwd=root)
-    return root
+# 10-07 (G-10-1): this module's own copy helper and the two constants that
+# existed only to feed it (`_copy_shipped_config_into`,
+# `_SHIPPED_CONFIG_PATHS`/`_REPO_ROOT`) were collapsed into the shared
+# `tests.support.shipped_config` harness -- the config set copied in is
+# still the real shipped one, with two repo-local declarations
+# (`quality_gate.commands`, `publishing.create_pr`) rewritten by the shared
+# harness for a throwaway checkout that cannot satisfy either as shipped.
+# The property under test -- the shipped configuration resolves and drives
+# to `COMPLETED` with no scripted worker -- is unchanged; only the source of
+# the copy-and-neutralize step moved. A future reader should not "restore"
+# the old per-module helper any more than the drive-against-this-repo
+# behaviour the paragraph above already warns against.
 
 
 def _read_role_artifact(
@@ -229,7 +215,7 @@ def test_real_dark_factory_yaml_reaches_completed_with_no_explicit_script(
     tmp_path: Path,
     _external_runtime_fakes: Path,
 ) -> None:
-    config_root = _copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
+    config_root = copy_shipped_config_into(make_git_repo(tmp_path / "repo"))
     proc = _run_cli_against_real_repo("text:add a health endpoint", pg_url, config_root)
 
     run_dir: Path | None = None

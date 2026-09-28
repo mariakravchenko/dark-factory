@@ -44,14 +44,12 @@ from sqlalchemy.orm import Session
 
 from dark_factory.git.worktree import worktree_path
 from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
-from tests.integration.test_real_pipeline_zero_config import (
-    _copy_shipped_config_into,
-    _run_cli_against_real_repo,
-)
+from tests.integration.test_real_pipeline_zero_config import _run_cli_against_real_repo
 from tests.support.fake_claude_cli import write_fake_claude
 from tests.support.fake_copilot_cli import write_fake_copilot
 from tests.support.fake_hermes_cli import write_fake_hermes
 from tests.support.git_repo import git_commit_all, make_git_repo
+from tests.support.shipped_config import copy_shipped_config_into
 
 pytestmark = pytest.mark.integration
 
@@ -201,16 +199,20 @@ def test_reassigned_roles_reach_completed_identically_to_all_fake(
     same configuration run entirely on ``FakeWorker`` -- except for which
     worker name each role execution records.
     """
-    three_runtime_root = _copy_shipped_config_into(
+    three_runtime_root = copy_shipped_config_into(
         make_git_repo(tmp_path / "three-runtime-repo")
     )
-    all_fake_root = _copy_shipped_config_into(make_git_repo(tmp_path / "all-fake-repo"))
+    all_fake_root = copy_shipped_config_into(make_git_repo(tmp_path / "all-fake-repo"))
     _rewrite_all_workers_to_fake(all_fake_root)
     git_commit_all(all_fake_root, "rewrite worker: lines to fake for SC2 comparison")
 
     # This assertion is what makes the rest of the test a proof about
     # configuration rather than a coincidence -- it must come first and
-    # must fail loudly.
+    # must fail loudly. 10-07: the precondition still holds -- this compares
+    # `.dark-factory/roles/*.yaml` between the two copied roots, which
+    # `copy_shipped_config_into`'s neutralization never touches (it rewrites
+    # only `.dark-factory.yaml`'s `quality_gate`/`publishing` keys), and both
+    # roots are neutralized identically.
     _role_yaml_diff_is_worker_lines_only(three_runtime_root, all_fake_root)
 
     fake_dir = tmp_path / "sc2-fakebin"
@@ -279,7 +281,7 @@ def test_shipped_config_with_no_fake_binaries_fails_visibly_not_silently(
     configuration assigned -- ruling out a silent substitution to a
     different worker, which would otherwise look exactly like a pass.
     """
-    config_root = _copy_shipped_config_into(
+    config_root = copy_shipped_config_into(
         make_git_repo(tmp_path / "no-binaries-repo")
     )
 
