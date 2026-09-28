@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 10
+open_count: 12
 waived_count: 0
 fixed_count: 2
-total_count: 12
-last_updated: 2026-09-26T16:30:21.672Z
+total_count: 14
+last_updated: 2026-09-28T08:08:44.277Z
 ---
 
 # Broken Windows Ledger
@@ -27,6 +27,8 @@ last_updated: 2026-09-26T16:30:21.672Z
 | 10 | 07 | stub | src/dark_factory/workers/claude_code.py | 388 | ClaudeCodeWorker.resume() raises NotImplementedError until plan 07-03 lands the native --resume <session_id> branch (execute() is fully implemented and proven this plan) | fixed |  | 2026-09-20T18:05:11.961Z | 2026-09-20T18:31:31.040Z |
 | 11 | 10 | unrun-verify | tests/integration/test_unsupported_source.py |  | github:152 case updated for real _load_github but not executed against real PostgreSQL in this environment (integration tier, needs pg_url/engine fixtures) | open |  | 2026-09-26T16:30:21.545Z |  |
 | 12 | 10 | deviation | src/dark_factory/input/loaders.py |  | Live smoke test of _load_github against a real GitHub issue deferred -- GITHUB_TOKEN absent from environment/.env in this session; unit tier (fakes only) fully proven and gates this plan's <verify> | open |  | 2026-09-26T16:30:21.672Z |  |
+| 13 | 10 | unrun-verify | tests/integration/test_real_pipeline_zero_config.py |  | 10-07 plan verification step 5 (real quality gate + four real-CLI-subprocess tests against reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox | open |  | 2026-09-28T08:08:39.359Z |  |
+| 14 | 10 | unrun-verify | tests/integration/test_artifact_scope_enforcement.py |  | 10-07 Task 3 human-check (confirm the two tamper cases and no-fake-binaries case still FAIL their run for their own condition against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox | open |  | 2026-09-28T08:08:44.277Z |  |
 
 ````json
 [
@@ -172,6 +174,30 @@ last_updated: 2026-09-26T16:30:21.672Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-26T16:30:21.672Z",
+    "resolved_at": null
+  },
+  {
+    "id": 13,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "tests/integration/test_real_pipeline_zero_config.py",
+    "line": null,
+    "description": "10-07 plan verification step 5 (real quality gate + four real-CLI-subprocess tests against reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T08:08:39.359Z",
+    "resolved_at": null
+  },
+  {
+    "id": 14,
+    "kind": "unrun-verify",
+    "phase": "10",
+    "file": "tests/integration/test_artifact_scope_enforcement.py",
+    "line": null,
+    "description": "10-07 Task 3 human-check (confirm the two tamper cases and no-fake-binaries case still FAIL their run for their own condition against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-28T08:08:44.277Z",
     "resolved_at": null
   }
 ]
