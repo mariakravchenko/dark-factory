@@ -18,13 +18,16 @@ The redaction is *inherited, not added*: ``question`` and ``answer`` reach
 ``redact()`` through ``_write_human_interaction`` in the one mutation path
 (``persistence/mutations.py``) -- the single call site that
 ``tests/unit/test_single_mutation_path.py`` (the AST guard over the source tree)
-pins as the only writer of ``human_interactions``. No new scrubbing call was
-added on the pause path in the runner; the last test in this module asserts
-exactly that.
+pins as the only writer of ``human_interactions``. The runner does scrub two
+GitHub API failure strings on its own (plans 10-06 and 10-03) before they enter
+persisted payloads, but never a human-interaction question or answer -- the
+last test in this module asserts exactly that structural contract, and that
+the extraction it relies on is not vacuous.
 """
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from collections.abc import Callable
@@ -292,15 +295,106 @@ def test_the_stored_question_and_answer_are_markers_not_dropped_fields(
     assert "please delete this line" in swept.answer
 
 
+def _extract_redact_first_args(source: str) -> list[str]:
+    """Parse ``source`` and return the unparsed text of each ``redact(...)``
+    call's first positional argument, in source order.
+
+    Uses ``ast`` rather than a token or regex scan: both of ``runner.py``'s
+    call sites are formatted across several lines, and this repo already
+    guards structure with AST in ``tests/unit/test_single_mutation_path.py``.
+    """
+    tree = ast.parse(source)
+    args: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "redact"
+            and node.args
+        ):
+            args.append(ast.unparse(node.args[0]))
+    return args
+
+
+# The exact expressions ``runner.py`` is permitted to pass as ``redact()``'s
+# first positional argument. Both of Phase 10's GitHub-path call sites scrub
+# the same expression -- a stringified ``GitHubError`` -- never a
+# human-interaction question or answer:
+#
+# * plan 10-06 (GIT-03): the publish-path client-construction failure,
+#   folded into ``PublishResult.error`` before it is ever persisted.
+# * plan 10-03 (GIT-05): the clarification-comment failure, folded into the
+#   ``QUESTION_CREATED`` payload's ``clarification_comment_error`` key.
+#
+# A new ``redact(`` call site scrubbing anything else -- including a renamed
+# exception variable -- trips this guard and must be added here deliberately,
+# never silently widened.
+_RUNNER_PERMITTED_REDACT_ARGUMENTS = frozenset({"str(exc)"})
+
+_HUMAN_INTERACTION_FIELD_MARKERS = ("question", "answer")
+
+
+def _mentions_human_interaction_field(expr: str) -> bool:
+    lowered = expr.lower()
+    return any(marker in lowered for marker in _HUMAN_INTERACTION_FIELD_MARKERS)
+
+
 def test_the_interaction_writer_scrubs_at_the_one_mutation_path_call_site() -> None:
     """The structural half of the argument: the question and the answer are
     redacted inside ``_write_human_interaction`` -- the same call site
-    ``_write_role_execution`` uses -- and the runner never scrubs on the pause
-    path. ``tests/unit/test_single_mutation_path.py`` guards that this is the
-    only writer of the table."""
+    ``_write_role_execution`` uses. The runner does scrub two GitHub API
+    failure strings (GIT-03's publish-path client-construction failure,
+    GIT-05's clarification-comment failure) before they enter persisted
+    payloads, but never a human-interaction question or answer -- those two
+    fields are redacted exclusively inside ``_write_human_interaction``.
+    ``tests/unit/test_single_mutation_path.py`` guards that ``mutations.py``
+    is the table's only writer."""
     mutations_src = Path(mutations_mod.__file__).read_text(encoding="utf-8")
     assert "redact(spec.question, known_secrets=known)" in mutations_src
     assert "redact(spec.answer, known_secrets=known)" in mutations_src
 
     runner_src = Path(runner_mod.__file__).read_text(encoding="utf-8")
-    assert "redact(" not in runner_src
+    redacted_args = _extract_redact_first_args(runner_src)
+    assert redacted_args, (
+        "runner.py has no redact( call sites -- Phase 10 added two "
+        "(GIT-03/GIT-05); either the extraction helper or the source tree "
+        "changed in a way this guard was not updated for"
+    )
+    for arg in redacted_args:
+        assert arg in _RUNNER_PERMITTED_REDACT_ARGUMENTS, (
+            f"runner.py scrubs an expression not on the permitted allowlist: "
+            f"{arg!r} -- a new redact( call site must be reviewed and added "
+            f"to _RUNNER_PERMITTED_REDACT_ARGUMENTS deliberately"
+        )
+        assert not _mentions_human_interaction_field(arg), (
+            f"runner.py scrubs {arg!r}, which mentions a human-interaction "
+            f"question or answer -- those two fields are redacted exclusively "
+            f"inside _write_human_interaction (persistence/mutations.py)"
+        )
+
+    # Self-detection: the two checks above are only meaningful if the
+    # extraction helper actually surfaces a violation when one exists. Run it
+    # over a short inline counterexample that DOES scrub a human-interaction
+    # field and confirm both checks reject it. Without this, the narrowed
+    # guard would pass trivially if the extraction helper ever silently
+    # returned an empty list -- the exact failure mode a loosened assertion
+    # is most likely to have (this repo already learned that lesson in plan
+    # 07-02).
+    counterexample_src = (
+        "def _leak_human_text(spec, known):\n"
+        "    return redact(spec.question, known_secrets=known)\n"
+    )
+    counterexample_args = _extract_redact_first_args(counterexample_src)
+    assert counterexample_args == ["spec.question"], (
+        f"extraction helper did not surface the counterexample's redact( "
+        f"call -- got {counterexample_args}"
+    )
+    assert counterexample_args[0] not in _RUNNER_PERMITTED_REDACT_ARGUMENTS, (
+        "the counterexample's argument must NOT be on the permitted "
+        "allowlist -- if it is, the allowlist is not doing its job"
+    )
+    assert _mentions_human_interaction_field(counterexample_args[0]), (
+        "the counterexample's argument must be detected as a "
+        "human-interaction field -- if it is not, the marker check is not "
+        "doing its job"
+    )
