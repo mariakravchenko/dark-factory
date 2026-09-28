@@ -13,6 +13,12 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
+# GSD planning tool state — regeneratable from committed .planning/ content,
+# not meant to be tracked (research/.cache/ is a literal HTTP response cache;
+# state.json is a derived snapshot of ROADMAP.md's phase statuses).
+.planning/research/.cache/
+.planning/state.json
+
 # Local environment file — load-bearing: keeps a real DATABASE_URL / GITHUB_TOKEN out of git
 .env
 
