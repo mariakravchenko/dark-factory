@@ -60,7 +60,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 7: Claude Code — the First Real Worker** - A real agent runtime performs a role and resumes, with the orchestrator runtime-agnostic (completed 2026-09-21)
 - [x] **Phase 8: Copilot & Hermes — Worker Independence Proven** - The same role runs unchanged on three genuinely different runtimes, chosen in config (completed 2026-09-22)
 - [x] **Phase 9: Independent Quality Gate & Bounded Feedback Loops** - The platform re-runs the repo's own commands and bounds every retry (completed 2026-09-26)
-- [ ] **Phase 10: GitHub — Issue Intake, Idempotent Publishing, Comment Resume** - An issue starts a run, the run asks on the issue, and a verified result becomes exactly one PR
+- [x] **Phase 10: GitHub — Issue Intake, Idempotent Publishing, Comment Resume** - An issue starts a run, the run asks on the issue, and a verified result becomes exactly one PR (completed 2026-09-28)
 - [ ] **Phase 11: One Orchestrator, Many Triggers — Cross-Machine Resume** - A run started locally finishes in CI through Neon alone, proven by the FakeWorker suite
 - [ ] **Phase 12: Observability & Audit Surface** - For any run, Dark Factory can explain exactly where it is and everything that happened to it
 
@@ -509,7 +509,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
-| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | In Progress|  |
+| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | Complete    | 2026-09-28 |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 
