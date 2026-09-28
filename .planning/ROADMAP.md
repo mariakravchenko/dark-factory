@@ -425,11 +425,15 @@ Plans:
   4. A GitHub-sourced run posts exactly one clarification comment and stays `WAITING_HUMAN`; a duplicate webhook delivery of the reply stores exactly one answer.
   5. An issue comment answering a pending interaction resumes the same `RoleExecution`, and a comment that matches no pending interaction creates no run.
 
-**Plans**: 6/6 plans executed
+**Plans**: 6/8 plans executed
 
 > Plan numbers are not execution order here. `10-01` was split during plan review (it exceeded
 > the per-plan scope ceiling), and its second half became `10-06`, which runs in **wave 2** —
 > before `10-02`/`10-03`/`10-04`. Execution order is the wave order below.
+>
+> `10-07` and `10-08` are gap-closure plans added after UAT (gap `G-10-1`). Both are
+> test-only and depend on nothing, so both run in **wave 1** alongside nothing else that
+> remains outstanding.
 
 Plans:
 
@@ -450,6 +454,11 @@ Plans:
 **Wave 4** *(blocked on Wave 3)*
 
 - [x] 10-05-PLAN.md — Boundaries enforced, not documented: `githubkit` lives in one module and the receiver cannot run the pipeline
+
+**Gap closure** *(G-10-1, added after UAT — both wave 1, no dependencies)*
+
+- [ ] 10-07-PLAN.md — The shipped config stops failing in a throwaway repo: one shared, unit-proven `tests/support/shipped_config.py` harness neutralizing `quality_gate.commands` and `publishing.create_pr` for all four real-CLI-subprocess tests, plus three negative controls strengthened to assert on the persisted failure reason
+- [ ] 10-08-PLAN.md — Two assertions pointed at the wrong thing: the LOOP-04 adjacency proof promoted to a committed `tests/db/` test reading the `ROLE_FAILED` error field, and the over-broad redaction structural guard narrowed to the contract it claims to protect
 
 **Invariants**: every external side effect is idempotent, keyed on a persisted identifier; the webhook path takes the same lease as the CLI path.
 
