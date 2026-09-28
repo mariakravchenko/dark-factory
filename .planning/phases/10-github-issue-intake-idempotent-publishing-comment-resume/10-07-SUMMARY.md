@@ -17,7 +17,8 @@ affects: [10-08-gap-closure, gsd-verify-work, future-integration-tests-that-copy
 actuals:
   tokens: 6146
   tasks: 3
-  commits: 4
+  commits: 8
+  plan_head_before: 589d57ce23bf988ca75c4f0c095512bf351f64e0
 
 tech-stack:
   added: []
