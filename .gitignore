@@ -19,6 +19,10 @@ dist/
 .planning/research/.cache/
 .planning/state.json
 
+# AI tooling installs — local dev-tool configuration, not project source.
+.claude/
+.opencode/
+
 # Local environment file — load-bearing: keeps a real DATABASE_URL / GITHUB_TOKEN out of git
 .env
 
