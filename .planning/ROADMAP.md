@@ -425,7 +425,7 @@ Plans:
   4. A GitHub-sourced run posts exactly one clarification comment and stays `WAITING_HUMAN`; a duplicate webhook delivery of the reply stores exactly one answer.
   5. An issue comment answering a pending interaction resumes the same `RoleExecution`, and a comment that matches no pending interaction creates no run.
 
-**Plans**: 6/8 plans executed
+**Plans**: 7/8 plans executed
 
 > Plan numbers are not execution order here. `10-01` was split during plan review (it exceeded
 > the per-plan scope ceiling), and its second half became `10-06`, which runs in **wave 2** —
@@ -457,7 +457,7 @@ Plans:
 
 **Gap closure** *(G-10-1, added after UAT — both wave 1, no dependencies)*
 
-- [ ] 10-07-PLAN.md — The shipped config stops failing in a throwaway repo: one shared, unit-proven `tests/support/shipped_config.py` harness neutralizing `quality_gate.commands` and `publishing.create_pr` for all four real-CLI-subprocess tests, plus three negative controls strengthened to assert on the persisted failure reason
+- [x] 10-07-PLAN.md — The shipped config stops failing in a throwaway repo: one shared, unit-proven `tests/support/shipped_config.py` harness neutralizing `quality_gate.commands` and `publishing.create_pr` for all four real-CLI-subprocess tests, plus three negative controls strengthened to assert on the persisted failure reason
 - [ ] 10-08-PLAN.md — Two assertions pointed at the wrong thing: the LOOP-04 adjacency proof promoted to a committed `tests/db/` test reading the `ROLE_FAILED` error field, and the over-broad redaction structural guard narrowed to the contract it claims to protect
 
 **Invariants**: every external side effect is idempotent, keyed on a persisted identifier; the webhook path takes the same lease as the CLI path.
@@ -509,7 +509,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 7. Claude Code — the First Real Worker | 4/4 | Complete    | 2026-09-21 |
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
-| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 6/6 | In Progress|  |
+| 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 7/8 | In Progress|  |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 0/TBD | Not started | - |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 

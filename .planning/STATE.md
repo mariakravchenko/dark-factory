@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 10
 current_phase_name: GitHub — Issue Intake, Idempotent Publishing, Comment Resume
-status: verifying
-stopped_at: Completed 10-05-PLAN.md
-last_updated: "2026-09-27T13:05:46.985Z"
-last_activity: 2026-09-26
+status: executing
+stopped_at: Completed 10-07-PLAN.md
+last_updated: "2026-09-28T08:07:42.566Z"
+last_activity: 2026-09-28
 last_activity_desc: Phase 10 execution started
-state_head: a4c8a2f78001cdf08cd384a4c1573a06bb71189a
+state_head: f152345ae576a796147b766928954192349ddff3
 progress:
   total_phases: 12
   completed_phases: 0
-  total_plans: 57
-  completed_plans: 57
+  total_plans: 59
+  completed_plans: 58
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-26)
 ## Current Position
 
 Phase: 10 (GitHub — Issue Intake, Idempotent Publishing, Comment Resume) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
-Last activity: 2026-09-26 — Phase 10 execution started
+Plan: 2 of 8
+Status: Ready to execute
+Last activity: 2026-09-28 — Phase 10 execution started
 
 Progress: [░░░░░░░░░░] 0% (9/12 phases)
 
@@ -111,6 +111,7 @@ Progress: [░░░░░░░░░░] 0% (9/12 phases)
 | Phase 10 P03 | ~2h | 2 tasks | 4 files |
 | Phase 10 P04 | ~2h10min | 3 tasks | 11 files |
 | Phase 10 P05 | 55min | 2 tasks | 2 files |
+| Phase 10 P07 | 55min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -222,6 +223,7 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-04: the self-comment filter reads the commenter identity off comment.user.login (the comment's own author), not sender.login (who triggered the delivery) -- closes 10-RESEARCH.md Assumption A4 — Confirmed by introspecting the installed githubkit 0.16.1 / githubkit-schemas 26.9.21 package's own typed model before writing the call site, both self-comment checks (comment id and login) evaluated independently regardless
 - [Phase 10]: [Phase 10]: 10-05: githubkit allowed-module set has three entries, not the plan's anticipated two -- webhook/resolve.py's UNSET sentinel import is a third genuine call site, discovered by reading actual source rather than only the plan's read_first list; documented in the guard's own docstring, no production code touched
 - [Phase 10]: [Phase 10]: 10-05: D-02 guarded on names (advance/drive as import or bare call) rather than closure membership, since answers.py legitimately imports RunNotFoundError from runner.py making a closure-exclusion assertion false on landing; genuinely-optional proof for the webhook extra reuses test_no_mcp_import_in_core.py's own import-graph-only mechanism rather than inventing a subprocess-based check
+- [Phase 10]: 10-07: Collapsed four duplicated shipped-config copy helpers into tests/support/shipped_config.py; neutralize_repo_local_config rewrites only quality_gate/publishing on the parsed YAML document (never a duplicate-key append), closing G-10-1's two serial root causes
 
 ### Pending Todos
 
@@ -236,6 +238,8 @@ None yet.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
+- [Phase 10] 10-07: DB-tier verification (real gate/publish path against reachable PostgreSQL) deferred -- no PostgreSQL reachable in this sandbox. Steps 1-4 of the plan's verification pass; step 5 and Task 3's human-check need a reachable PostgreSQL: uv run pytest -m integration -q tests/integration/test_real_pipeline_zero_config.py tests/integration/test_artifact_scope_enforcement.py tests/integration/test_artifact_cross_clone.py tests/integration/test_role_reassignment_sc2.py
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -246,6 +250,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-27T13:05:46.897Z
-Stopped at: Completed 10-05-PLAN.md
+Last session: 2026-09-28T08:07:42.466Z
+Stopped at: Completed 10-07-PLAN.md
 Resume file: None
