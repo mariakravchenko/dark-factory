@@ -73,6 +73,11 @@ resume it; durability and observability are the same requirement.
 - ✓ Quality-gate result written to `verification/quality_gate.json`, redacted against known secrets in both captured output and the command string itself (CR-02) — Phase 9 (GATE-04)
 - ✓ QA FAIL returns a structured issues artifact to the Developer; quality-gate FAIL returns the real command failure output; both feed the Developer's next attempt via `optional_inputs`/`ContextBuilder` — Phase 9 (LOOP-01, LOOP-02)
 - ✓ Retry limits from repo config (`retry.qa_developer_max_iterations`, `retry.quality_gate_max_iterations`) checked before dispatch; on exhaustion the run transitions to `FAILED` with every attempt and reason persisted — Phase 9 (LOOP-03, LOOP-04)
+- ✓ Run a task from a GitHub issue: `dark-factory run github:<n>` (title, body, comments, labels; `source_ref`/`metadata` populated) — Phase 10 (INTAKE-03)
+- ✓ Publishing occurs only when QA = PASS **and** Quality Gate = PASS → collect diff, commit, push, create exactly one PR, persist PR metadata → COMPLETED — Phase 10 (GIT-03), proven against real GitHub (a real PR opened at `mariakravchenko/app-new#10` during manual UAT)
+- ✓ Idempotency: retrying publishing with an existing `pr_number`/`pr_url`/`published_commit_sha` does not open a second PR (three-way persisted-identifier fast path); a crash between GitHub-side create and the identity commit is recovered by a head-branch-scoped existence check before every create — Phase 10 (GIT-04)
+- ✓ GitHub as human-interaction channel: a role reaching `NEEDS_INPUT` posts a clarification comment on the source issue, threaded by a persisted comment id so a resume never re-posts — Phase 10 (GIT-05)
+- ✓ GitHub webhook receiver: verifies the inbound signature before any parse (fail-closed on an unset secret), resolves a reply comment to its pending interaction (never Dark Factory's own posted comment, never redelivery-duplicated), and calls `submit_answer` in-process — the same lease/transaction path `resume --answer` uses — Phase 10 (GIT-06)
 
 ### Active
 
@@ -80,7 +85,6 @@ resume it; durability and observability are the same requirement.
 
 **Task intake**
 - [ ] Run a task from plain text: `dark-factory run text:"..."`
-- [ ] Run a task from a GitHub issue: `dark-factory run github:152` (title, body, comments, labels, metadata)
 - [ ] Deterministic source identification (no LLM needed to classify text vs path vs issue)
 - [ ] Normalize every source to one internal `NormalizedTask` model
 
@@ -117,11 +121,7 @@ resume it; durability and observability are the same requirement.
 
 **Independent verification (Quality Gate)** — shipped Phase 9, see Validated above
 
-**Git lifecycle & GitHub integration**
-- [ ] Publishing occurs only when QA = PASS **and** Quality Gate = PASS → collect diff, commit, push, create PR, persist PR metadata → COMPLETED
-- [ ] GitHub as task source, human-interaction channel (post clarification comment, ingest reply), and publishing destination
-- [ ] GitHub event handler: a new issue comment finds the associated run + pending interaction, stores the answer, resumes the same `RoleExecution` (never creates a new run)
-- [ ] Idempotency: retrying publishing with an existing `pr_number` does not open a second PR; branch, commit SHA, PR number/URL, clarification comment id persisted
+**Git lifecycle & GitHub integration** — shipped Phase 10, see Validated above
 
 **Triggers: CLI / IDE / CI / GitHub**
 - [ ] One orchestration implementation; environments are only triggers — no separate CI orchestrator
@@ -206,6 +206,10 @@ resume it; durability and observability are the same requirement.
 | `enforce_write_scope`'s guard widened to fire on both `Signal.ROLE_COMPLETED` and `Signal.ROLE_BOUNCED` (one call site, not a parallel second check) | CR-01 (09-REVIEW.md): the guard originally covered only completion, so a bounced attempt's out-of-scope write bypassed the ROLE-05 authorization boundary entirely | Shipped Phase 9 (plan 09-04); proved by `tests/db/test_write_scope_enforced_on_bounce.py` |
 | `run_quality_gate`'s command-text field is redacted identically to its stdout/stderr, at construction time, before `GateCommandResult` exists | CR-02 (09-REVIEW.md): only the two output streams were redacted; a secret embedded in the configured command string itself reached the committed `quality_gate.json` unredacted | Shipped Phase 9 (plan 09-05); single choke point, no second redaction call site |
 | The Developer's attempt-2 `RoleContext` rebuild in test fixtures must derive the run's worktree via `ensure_worktree(base_branch, working_branch)` from the freshly loaded `RunState`, never from a pre-computed `repo_root` | G-09-6/G-09-7: `_CapturingWorker` passed the config repo root instead of the git worktree to `build_role_context`, making LOOP-01/LOOP-02's db-tier proofs unconditionally red for a whole phase — a test-fixture defect, zero production impact (`runner.py:866` always passed the correct value). Root cause: `.planning/debug/resolved/g-09-6-and-g-09-7-missing-architecture-design-md.md` | Fixed Phase 9 (plan 09-06); new DB-free AST guard (`tests/unit/test_role_context_rebuild_uses_the_worktree.py`) restores detection; behaviorally confirmed against real PostgreSQL 17 (2 passed) |
+| `source_ref = "{owner}/{repo}#{issue_number}"` and `metadata = {owner, repo, issue_number, labels, comment_count}` for a GitHub-sourced run, rather than a bare URL or dedicated `runs` columns | 10-RESEARCH.md Open Question 2 / Task 2 checkpoint option A1: human-legible in `status`/`RUN_CREATED`, and the webhook resolver queries typed `metadata` fields with no string parsing or API-host coupling; avoids `runs`-table columns that every non-GitHub source would carry as permanent NULLs | Shipped Phase 10 (plan 10-01) |
+| The webhook receiver's own mutation is exactly `submit_answer`, in-process, never `advance`/`drive` — enforced by two AST import-closure guards (no `advance`/`drive` reachable under `src/dark_factory/webhook/`; `dark_factory.webhook` unreachable from the orchestrator core) | GIT-06/D-01/D-02: the receiver is the first unauthenticated network edge in the codebase; a request must never be able to hold a lease for a role's duration or spawn a worker subprocess | Shipped Phase 10 (plans 10-04, 10-05) |
+| Four real-CLI-subprocess integration tests copying the shipped `.dark-factory.yaml` verbatim into a throwaway repo must neutralize `quality_gate.commands` and `publishing.create_pr` through one shared harness, not per-test ad hoc fixes | G-10-1 root cause: the shipped config's `quality_gate.commands` (`uv run pytest -q`) has no meaning in a throwaway repo with no Python project — exit 5 every attempt, QA↔DEVELOPMENT bounces to exhaustion, run terminates FAILED, masking whether the actual publish/intake path works at all. Two independent test-only defects (a LOOP-04 test reading the wrong event field, an over-broad redaction-guard assertion) surfaced in the same diagnosis. Root cause: `.planning/debug/qa-gate-exhausts-bounces-terminates-failed.md` | Fixed Phase 10 (gap-closure plans 10-07/10-08); zero production changes; independently re-verified (808/808 unit+contract, then 1171/1171 full sweep against real Postgres in manual UAT) |
+| Dark Factory is installed as a standalone CLI tool (`uv tool install`) and run from *inside* the target repository's own local checkout — `.dark-factory.yaml`, `.env`, and all git/worktree operations resolve against `Path.cwd()`, never against wherever Dark Factory's own source lives | Discovered during live UAT: `repo_root` defaults to `Path.cwd()` throughout `orchestrator/runner.py`, so running `dark-factory` from inside its own checkout while pointing its own `.dark-factory.yaml` at a different GitHub repo would branch/commit/push against Dark Factory's *own* git history, not the target repo's. Confirmed the correct usage model (own checkout + `.env` per target repo, tool installed once) by setting up and successfully running a real end-to-end delivery against a separate repo (`mariakravchenko/app-new`, PR #10) | Confirmed Phase 10 UAT; not a code change, a usage-model clarification worth documenting before Phase 11 (cross-machine resume) or a README "getting started" section |
 
 ## Evolution
 
@@ -225,4 +229,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-26 after Phase 9*
+*Last updated: 2026-09-28 after Phase 10*
