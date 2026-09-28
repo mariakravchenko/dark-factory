@@ -148,3 +148,7 @@ Expected: all seven tests pass -- the four positive/reassignment cases reach `CO
 ---
 *Phase: 10-github-issue-intake-idempotent-publishing-comment-resume*
 *Completed: 2026-09-28*
+
+## Self-Check: PASSED
+
+All created files verified present on disk (`tests/support/shipped_config.py`, `tests/unit/test_shipped_config_harness.py`, this SUMMARY.md). All six commit hashes (`ec8d606`, `58fba52`, `cfc4cc0`, `5d8057c`, `f152345`, `e63b6c7`) verified present in `git log --oneline --all`.
