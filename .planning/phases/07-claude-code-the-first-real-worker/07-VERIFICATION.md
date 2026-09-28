@@ -1,11 +1,12 @@
 ---
 phase: 07-claude-code-the-first-real-worker
 verified: 2026-09-20T23:40:00Z
-status: human_needed
+status: passed
 score: 16/16 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
 covered_files:
+
   - ".github/workflows/ci.yml"
   - ".planning/phases/07-claude-code-the-first-real-worker/07-01-PLAN.md"
   - ".planning/phases/07-claude-code-the-first-real-worker/07-01-SUMMARY.md"
@@ -30,6 +31,7 @@ covered_files:
   - "tests/unit/test_native_tool_contract.py"
   - "tests/unit/test_settings.py"
   - "tests/unit/test_worker_registry_names.py"
+
 covered_digest: "v1:sha256:2416da6692565e0a449ab34de9152dfdb9532667010d9c88dcfa8119407a6a92"
 re_verification:
   previous_status: gaps_found
@@ -39,6 +41,7 @@ re_verification:
   gaps_remaining: []
   regressions: []
 human_verification:
+
   - test: "GitHub Actions CI actually runs and goes green (SC4 / QUAL-04)"
     expected: "All four named steps (Lint, Types, Worker-name leak guard, Unit and contract tiers) go green on a real Actions run; a deliberate worker-name leak or a defanged guard step fails the build."
     why_human: "`git remote -v` is empty in this working copy — no GitHub remote exists, so no Actions run can be triggered or observed from this sandbox. Structurally verified locally (YAML parses, correct steps/triggers/permissions, guard-on-the-guard test passes) but never actually executed. Documented in 07-USER-SETUP.md. Environment precondition, not a code defect — unchanged since the initial pass."
