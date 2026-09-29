@@ -189,7 +189,12 @@ def _base_argv(context: object) -> list[str]:
     special-casing. An empty grant list produces no ``--allowedTools``
     element at all -- an ``--allowedTools`` flag with an empty value is not
     the same as no flag, and only the omission expresses "grants nothing".
+
+    ``--model`` is appended only when ``Settings.claude_model`` is a
+    non-empty string, mirroring ``CopilotWorker``'s ``copilot_model``
+    handling -- unset means the ``claude`` CLI's own default model.
     """
+    settings = get_settings()
     granted = getattr(context, "tools", None) or []
     run_id = getattr(context, "run_id", None)
     artifacts_dir = getattr(context, "artifacts_dir", None)
@@ -212,6 +217,8 @@ def _base_argv(context: object) -> list[str]:
     names = allowed_tools_for(granted, artifacts_glob, artifacts_read_glob)
     if names:
         argv.extend(["--allowedTools", ",".join(names)])
+    if settings.claude_model:
+        argv.extend(["--model", settings.claude_model])
     return argv
 
 

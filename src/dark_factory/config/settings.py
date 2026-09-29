@@ -76,7 +76,10 @@ class Settings(BaseSettings):
     identifier is pinned by default because no verified identifier exists
     for this environment (D-02 defers the live spike to whenever the CLI is
     actually installed), so the CLI's own default model is used unless an
-    operator configures one.
+    operator configures one. ``claude_model`` is the same optional-pin
+    pattern for the ``claude-code`` worker: unset means the ``claude`` CLI's
+    own default model, set means ``ClaudeCodeWorker._base_argv`` appends
+    ``--model <claude_model>`` to every invocation.
 
     ``github_webhook_secret`` (Plan 10-01, D-04) is Dark Factory's own
     infrastructure credential for verifying inbound GitHub webhook
@@ -105,6 +108,7 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr | None = None
     copilot_github_token: SecretStr | None = None
     copilot_model: str | None = None
+    claude_model: str | None = None
     worker_timeout_seconds: int = 1800
 
     @field_validator("log_level")
