@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-09-29T13:16:38.265Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-09-29T20:26:30.157Z"
 last_activity: 2026-09-29
 last_activity_desc: Phase 11 execution started
-state_head: a870ddd3e731730fcdab43dab2cce92524f49e80
+state_head: 7dd56f6eec3eb1a8d3bcb37d752fd0844ec9199c
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 64
-  completed_plans: 60
+  completed_plans: 61
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-09-29 — Phase 11 execution started
 
@@ -115,6 +115,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 10 P07 | 55min | 3 tasks | 6 files |
 | Phase 10 P08 | 55min | 2 tasks | 2 files |
 | Phase 11 P01 | 65min | 2 tasks | 9 files |
+| Phase 11 P02 | ~25min task-commits + ~1h31m full-suite verification wait | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -232,6 +233,9 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11] 11-01: GitHubError re-exported from dark_factory.github.client (added to __all__) rather than importing the bare dark_factory.github package into webhook/app.py, keeping the webhook direct-import allowlist unwidened
 - [Phase 11]: [Phase 11] 11-01: build_app gains a dispatch_client_factory keyword mirroring authenticated_login's test-injection seam; the dispatch call in _resolve_and_act wires only the success path (fail-soft handling deferred to plan 11-02, per this plan's own instruction)
 - [Phase 11]: [Phase 11] 11-01: the one-reader AST guard for dispatch_github_token has TWO legitimate readers (github/client.py and webhook/app.py's own startup diagnostic), not the plan's literally-stated single entry -- resolved via the guard's own documented escape hatch for a deliberate second reader
+- [Phase 11]: [Phase 11] 11-02: all four dispatch outcomes (GitHubError fail-soft arm + two skip guards) written in one contiguous edit to webhook/app.py's dispatch block since they share one code path -- Task 1's commit carries Task 2's production code, Task 2's commit is test-only
+- [Phase 11]: [Phase 11] 11-02: MissingGitHubCredentialError added to dark_factory.github.client.__all__ (mirrors 11-01's identical GitHubError re-export decision), required by mypy --strict's explicit-export rule
+- [Phase 11]: [Phase 11] 11-02: the repository-config skip test builds a normal github:-sourced run and strips github_owner/github_repo from the already-persisted runs.workflow JSONB column after WAITING_HUMAN, rather than the plan's literal no-overwrite recipe -- _load_github validates those same fields at intake time and would refuse to create the run at all
 
 ### Pending Todos
 
@@ -256,6 +260,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T13:16:38.173Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-09-29T20:26:30.063Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
