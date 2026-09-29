@@ -79,6 +79,7 @@ __all__ = [
     "GitHubError",
     "GitHubIssue",
     "GitHubPullRequest",
+    "MissingGitHubCredentialError",
 ]
 
 

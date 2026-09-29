@@ -43,6 +43,16 @@ control** (T-10-18):
    ``LeaseNotAcquired`` means right now is a bad moment -- a retryable 503.
    Any unexpected exception is logged with the exception and returns a fixed
    500, never echoed.
+7. After ``submit_answer`` commits, dispatch a real ``workflow_dispatch`` on
+   the run's own persisted target repository (Phase 11, D-01/D-02). Four
+   outcomes, all ending in ``200`` -- by the time this step runs the answer
+   has already committed, so none of these ever changes the response code:
+   dispatched (``webhook.dispatch.requested``); skipped because the run's
+   repository is not configured for it (``webhook.dispatch.skipped``,
+   ``reason="repository_not_configured"``); skipped because this process
+   holds no dispatch credential (``webhook.dispatch.skipped``,
+   ``reason="dispatch_github_token_not_configured"``); or the dispatch call
+   itself failed against a real GitHub API (``webhook.dispatch.failed``).
 
 This module -- and everything it imports -- must never reference ``advance``
 or ``drive``: the receiver's only mutation is ``submit_answer`` (D-02, T-10-21).
@@ -67,7 +77,11 @@ from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
 from dark_factory.config.settings import Settings, get_settings
-from dark_factory.github.client import GitHubClient, GitHubError
+from dark_factory.github.client import (
+    GitHubClient,
+    GitHubError,
+    MissingGitHubCredentialError,
+)
 from dark_factory.orchestrator.answers import (
     NoPendingInteraction,
     NotWaitingForHuman,
@@ -90,6 +104,19 @@ _ISSUE_COMMENT_EVENT = "issue_comment"
 # repository. Not a Dark Factory-owned file -- Dark Factory never ships or
 # enforces this file existing.
 _RESUME_WORKFLOW_FILENAME = "resume.yml"
+
+# Phase 11, plan 11-02 (HITL-06 fail-soft half): the three named reasons a
+# `webhook.dispatch.skipped` record can carry -- module-level constants, not
+# inline literals, so the tests that assert on them cannot silently drift
+# from the values this module actually emits. `_RUN_STATE_UNAVAILABLE` shares
+# its guard clause's shape with `_REPOSITORY_NOT_CONFIGURED` (both are "the
+# repository target could not be resolved") but is not independently tested:
+# `load_run_state` cannot genuinely return `None` here, since `submit_answer`
+# has just succeeded against this exact run id -- the branch exists only for
+# mypy's `state.workflow` narrowing.
+_DISPATCH_SKIP_REASON_RUN_STATE_UNAVAILABLE = "run_state_unavailable"
+_DISPATCH_SKIP_REASON_REPOSITORY_NOT_CONFIGURED = "repository_not_configured"
+_DISPATCH_SKIP_REASON_CREDENTIAL_NOT_CONFIGURED = "dispatch_github_token_not_configured"
 
 # Fixed, non-echoing response bodies (T-10-22): never the received/computed
 # signature, the secret, a payload fragment, a validation-error detail, a run
@@ -268,13 +295,30 @@ def build_app(
             state = load_run_state(dispatch_session, outcome.run_id)
         finally:
             dispatch_session.close()
-        repository = (
-            (state.workflow.get("repository") or {}) if state is not None else {}
-        )
+
+        # Guard 1 (plan 11-02): `state` being `None` cannot happen here in
+        # practice -- `submit_answer` just succeeded against this exact run
+        # id -- but mypy still needs the branch to narrow `state.workflow`
+        # safely below, so it takes the same skip shape under its own,
+        # untested reason.
+        if state is None:
+            _log.info(
+                "webhook.dispatch.skipped",
+                run_id=str(outcome.run_id),
+                reason=_DISPATCH_SKIP_REASON_RUN_STATE_UNAVAILABLE,
+            )
+            return _OK
+
+        # Guard 2 (plan 11-02, HITL-06 degraded config): an unconfigured
+        # repository is the ordinary state of a `text:`-sourced run that
+        # never had a GitHub repository, not a fault -- mirrors
+        # `orchestrator/publish.py`'s identical field-by-field narrowing of
+        # these same three fields, logged at `info` rather than `warning`.
+        repository = state.workflow.get("repository") or {}
         owner = repository.get("github_owner")
         repo = repository.get("github_repo")
         base_branch = repository.get("base_branch")
-        if (
+        if not (
             isinstance(owner, str)
             and owner
             and isinstance(repo, str)
@@ -282,13 +326,66 @@ def build_app(
             and isinstance(base_branch, str)
             and base_branch
         ):
-            _dispatch_provider().dispatch_workflow(
+            _log.info(
+                "webhook.dispatch.skipped",
+                run_id=str(outcome.run_id),
+                reason=_DISPATCH_SKIP_REASON_REPOSITORY_NOT_CONFIGURED,
+            )
+            return _OK
+
+        # Guard 3 (plan 11-02, HITL-06 degraded credential): unlike Guard 2,
+        # this is a deployment that IS trying to dispatch and cannot --
+        # `build_app` already logged the same condition once at startup, so
+        # this per-delivery record is what ties it to a specific waiting
+        # run. Ordered, and must stay ordered, before the `except
+        # GitHubError` arm below: `MissingGitHubCredentialError` is itself a
+        # `GitHubError` subclass, and a single combined handler would
+        # collapse two genuinely different operator situations -- "GitHub
+        # rejected the call" vs. "no token was ever configured" -- into one.
+        try:
+            dispatch_client = _dispatch_provider()
+        except MissingGitHubCredentialError:
+            _log.warning(
+                "webhook.dispatch.skipped",
+                run_id=str(outcome.run_id),
+                reason=_DISPATCH_SKIP_REASON_CREDENTIAL_NOT_CONFIGURED,
+            )
+            return _OK
+
+        # Guard 4 (plan 11-02, HITL-06 fail-soft): the dispatch call itself
+        # can fail against a real GitHub API. Not `_RETRY_LATER` (503): by
+        # the time this runs the answer has already committed, so a
+        # redelivery would take the `NotWaitingForHuman`/`NoPendingInteraction`
+        # arm above and return 200 without dispatching anyway -- a 503 here
+        # would buy no retry and would misreport a delivery that was in fact
+        # fully applied. Fail soft, never silent (mirrors
+        # `orchestrator/runner.py`'s clarification-comment posting, written
+        # locally here since that module is not on this package's direct-
+        # import allowlist -- `tests/unit/test_webhook_process_boundary.py::
+        # _WEBHOOK_DIRECT_ALLOWED`). `_log.warning`, not `_log.exception`: a
+        # traceback here is noise -- `GitHubApiError` already carries
+        # `status_code`/`endpoint` as attributes and its message has already
+        # passed through `redact()` inside `GitHubClient._raise_api_error`,
+        # the single redaction frame for this class of message. Do not
+        # re-format the exception, do not read `.response`, and do not call
+        # `redact()` again -- that would only create a second place to get
+        # it wrong.
+        try:
+            dispatch_client.dispatch_workflow(
                 owner,
                 repo,
                 workflow_id=_RESUME_WORKFLOW_FILENAME,
                 ref=base_branch,
                 run_id=str(outcome.run_id),
             )
+        except GitHubError as exc:
+            _log.warning(
+                "webhook.dispatch.failed",
+                run_id=str(outcome.run_id),
+                workflow=_RESUME_WORKFLOW_FILENAME,
+                detail=str(exc),
+            )
+        else:
             _log.info(
                 "webhook.dispatch.requested",
                 run_id=str(outcome.run_id),

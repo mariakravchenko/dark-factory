@@ -35,6 +35,7 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
+from structlog.testing import capture_logs
 
 from dark_factory.config.loader import load_effective_config
 from dark_factory.config.settings import Settings
@@ -50,7 +51,11 @@ from dark_factory.persistence.models import (
     Run,
     RunEvent,
 )
-from dark_factory.webhook.app import build_app
+from dark_factory.webhook.app import (
+    _DISPATCH_SKIP_REASON_CREDENTIAL_NOT_CONFIGURED,
+    _DISPATCH_SKIP_REASON_REPOSITORY_NOT_CONFIGURED,
+    build_app,
+)
 from tests.support.fake_github import FakeGitHubClient
 from tests.support.webhook_events import build_issue_comment_payload, sign_payload
 
@@ -184,6 +189,23 @@ def _role_execution_row(engine: Engine, run_id: UUID) -> RoleExecution:
         )
         assert row is not None
         return row
+
+
+def _role_executions_count(engine: Engine, run_id: UUID) -> int:
+    with Session(engine) as session:
+        return (
+            session.scalar(
+                sa.select(sa.func.count())
+                .select_from(RoleExecution)
+                .where(RoleExecution.run_id == run_id)
+            )
+            or 0
+        )
+
+
+def _runs_count(engine: Engine) -> int:
+    with Session(engine) as session:
+        return session.scalar(sa.select(sa.func.count()).select_from(Run)) or 0
 
 
 def _run_status(engine: Engine, run_id: UUID) -> RunStatus:
@@ -366,15 +388,85 @@ def test_the_answer_is_recorded_even_when_the_dispatch_call_raises(
     )
     signature = sign_payload(webhook_secret, body)
 
-    # Task 1 (11-01) wires only the success path -- the fail-soft branch
-    # around a raising dispatch call is plan 11-02's task, so this call is
-    # expected to propagate the raised GitHubApiError. Only the durably
-    # committed state (not the response code) is asserted here.
-    with pytest.raises(GitHubApiError):
-        _post(webhook_client, body, signature=signature)
+    # Plan 11-02, Task 1: `_resolve_and_act` now catches the dispatch call's
+    # own `GitHubError` internally (fail soft, never silent) -- this
+    # delivery answers 200 rather than propagating the exception. Before
+    # this plan the raise reached the caller (11-01 wired only the success
+    # path); this test's own name and durable-state assertions were always
+    # about the answer surviving the raise, which remains true here.
+    response = _post(webhook_client, body, signature=signature)
+    assert response.status_code == 200
 
     interaction = _the_interaction(engine, waiting_run.run_id)
     assert interaction is not None
     assert interaction.status is InteractionStatus.ANSWERED
     assert interaction.answer == "use staging"
     assert _run_status(engine, waiting_run.run_id) is RunStatus.BA
+
+
+# --------------------------------------------------------------------------- #
+# 3. A GitHub outage never costs the human their answer -- with the log
+#    record and full state-invariant proof HITL-06's prohibition requires
+# --------------------------------------------------------------------------- #
+
+
+def test_a_dispatch_api_failure_still_answers_200_and_keeps_the_committed_answer(
+    waiting_run: WaitingRun,
+    real_session_factory: SessionFactory,
+    fake_settings: Settings,
+    webhook_secret: str,
+    engine: Engine,
+) -> None:
+    fake_dispatch_client = FakeGitHubClient(
+        raises={
+            "dispatch_workflow": GitHubApiError(
+                "upstream unavailable",
+                status_code=503,
+                endpoint="actions.create_workflow_dispatch acme/widgets/resume.yml",
+            )
+        }
+    )
+    webhook_client = _build_webhook_client(
+        real_session_factory, fake_settings, fake_dispatch_client
+    )
+    before_role = _role_execution_row(engine, waiting_run.run_id)
+    runs_before = _runs_count(engine)
+
+    body = build_issue_comment_payload(
+        comment_id=waiting_run.clarification_comment_id + 3000,
+        comment_body="use the read replica",
+        comment_user_login="a-human",
+        issue_number=_ISSUE_NUMBER,
+        owner=_OWNER,
+        repo=_REPO,
+    )
+    signature = sign_payload(webhook_secret, body)
+
+    # structlog's own capture (not the real-sink helper
+    # tests/unit/test_log_redaction.py's own docstring requires for
+    # redaction-processor proofs): the failure detail here is already
+    # `GitHubApiError`'s own redacted message, so no processor needs to run
+    # for this assertion -- only "was this event actually emitted, exactly
+    # once, with these fields" matters, which is exactly what
+    # `capture_logs()` proves without needing a real sink.
+    with capture_logs() as captured:
+        response = _post(webhook_client, body, signature=signature)
+
+    assert response.status_code == 200
+
+    interaction = _the_interaction(engine, waiting_run.run_id)
+    assert interaction is not None
+    assert interaction.status is InteractionStatus.ANSWERED
+    assert interaction.answer == "use the read replica"
+    assert _run_status(engine, waiting_run.run_id) is not RunStatus.WAITING_HUMAN
+    assert _role_executions_count(engine, waiting_run.run_id) == 1
+    after_role = _role_execution_row(engine, waiting_run.run_id)
+    assert after_role.id == before_role.id
+    assert _runs_count(engine) == runs_before
+
+    failed_entries = [
+        entry for entry in captured if entry.get("event") == "webhook.dispatch.failed"
+    ]
+    assert len(failed_entries) == 1
+    assert failed_entries[0]["run_id"] == str(waiting_run.run_id)
+    assert "upstream unavailable" in str(failed_entries[0]["detail"])
