@@ -1,18 +1,18 @@
 ---
 gsd_state_version: "1.0"
 current_phase: 11
-current_phase_name: one-orchestrator-many-triggers-cross-machine-resume
+current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Phase 11 context gathered
-last_updated: "2026-09-29T11:08:57.637Z"
-last_activity: 2026-09-28
-last_activity_desc: Phase 10 complete, transitioned to Phase 11
-state_head: 2e958811b464dea4db086586f3d0c3c67dac842b
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-09-29T13:16:38.265Z"
+last_activity: 2026-09-29
+last_activity_desc: Phase 11 execution started
+state_head: a870ddd3e731730fcdab43dab2cce92524f49e80
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 64
-  completed_plans: 59
+  completed_plans: 60
   percent: 0
 ---
 
@@ -27,10 +27,10 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 ## Current Position
 
-Phase: 11 (one-orchestrator-many-triggers-cross-machine-resume) — READY TO EXECUTE
-Plan: Not started
+Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-09-28 — Phase 10 complete, transitioned to Phase 11
+Last activity: 2026-09-29 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (10/12 phases)
 
@@ -114,6 +114,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 10 P05 | 55min | 2 tasks | 2 files |
 | Phase 10 P07 | 55min | 3 tasks | 6 files |
 | Phase 10 P08 | 55min | 2 tasks | 2 files |
+| Phase 11 P01 | 65min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,9 @@ Recent decisions affecting current work:
 - [Phase 10]: 10-07: Collapsed four duplicated shipped-config copy helpers into tests/support/shipped_config.py; neutralize_repo_local_config rewrites only quality_gate/publishing on the parsed YAML document (never a duplicate-key append), closing G-10-1's two serial root causes
 - [Phase 10]: 10-08: Both runner.py GitHub-path redact() call sites unparse to identical 'str(exc)' text, so _RUNNER_PERMITTED_REDACT_ARGUMENTS is a one-entry allowlist naming both call sites (10-06/GIT-03, 10-03/GIT-05) rather than two distinguishable entries; guard proven non-vacuous by an inline counterexample assertion
 - [Phase 10]: 10-08: G-10-1's LOOP-04 evidence promoted from an untracked throwaway to committed tests/db/test_loop04_adjacency.py, reading the adjacency reason from the ROLE_FAILED event and role-execution error column (not RUN_FAILED), closing the STATE.md Blocker
+- [Phase 11]: [Phase 11] 11-01: GitHubError re-exported from dark_factory.github.client (added to __all__) rather than importing the bare dark_factory.github package into webhook/app.py, keeping the webhook direct-import allowlist unwidened
+- [Phase 11]: [Phase 11] 11-01: build_app gains a dispatch_client_factory keyword mirroring authenticated_login's test-injection seam; the dispatch call in _resolve_and_act wires only the success path (fail-soft handling deferred to plan 11-02, per this plan's own instruction)
+- [Phase 11]: [Phase 11] 11-01: the one-reader AST guard for dispatch_github_token has TWO legitimate readers (github/client.py and webhook/app.py's own startup diagnostic), not the plan's literally-stated single entry -- resolved via the guard's own documented escape hatch for a deliberate second reader
 
 ### Pending Todos
 
@@ -252,6 +256,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-29T10:18:37.607Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-CONTEXT.md
+Last session: 2026-09-29T13:16:38.173Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None

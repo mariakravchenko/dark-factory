@@ -86,7 +86,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 - [x] **HITL-03**: Operator can resume a paused run locally — `dark-factory resume <run-id> --answer "..."` — from a brand-new process with no in-memory state from the original run
 - [x] **HITL-04**: When a worker adapter supports native sessions, resume uses the opaque `worker_session_id`; the orchestrator does not interpret it
 - [x] **HITL-05**: When native resume is unavailable, the adapter resumes by reconstructing context; the orchestrator sees the same `worker.resume(...)` call either way
-- [ ] **HITL-06**: A run can be resumed on a different machine or process than the one that started it (local → CI, webhook, delayed human answer)
+- [x] **HITL-06**: A run can be resumed on a different machine or process than the one that started it (local → CI, webhook, delayed human answer)
 - [x] **HITL-07**: Two processes cannot execute the same run simultaneously; single-owner execution is enforced with PostgreSQL transactions / row locking / conditional updates and no separate distributed-lock service
 - [x] **HITL-08**: A database transaction is never held open across a worker subprocess call; ownership is held by a lease with database-clock expiry
 
@@ -115,7 +115,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Triggers & CLI
 
-- [ ] **TRIG-01**: There is one orchestration implementation; CLI, IDE, CI, and GitHub events are only triggers — there is no separate CI orchestrator
+- [x] **TRIG-01**: There is one orchestration implementation; CLI, IDE, CI, and GitHub events are only triggers — there is no separate CI orchestrator
 - [ ] **TRIG-02**: The CLI provides `run`, `resume`, `status`, `runs`, `artifacts`, and `events`
 - [ ] **TRIG-03**: `dark-factory status <run>` renders the run id, task, state, per-role pipeline with worker and attempt counts, artifacts, and human interactions
 - [ ] **TRIG-04**: A run can continue across the local → CI boundary through Neon with no separate CI code path
@@ -239,7 +239,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | HITL-03 | Phase 2 | Complete |
 | HITL-04 | Phase 7 | Complete |
 | HITL-05 | Phase 7 | Complete |
-| HITL-06 | Phase 11 | Pending |
+| HITL-06 | Phase 11 | Complete |
 | HITL-07 | Phase 2 | Complete |
 | HITL-08 | Phase 2 | Complete |
 | LOOP-01 | Phase 9 | Complete |
@@ -256,7 +256,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | GIT-04 | Phase 10 | Complete |
 | GIT-05 | Phase 10 | Complete |
 | GIT-06 | Phase 10 | Complete |
-| TRIG-01 | Phase 11 | Pending |
+| TRIG-01 | Phase 11 | Complete |
 | TRIG-02 | Phase 12 | Pending |
 | TRIG-03 | Phase 12 | Pending |
 | TRIG-04 | Phase 11 | Pending |
