@@ -1,0 +1,380 @@
+"""HITL-06 (dispatch half), D-01/D-02/D-03 -- proved against real PostgreSQL
+(Phase 11, plan 11-01):
+
+    After a resolvable reply's ``submit_answer`` mutation has already
+    committed, the webhook receiver dispatches exactly one real
+    ``workflow_dispatch`` on the run's own persisted target repository,
+    carrying only the run id -- and the answer stays durably recorded even
+    when that dispatch call itself raises.
+
+Sibling of ``tests/db/test_webhook_resolves_answer.py``: reuses its
+``github:``-sourced setup (``config_root_factory`` + the
+``repository.github_owner``/``github_repo`` overwrite, the intake-side
+``FakeGitHubClient`` monkeypatched into ``dark_factory.input.loaders``, and a
+second, independently scripted ``FakeGitHubClient`` injected through the
+``github_client_factory`` seam for the clarification-comment post) and
+``tests/db/test_resume_first_advance.py``'s real-row-count discipline. The
+one divergence: ``webhook_client`` here also injects a THIRD
+``FakeGitHubClient`` -- through ``build_app``'s new ``dispatch_client_factory``
+keyword (Phase 11, D-01) -- and this module's own ``fake_settings`` override
+carries a fake ``dispatch_github_token`` (Phase 11, D-03), since the shared
+``tests/conftest.py::fake_settings`` fixture does not set one and this plan
+must not edit that shared file.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from uuid import UUID
+
+import pytest
+import sqlalchemy as sa
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session
+from starlette.testclient import TestClient
+
+from dark_factory.config.loader import load_effective_config
+from dark_factory.config.settings import Settings
+from dark_factory.domain.interaction import InteractionStatus
+from dark_factory.domain.status import RunStatus
+from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
+from dark_factory.github.client import GitHubApiError, GitHubIssue
+from dark_factory.input import loaders
+from dark_factory.orchestrator.runner import drive, start_run
+from dark_factory.persistence.models import (
+    HumanInteraction,
+    RoleExecution,
+    Run,
+    RunEvent,
+)
+from dark_factory.webhook.app import build_app
+from tests.support.fake_github import FakeGitHubClient
+from tests.support.webhook_events import build_issue_comment_payload, sign_payload
+
+pytestmark = [pytest.mark.db, pytest.mark.usefixtures("use_fake_secrets")]
+
+SessionFactory = Callable[[], Session]
+
+_OWNER = "acme"
+_REPO = "widgets"
+_ISSUE_NUMBER = 11
+_ISSUE_TITLE = "Fix the flaky retry logic"
+_BASE_BRANCH = "main"
+_QUESTIONS = ["primary or replica?"]
+_TOKEN_LOGIN = "dark-factory-bot"
+_WEBHOOK_PATH = "/webhooks/github"
+
+_REPOSITORY_BLOCK = "repository:\n  base_branch: main\n"
+
+_NEEDS_INPUT = WorkerResult(
+    status=WorkerResultStatus.NEEDS_INPUT,
+    summary="need a decision",
+    questions=list(_QUESTIONS),
+)
+
+# Fresh, module-local fake credential values -- obviously-fake, >=8-char
+# placeholders (matches `known_secret_values()`'s own minimum-length floor).
+# This module overrides `tests/conftest.py::fake_settings` locally (rather
+# than editing that shared fixture) solely to add `dispatch_github_token`
+# (Phase 11, D-03), which the shared fixture does not set.
+_FAKE_DB_URL = (
+    "postgresql://df_fake_user:df_fake_pw_0123456789@fake-db.invalid:5432/df_fake_db"
+)
+_FAKE_DB_URL_DIRECT = "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
+_FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
+_FAKE_WEBHOOK_SECRET = "whsec_FAKEfakeFAKEfake0000000000000000"
+_FAKE_DISPATCH_TOKEN = "dispatch_FAKEfakeFAKEfake00000000000000"
+
+
+@pytest.fixture
+def fake_settings() -> Settings:
+    """Override the shared fixture to also carry a fake
+    ``dispatch_github_token`` (Phase 11, D-03)."""
+    return Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        database_url=_FAKE_DB_URL,
+        database_url_direct=_FAKE_DB_URL_DIRECT,
+        github_token=_FAKE_GITHUB_TOKEN,
+        github_webhook_secret=_FAKE_WEBHOOK_SECRET,
+        dispatch_github_token=_FAKE_DISPATCH_TOKEN,
+    )
+
+
+class _StubClientFactory:
+    """Stands in for ``GitHubClient`` at the intake loader's own call site,
+    mirroring ``tests/db/test_webhook_resolves_answer.py``."""
+
+    def __init__(self, client: FakeGitHubClient) -> None:
+        self._client = client
+
+    def from_settings(self, settings: object) -> FakeGitHubClient:
+        return self._client
+
+
+def _patch_intake_client(
+    monkeypatch: pytest.MonkeyPatch, fake_client: FakeGitHubClient
+) -> None:
+    monkeypatch.setattr(loaders, "get_settings", lambda: object())
+    monkeypatch.setattr(loaders, "GitHubClient", _StubClientFactory(fake_client))
+
+
+def _write_github_ba_tree(config_root_factory: Callable[..., Path]) -> Path:
+    root = config_root_factory(roles=("BA",))
+    config_path = root / ".dark-factory.yaml"
+    original = config_path.read_text(encoding="utf-8")
+    assert _REPOSITORY_BLOCK in original, (
+        "config_root_factory no longer writes 'repository:\\n  base_branch: main\\n'"
+        " verbatim -- update this test's overwrite string to match"
+    )
+    patched = original.replace(
+        _REPOSITORY_BLOCK,
+        f"repository:\n  base_branch: {_BASE_BRANCH}\n"
+        f"  github_owner: {_OWNER}\n  github_repo: {_REPO}\n",
+    )
+    config_path.write_text(patched, encoding="utf-8")
+    return root
+
+
+def _scripted_issue() -> GitHubIssue:
+    return GitHubIssue(
+        number=_ISSUE_NUMBER,
+        title=_ISSUE_TITLE,
+        body="Retries sometimes double-fire under load.",
+        labels=[],
+        comments=[],
+    )
+
+
+@pytest.fixture
+def real_session_factory(engine: Engine) -> SessionFactory:
+    def factory() -> Session:
+        return Session(bind=engine, expire_on_commit=False)
+
+    return factory
+
+
+@pytest.fixture
+def cleanup_runs(engine: Engine) -> Iterator[list[Any]]:
+    ids: list[Any] = []
+    yield ids
+    if ids:
+        with engine.begin() as conn:
+            conn.execute(sa.delete(RunEvent).where(RunEvent.run_id.in_(ids)))
+            conn.execute(
+                sa.delete(HumanInteraction).where(HumanInteraction.run_id.in_(ids))
+            )
+            conn.execute(sa.delete(RoleExecution).where(RoleExecution.run_id.in_(ids)))
+            conn.execute(sa.delete(Run).where(Run.id.in_(ids)))
+
+
+def _the_interaction(engine: Engine, run_id: UUID) -> HumanInteraction | None:
+    with Session(engine) as session:
+        return session.scalar(
+            sa.select(HumanInteraction).where(HumanInteraction.run_id == run_id)
+        )
+
+
+def _role_execution_row(engine: Engine, run_id: UUID) -> RoleExecution:
+    with Session(engine) as session:
+        row = session.scalar(
+            sa.select(RoleExecution).where(RoleExecution.run_id == run_id)
+        )
+        assert row is not None
+        return row
+
+
+def _run_status(engine: Engine, run_id: UUID) -> RunStatus:
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        return run.status
+
+
+@dataclass
+class WaitingRun:
+    run_id: UUID
+    root: Path
+    clarification_comment_id: int
+
+
+@pytest.fixture
+def waiting_run(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_worker_registry: Callable[..., Any],
+) -> WaitingRun:
+    """A fresh ``github:``-sourced run, driven to ``WAITING_HUMAN`` with a
+    real, committed ``clarification_comment_id`` -- the state every scenario
+    in this module starts from."""
+    root = _write_github_ba_tree(config_root_factory)
+    fake_intake_client = FakeGitHubClient(issue=_scripted_issue())
+    _patch_intake_client(monkeypatch, fake_intake_client)
+    snapshot = load_effective_config(root)
+    run_id = start_run(
+        f"github:{_ISSUE_NUMBER}",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append(run_id)
+
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
+    final = drive(
+        run_id,
+        session_factory=real_session_factory,
+        registry=fake_worker_registry([_NEEDS_INPUT]),
+        repo_root=root,
+        github_client_factory=lambda: fake_publish,
+    )
+    assert final is RunStatus.WAITING_HUMAN
+
+    interaction = _the_interaction(engine, run_id)
+    assert interaction is not None
+    assert interaction.clarification_comment_id is not None
+    return WaitingRun(
+        run_id=run_id,
+        root=root,
+        clarification_comment_id=interaction.clarification_comment_id,
+    )
+
+
+def _build_webhook_client(
+    real_session_factory: SessionFactory,
+    fake_settings: Settings,
+    dispatch_client: FakeGitHubClient,
+) -> TestClient:
+    """Build a ``TestClient`` injecting ``dispatch_client`` through
+    ``build_app``'s ``dispatch_client_factory`` keyword (Phase 11, D-01) --
+    independent of the intake-side and clarification-comment fakes
+    ``waiting_run`` uses. A plain function, not a fixture, so each test can
+    construct its own differently-scripted ``FakeGitHubClient`` (the
+    happy-path fake vs. the raising fake) without mutating a shared
+    instance's private state."""
+    app = build_app(
+        session_factory=real_session_factory,
+        settings_factory=lambda: fake_settings,
+        authenticated_login=lambda: _TOKEN_LOGIN,
+        dispatch_client_factory=lambda: dispatch_client,
+    )
+    return TestClient(app)
+
+
+@pytest.fixture
+def webhook_secret(fake_settings: Settings) -> str:
+    assert fake_settings.github_webhook_secret is not None
+    return fake_settings.github_webhook_secret.get_secret_value()
+
+
+def _post(
+    client: TestClient,
+    body: bytes,
+    *,
+    signature: str | None,
+    event: str = "issue_comment",
+    delivery_id: str = "delivery-0",
+) -> Any:
+    headers = {"X-GitHub-Event": event, "X-GitHub-Delivery": delivery_id}
+    if signature is not None:
+        headers["X-Hub-Signature-256"] = signature
+    return client.post(_WEBHOOK_PATH, content=body, headers=headers)
+
+
+# --------------------------------------------------------------------------- #
+# 1. The happy path: exactly one dispatch_workflow call, exact arguments
+# --------------------------------------------------------------------------- #
+
+
+def test_a_resolvable_reply_dispatches_the_resume_workflow(
+    waiting_run: WaitingRun,
+    real_session_factory: SessionFactory,
+    fake_settings: Settings,
+    webhook_secret: str,
+    engine: Engine,
+) -> None:
+    fake_dispatch_client = FakeGitHubClient()
+    webhook_client = _build_webhook_client(
+        real_session_factory, fake_settings, fake_dispatch_client
+    )
+    before_role = _role_execution_row(engine, waiting_run.run_id)
+
+    body = build_issue_comment_payload(
+        comment_id=waiting_run.clarification_comment_id + 1000,
+        comment_body="use the primary cluster",
+        comment_user_login="a-human",
+        issue_number=_ISSUE_NUMBER,
+        owner=_OWNER,
+        repo=_REPO,
+    )
+    response = _post(webhook_client, body, signature=sign_payload(webhook_secret, body))
+    assert response.status_code == 200
+
+    dispatch_calls = [
+        call for call in fake_dispatch_client.calls if call[0] == "dispatch_workflow"
+    ]
+    assert len(dispatch_calls) == 1
+    _, kwargs = dispatch_calls[0]
+    assert kwargs == {
+        "owner": "acme",
+        "repo": "widgets",
+        "workflow_id": "resume.yml",
+        "ref": "main",
+        "run_id": str(waiting_run.run_id),
+    }
+
+    # Phase 10 behaviour is unchanged (GIT-06).
+    interaction = _the_interaction(engine, waiting_run.run_id)
+    assert interaction is not None
+    assert interaction.status is InteractionStatus.ANSWERED
+    after_role = _role_execution_row(engine, waiting_run.run_id)
+    assert after_role.id == before_role.id
+    assert _run_status(engine, waiting_run.run_id) is RunStatus.BA
+
+
+# --------------------------------------------------------------------------- #
+# 2. The answer is recorded even when the dispatch call raises
+# --------------------------------------------------------------------------- #
+
+
+def test_the_answer_is_recorded_even_when_the_dispatch_call_raises(
+    waiting_run: WaitingRun,
+    real_session_factory: SessionFactory,
+    fake_settings: Settings,
+    webhook_secret: str,
+    engine: Engine,
+) -> None:
+    fake_dispatch_client = FakeGitHubClient(
+        raises={
+            "dispatch_workflow": GitHubApiError("boom", status_code=503, endpoint="x")
+        }
+    )
+    webhook_client = _build_webhook_client(
+        real_session_factory, fake_settings, fake_dispatch_client
+    )
+
+    body = build_issue_comment_payload(
+        comment_id=waiting_run.clarification_comment_id + 2000,
+        comment_body="use staging",
+        comment_user_login="a-human",
+        issue_number=_ISSUE_NUMBER,
+        owner=_OWNER,
+        repo=_REPO,
+    )
+    signature = sign_payload(webhook_secret, body)
+
+    # Task 1 (11-01) wires only the success path -- the fail-soft branch
+    # around a raising dispatch call is plan 11-02's task, so this call is
+    # expected to propagate the raised GitHubApiError. Only the durably
+    # committed state (not the response code) is asserted here.
+    with pytest.raises(GitHubApiError):
+        _post(webhook_client, body, signature=signature)
+
+    interaction = _the_interaction(engine, waiting_run.run_id)
+    assert interaction is not None
+    assert interaction.status is InteractionStatus.ANSWERED
+    assert interaction.answer == "use staging"
+    assert _run_status(engine, waiting_run.run_id) is RunStatus.BA

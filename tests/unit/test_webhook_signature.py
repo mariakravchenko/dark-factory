@@ -99,6 +99,7 @@ class _FakeSettings:
         secret: str | None,
         *,
         github_token: str | None = "ghp_fake0000000000000000",
+        dispatch_github_token: str | None = "dispatch_fake0000000000000000",
     ) -> None:
         self.github_webhook_secret = (
             _FakeSecretStr(secret) if secret is not None else None
@@ -108,6 +109,14 @@ class _FakeSettings:
         # unaffected; only the new WR-02 tests below override it.
         self.github_token = (
             _FakeSecretStr(github_token) if github_token is not None else None
+        )
+        # Phase 11 (D-03): same default-to-configured shape, for the same
+        # reason -- every pre-existing test here predates
+        # dispatch_github_token and must stay unaffected by its addition.
+        self.dispatch_github_token = (
+            _FakeSecretStr(dispatch_github_token)
+            if dispatch_github_token is not None
+            else None
         )
 
 
@@ -128,6 +137,15 @@ def _make_client(
         settings_factory=lambda: _FakeSettings(secret),
         authenticated_login=lambda: _STUB_LOGIN,
     )
+    # Phase 11 (D-01/D-02): this module's fixtures (`_RaisingSessionFactory`,
+    # `_DummySession`) predate the post-submit_answer dispatch read and don't
+    # implement a real `Session`. None of these tests care about dispatch
+    # behaviour (covered at the db tier by
+    # `tests/db/test_webhook_dispatches_resume.py`) -- default
+    # `load_run_state` to `None` so the dispatch block's own
+    # "repository not configured" branch is taken and no session method
+    # beyond what these fixtures already provide is ever touched.
+    monkeypatch.setattr(app_module, "load_run_state", lambda *a, **k: None)
     if resolve_result is not None:
         monkeypatch.setattr(
             app_module, "resolve_issue_comment", lambda *a, **k: resolve_result
@@ -413,6 +431,20 @@ def test_fully_configured_settings_log_no_startup_warning() -> None:
         )
     output = buffer.getvalue()
     assert "webhook.build_app.missing" not in output
+
+
+def test_missing_dispatch_github_token_logs_a_warning_not_an_error() -> None:
+    """Phase 11 (D-01/D-03): unlike the other two startup checks, an unset
+    ``DISPATCH_GITHUB_TOKEN`` degrades one optional side effect (the
+    post-answer dispatch) rather than breaking every delivery -- logged at
+    ``warning``, not ``error``."""
+    with real_log_sink() as buffer:
+        build_app(
+            session_factory=_RaisingSessionFactory(),
+            settings_factory=lambda: _FakeSettings(_SECRET, dispatch_github_token=None),
+        )
+    output = buffer.getvalue()
+    assert "webhook.build_app.missing_dispatch_github_token" in output
 
 
 def test_injected_authenticated_login_skips_the_startup_check() -> None:

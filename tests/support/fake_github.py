@@ -17,7 +17,7 @@ __all__ = ["FakeGitHubClient"]
 
 class FakeGitHubClient:
     """A scripted double implementing :class:`GitHubClient`'s exact
-    four-method surface.
+    five-method surface.
 
     ``issue`` is either a single scripted :class:`GitHubIssue` returned on
     every :meth:`fetch_issue` call, or a list of them consumed in order
@@ -131,3 +131,21 @@ class FakeGitHubClient:
         )
         self._maybe_raise("find_pull_request_for_branch")
         return self._existing_pull_request
+
+    def dispatch_workflow(
+        self, owner: str, repo: str, *, workflow_id: str, ref: str, run_id: str
+    ) -> None:
+        self.calls.append(
+            (
+                "dispatch_workflow",
+                {
+                    "owner": owner,
+                    "repo": repo,
+                    "workflow_id": workflow_id,
+                    "ref": ref,
+                    "run_id": run_id,
+                },
+            )
+        )
+        self._maybe_raise("dispatch_workflow")
+        return None

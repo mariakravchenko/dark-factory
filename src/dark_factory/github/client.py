@@ -34,6 +34,18 @@ divergence from the researched OpenAPI-convention names):
 * ``gh.rest.users.get_authenticated()`` -> ``Response[PrivateUser | PublicUser]``;
   the parsed model's ``.login`` is the token's own identity (Phase 10, plan
   10-04, 10-RESEARCH.md Assumption A4/Pitfall 2).
+* ``gh.rest.actions.create_workflow_dispatch(owner, repo, workflow_id, ref=...,
+  inputs=...)`` -- confirmed present in the installed ``githubkit`` 0.16.1
+  package (Phase 11, plan 11-01, 11-RESEARCH.md Pattern 1). Two verified
+  facts: ``workflow_id`` accepts the workflow **file name** in place of a
+  numeric id (the endpoint's own installed docstring says so -- this is why
+  ``dispatch_workflow`` below can pass ``"resume.yml"`` directly); and an
+  optional ``return_run_details`` parameter, added to the GitHub API on
+  2026-02-19, would turn the default ``204 No Content`` response into a
+  ``200 OK`` carrying the dispatched run's id and URL. Deliberately not
+  requested here -- this phase has no dispatched-run observability
+  requirement -- but named here as the hook a later observability phase
+  (Phase 12) would use.
 * Failures raise ``githubkit.exception.GitHubException`` subclasses (most
   commonly ``RequestFailed``), carrying ``.response.status_code`` and
   ``.response.text`` when the failure reached a real HTTP response.
@@ -52,12 +64,22 @@ from githubkit.exception import GitHubException
 from pydantic import BaseModel, ConfigDict
 
 from dark_factory.events.redaction import redact
-from dark_factory.github import GitHubApiError, MissingGitHubCredentialError
+from dark_factory.github import (
+    GitHubApiError,
+    GitHubError,
+    MissingGitHubCredentialError,
+)
 
 if TYPE_CHECKING:
     from dark_factory.config.settings import Settings
 
-__all__ = ["GitHubClient", "GitHubComment", "GitHubIssue", "GitHubPullRequest"]
+__all__ = [
+    "GitHubClient",
+    "GitHubComment",
+    "GitHubError",
+    "GitHubIssue",
+    "GitHubPullRequest",
+]
 
 
 class GitHubComment(BaseModel):
@@ -141,6 +163,23 @@ class GitHubClient:
             )
         return cls(
             token=settings.github_token.get_secret_value(),
+            known_secrets=settings.known_secret_values(),
+        )
+
+    @classmethod
+    def for_dispatch(cls, settings: Settings) -> GitHubClient:
+        """Build a client from ``Settings.dispatch_github_token`` -- the
+        single frame where *that* credential is unwrapped from
+        ``SecretStr`` (Phase 11, D-03). Mirrors :meth:`from_settings`
+        exactly, substituting the dispatch-only token; never built from
+        ``settings.github_token``."""
+        if settings.dispatch_github_token is None:
+            raise MissingGitHubCredentialError(
+                "DISPATCH_GITHUB_TOKEN is not configured "
+                "(Settings.dispatch_github_token is None)"
+            )
+        return cls(
+            token=settings.dispatch_github_token.get_secret_value(),
             known_secrets=settings.known_secret_values(),
         )
 
@@ -254,6 +293,31 @@ class GitHubClient:
                 raise  # pragma: no cover - _raise_api_error always raises
             self._authenticated_login = user.login
         return self._authenticated_login
+
+    def dispatch_workflow(
+        self, owner: str, repo: str, *, workflow_id: str, ref: str, run_id: str
+    ) -> None:
+        """Trigger a ``workflow_dispatch`` run of ``workflow_id`` (a workflow
+        file name, e.g. ``"resume.yml"``) on ``ref`` (Phase 11, D-01/D-04).
+
+        Returns ``None`` on success -- the endpoint answers ``204 No
+        Content`` by default, so there is no body to read; "did not raise"
+        is the success signal, never ``response.parsed_data``.
+        """
+        try:
+            self._client.rest.actions.create_workflow_dispatch(
+                owner,
+                repo,
+                workflow_id,
+                ref=ref,
+                inputs={"run_id": run_id},
+            )
+        except GitHubException as exc:
+            self._raise_api_error(
+                exc,
+                endpoint=f"actions.create_workflow_dispatch {owner}/{repo}/{workflow_id}",
+            )
+            raise  # pragma: no cover - _raise_api_error always raises
 
     def find_pull_request_for_branch(
         self, owner: str, repo: str, *, head_branch: str

@@ -90,6 +90,19 @@ class Settings(BaseSettings):
     like every other optional credential on this object, so
     ``known_secret_values()``'s ``model_fields`` walk covers it with zero
     additional code.
+
+    ``dispatch_github_token`` (Plan 11-01, D-03) exists only so the webhook
+    receiver can call GitHub's ``workflow_dispatch`` API on the run's own
+    target repository after an answer has already been durably recorded
+    (:meth:`~dark_factory.github.client.GitHubClient.for_dispatch` is the
+    single frame that unwraps it). It is deliberately a third, separate
+    field -- never conflated with ``github_token`` (the calls Dark Factory
+    makes *as itself*: comments and pull requests) or
+    ``github_webhook_secret`` (verification of deliveries *arriving at*
+    Dark Factory) -- following the same one-field-per-credential-purpose
+    rule this object already enforces with ``copilot_github_token``. It
+    belongs to the webhook receiver process alone and is never passed to a
+    worker subprocess.
     """
 
     model_config = SettingsConfigDict(
@@ -102,6 +115,7 @@ class Settings(BaseSettings):
     database_url_direct: SecretStr
     github_token: SecretStr | None = None
     github_webhook_secret: SecretStr | None = None
+    dispatch_github_token: SecretStr | None = None
     log_level: str = "INFO"
     lease_ttl_seconds: int = 900
     lease_heartbeat_seconds: int = 300

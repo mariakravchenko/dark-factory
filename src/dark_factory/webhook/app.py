@@ -67,7 +67,7 @@ from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 
 from dark_factory.config.settings import Settings, get_settings
-from dark_factory.github.client import GitHubClient
+from dark_factory.github.client import GitHubClient, GitHubError
 from dark_factory.orchestrator.answers import (
     NoPendingInteraction,
     NotWaitingForHuman,
@@ -75,6 +75,7 @@ from dark_factory.orchestrator.answers import (
 )
 from dark_factory.orchestrator.lease import LeaseNotAcquired
 from dark_factory.persistence.engine import new_session
+from dark_factory.persistence.repositories import load_run_state
 from dark_factory.webhook.resolve import ResolvedAnswer, resolve_issue_comment
 
 __all__ = ["app", "build_app"]
@@ -84,6 +85,11 @@ _log = structlog.get_logger(__name__)
 _SIGNATURE_HEADER = "X-Hub-Signature-256"
 _EVENT_HEADER = "X-GitHub-Event"
 _ISSUE_COMMENT_EVENT = "issue_comment"
+# The deployer-side contract from 11-CONTEXT.md D-04: the workflow file name
+# a deployer must give their own `workflow_dispatch` workflow in the TARGET
+# repository. Not a Dark Factory-owned file -- Dark Factory never ships or
+# enforces this file existing.
+_RESUME_WORKFLOW_FILENAME = "resume.yml"
 
 # Fixed, non-echoing response bodies (T-10-22): never the received/computed
 # signature, the secret, a payload fragment, a validation-error detail, a run
@@ -100,10 +106,11 @@ def build_app(
     session_factory: Callable[[], Session] = new_session,
     settings_factory: Callable[[], Settings] = get_settings,
     authenticated_login: Callable[[], str] | None = None,
+    dispatch_client_factory: Callable[[], GitHubClient] | None = None,
 ) -> Starlette:
     """Build the receiver's one POST route.
 
-    The three keyword parameters are the test-injection seam (mirrors this
+    The four keyword parameters are the test-injection seam (mirrors this
     codebase's ``session_factory``/``github_client_factory`` idiom
     elsewhere): the production default (``app`` below, ``build_app()`` with
     no arguments) reads real settings, opens real sessions and lazily
@@ -115,6 +122,12 @@ def build_app(
     stub callable and never constructs a real client or needs
     ``GITHUB_TOKEN``.
 
+    ``dispatch_client_factory`` (Phase 11, D-01/D-03) is the dispatch half
+    of that same test-injection seam: when supplied, it replaces the lazy,
+    once-per-built-app :class:`GitHubClient` construction
+    :func:`_dispatch_provider` otherwise performs via
+    ``GitHubClient.for_dispatch(settings_factory())``.
+
     WR-02 (10-REVIEW.md): on the production path (``authenticated_login`` is
     ``None``), logs a loud ``ERROR`` -- but does not raise -- when
     ``GITHUB_TOKEN`` and/or ``GITHUB_WEBHOOK_SECRET`` are unconfigured, so a
@@ -124,6 +137,11 @@ def build_app(
     legitimately unset in environments that never run this receiver
     (10-02-SUMMARY.md), so refusing to construct the Starlette app at all
     would be a bigger behaviour change than this fix is scoped to make.
+
+    Phase 11 extends that same startup check with a third entry,
+    ``DISPATCH_GITHUB_TOKEN``, logged at ``warning`` rather than ``error``:
+    unlike the other two, an unset dispatch token degrades one optional side
+    effect (the resume dispatch) rather than breaking every delivery.
     """
     # A one-element list, not a bare ``nonlocal``-mutated variable: closed
     # over by ``_login_provider`` below and scoped to *this* ``build_app()``
@@ -131,6 +149,8 @@ def build_app(
     # cached client -- the exact reason ``GitHubClient.authenticated_login``
     # itself caches on the instance rather than a module global.
     _client_cache: list[GitHubClient] = []
+    # The dispatch half of the same one-element-list-per-built-app idiom.
+    _dispatch_cache: list[GitHubClient] = []
 
     if authenticated_login is None:
         _startup_settings = settings_factory()
@@ -151,6 +171,15 @@ def build_app(
                     "inbound delivery will be rejected with 401"
                 ),
             )
+        if _startup_settings.dispatch_github_token is None:
+            _log.warning(
+                "webhook.build_app.missing_dispatch_github_token",
+                detail=(
+                    "DISPATCH_GITHUB_TOKEN is not configured -- the "
+                    "post-answer workflow_dispatch will be skipped, but "
+                    "every inbound delivery is otherwise unaffected"
+                ),
+            )
 
     def _login_provider() -> Callable[[], str]:
         if authenticated_login is not None:
@@ -158,6 +187,13 @@ def build_app(
         if not _client_cache:
             _client_cache.append(GitHubClient.from_settings(settings_factory()))
         return _client_cache[0].authenticated_login
+
+    def _dispatch_provider() -> GitHubClient:
+        if dispatch_client_factory is not None:
+            return dispatch_client_factory()
+        if not _dispatch_cache:
+            _dispatch_cache.append(GitHubClient.for_dispatch(settings_factory()))
+        return _dispatch_cache[0]
 
     def _resolve_and_act(raw_body: bytes) -> Response:
         """Everything after signature verification. Runs off the event loop
@@ -220,6 +256,44 @@ def build_app(
                 "webhook.issue_comment.unexpected_error", run_id=str(outcome.run_id)
             )
             return _SERVER_ERROR
+
+        # Phase 11, D-01/D-02: after submit_answer has already committed,
+        # dispatch a real workflow_dispatch on the run's own target
+        # repository, carrying only the run id. A pure read
+        # (load_run_state) resolves the target from the run's own
+        # persisted `workflow["repository"]` snapshot -- never from
+        # NormalizedTask.metadata, never from a new Settings field.
+        dispatch_session = session_factory()
+        try:
+            state = load_run_state(dispatch_session, outcome.run_id)
+        finally:
+            dispatch_session.close()
+        repository = (
+            (state.workflow.get("repository") or {}) if state is not None else {}
+        )
+        owner = repository.get("github_owner")
+        repo = repository.get("github_repo")
+        base_branch = repository.get("base_branch")
+        if (
+            isinstance(owner, str)
+            and owner
+            and isinstance(repo, str)
+            and repo
+            and isinstance(base_branch, str)
+            and base_branch
+        ):
+            _dispatch_provider().dispatch_workflow(
+                owner,
+                repo,
+                workflow_id=_RESUME_WORKFLOW_FILENAME,
+                ref=base_branch,
+                run_id=str(outcome.run_id),
+            )
+            _log.info(
+                "webhook.dispatch.requested",
+                run_id=str(outcome.run_id),
+                workflow=_RESUME_WORKFLOW_FILENAME,
+            )
         return _OK
 
     async def _handle_issue_comment(request: Request) -> Response:
