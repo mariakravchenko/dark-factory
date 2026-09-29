@@ -30,6 +30,11 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
         # unrelated reasons, and "defaults to None" tests must not depend
         # on the ambient environment they happen to run in.
         "GITHUB_WEBHOOK_SECRET": None,
+        # Plan 11-01 added this secret field to Settings -- clear it for the
+        # same reason: a developer's own shell/`.env` may legitimately hold
+        # it for unrelated reasons, and "defaults to None" tests must not
+        # depend on the ambient environment.
+        "DISPATCH_GITHUB_TOKEN": None,
         "LOG_LEVEL": None,
         "LEASE_TTL_SECONDS": None,
         "LEASE_HEARTBEAT_SECONDS": None,
@@ -301,6 +306,38 @@ def test_known_secret_values_omits_unset_github_webhook_secret(
     known = Settings(_env_file=None).known_secret_values()
 
     assert "github_webhook_secret" not in known.values()
+
+
+def test_dispatch_github_token_defaults_to_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch)
+    assert Settings(_env_file=None).dispatch_github_token is None
+
+
+def test_known_secret_values_maps_dispatch_github_token_to_its_field_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    fake_dispatch_token = "dispatch_fake0000000000000000000000000"
+    _set_env(monkeypatch, DISPATCH_GITHUB_TOKEN=fake_dispatch_token)
+    known = Settings(_env_file=None).known_secret_values()
+
+    assert known[fake_dispatch_token] == "dispatch_github_token"
+
+
+def test_known_secret_values_omits_unset_dispatch_github_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from dark_factory.config.settings import Settings
+
+    _set_env(monkeypatch)
+    known = Settings(_env_file=None).known_secret_values()
+
+    assert "dispatch_github_token" not in known.values()
 
 
 def test_anthropic_api_key_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
