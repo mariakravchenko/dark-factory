@@ -474,7 +474,15 @@ Plans:
   2. CLI, webhook and CI entrypoints all funnel into the same `advance(run_id)`; there is no separate CI orchestrator and no CI-only code path.
   3. The `FakeWorker` orchestration suite covers role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, retry exhaustion and publishing, and runs green in CI with no external AI calls and no live worker credentials.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Tracer: an answer on a GitHub issue dispatches a real `workflow_dispatch` resume, end to end (D-01/D-02/D-03)
+- [ ] 11-02-PLAN.md — The dispatch degrades safely: API failure, unconfigured repository, unconfigured credential — each logged, each still 200
+- [ ] 11-03-PLAN.md — SC1's proof: a run paused by one OS process is finished by another with the worktree deleted, plus the TRIG-01 structural guard (D-06)
+- [ ] 11-04-PLAN.md — CI runs the `db` marker tier via the runner's own Docker, plus the guard keeping QUAL-01's coverage claim honest (D-05/D-07)
+- [ ] 11-05-PLAN.md — The deployer-facing `resume.yml` reference workflow and least-privilege dispatch credential, machine-checked (D-04)
+
 **Invariants**: triggers carry zero lifecycle logic; the run's working state is re-materialized from Neon plus git on any machine.
 
 ### Phase 12: Observability & Audit Surface
