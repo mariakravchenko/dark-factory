@@ -470,3 +470,261 @@ def test_a_dispatch_api_failure_still_answers_200_and_keeps_the_committed_answer
     assert len(failed_entries) == 1
     assert failed_entries[0]["run_id"] == str(waiting_run.run_id)
     assert "upstream unavailable" in str(failed_entries[0]["detail"])
+
+
+# --------------------------------------------------------------------------- #
+# 4. An unconfigured repository records the answer and skips the dispatch
+# --------------------------------------------------------------------------- #
+
+
+def test_a_run_without_repository_config_records_the_answer_and_skips_the_dispatch(
+    config_root_factory: Callable[..., Path],
+    real_session_factory: SessionFactory,
+    cleanup_runs: list[Any],
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    fake_worker_registry: Callable[..., Any],
+    fake_settings: Settings,
+    webhook_secret: str,
+) -> None:
+    """The plan's literal recipe (build via ``config_root_factory`` with no
+    ``_write_github_ba_tree`` overwrite, so `.dark-factory.yaml` never gets
+    an owner/repo) cannot reach ``WAITING_HUMAN``: ``_load_github``
+    (``src/dark_factory/input/loaders.py``, D-04) validates
+    ``github_owner``/``github_repo`` on ``snapshot["repository"]`` -- the
+    SAME mapping the run's persisted ``workflow`` column stores -- and
+    raises ``UnresolvableSourceError`` before ``start_run`` ever creates a
+    row. A repository config that is missing at intake time is therefore
+    missing before there is a run to test against, not after.
+
+    What HITL-06's degraded-config truth actually asserts is a property of
+    the *persisted* ``workflow["repository"]`` snapshot the dispatch guard
+    reads, independent of how a run came to have it -- so this test builds
+    a normal ``github:``-sourced run through the intake path (owner/repo
+    present, exactly like ``waiting_run``), drives it to ``WAITING_HUMAN``,
+    and then directly strips ``github_owner``/``github_repo`` from the
+    already-persisted ``runs.workflow`` JSONB column -- the one column the
+    dispatch guard reads (``load_run_state`` inside ``_resolve_and_act``),
+    never re-read from the config tree on disk. This proves the guard
+    itself, rather than a scenario the intake layer already refuses to
+    create.
+    """
+    root = _write_github_ba_tree(config_root_factory)
+    fake_intake_client = FakeGitHubClient(issue=_scripted_issue())
+    _patch_intake_client(monkeypatch, fake_intake_client)
+    snapshot = load_effective_config(root)
+    run_id = start_run(
+        f"github:{_ISSUE_NUMBER}",
+        session_factory=real_session_factory,
+        snapshot=snapshot,
+    )
+    cleanup_runs.append(run_id)
+
+    fake_publish = FakeGitHubClient(issue=_scripted_issue())
+    final = drive(
+        run_id,
+        session_factory=real_session_factory,
+        registry=fake_worker_registry([_NEEDS_INPUT]),
+        repo_root=root,
+        github_client_factory=lambda: fake_publish,
+    )
+    assert final is RunStatus.WAITING_HUMAN
+
+    interaction = _the_interaction(engine, run_id)
+    assert interaction is not None
+    assert interaction.clarification_comment_id is not None
+
+    # Strip the persisted snapshot's repository config down to the
+    # unconfigured shape `tests/conftest.py::_write_config_tree` writes by
+    # default (`{base_branch: main}`, no owner/repo) -- the dispatch guard's
+    # own read target, not the on-disk YAML the intake layer already
+    # validated and moved past.
+    with Session(engine) as session:
+        run = session.get(Run, run_id)
+        assert run is not None
+        workflow = dict(run.workflow)
+        workflow["repository"] = {"base_branch": _BASE_BRANCH}
+        run.workflow = workflow
+        session.commit()
+
+    fake_dispatch_client = FakeGitHubClient()
+    webhook_client = _build_webhook_client(
+        real_session_factory, fake_settings, fake_dispatch_client
+    )
+    body = build_issue_comment_payload(
+        comment_id=interaction.clarification_comment_id + 7000,
+        comment_body="use the primary cluster",
+        comment_user_login="a-human",
+        issue_number=_ISSUE_NUMBER,
+        owner=_OWNER,
+        repo=_REPO,
+    )
+
+    with capture_logs() as captured:
+        response = _post(
+            webhook_client, body, signature=sign_payload(webhook_secret, body)
+        )
+
+    assert response.status_code == 200
+    after = _the_interaction(engine, run_id)
+    assert after is not None
+    assert after.status is InteractionStatus.ANSWERED
+    dispatch_calls = [
+        call for call in fake_dispatch_client.calls if call[0] == "dispatch_workflow"
+    ]
+    assert dispatch_calls == []
+
+    skipped_entries = [
+        entry for entry in captured if entry.get("event") == "webhook.dispatch.skipped"
+    ]
+    assert len(skipped_entries) == 1
+    assert skipped_entries[0]["reason"] == _DISPATCH_SKIP_REASON_REPOSITORY_NOT_CONFIGURED
+    assert skipped_entries[0]["run_id"] == str(run_id)
+
+
+# --------------------------------------------------------------------------- #
+# 5. An unconfigured dispatch credential records the answer and skips the
+#    dispatch -- exercising the real _dispatch_provider production path
+# --------------------------------------------------------------------------- #
+
+
+def test_a_receiver_without_a_dispatch_token_records_the_answer_and_skips_the_dispatch(
+    waiting_run: WaitingRun,
+    real_session_factory: SessionFactory,
+    engine: Engine,
+) -> None:
+    settings_without_dispatch_token = Settings(
+        _env_file=None,  # type: ignore[call-arg]
+        database_url=_FAKE_DB_URL,
+        database_url_direct=_FAKE_DB_URL_DIRECT,
+        github_token=_FAKE_GITHUB_TOKEN,
+        github_webhook_secret=_FAKE_WEBHOOK_SECRET,
+        dispatch_github_token=None,
+    )
+    # dispatch_client_factory=None (the default) exercises the real
+    # GitHubClient.for_dispatch(settings_factory()) production path inside
+    # _dispatch_provider -- the proof is that construction itself raises
+    # MissingGitHubCredentialError and the guard catches it, not that an
+    # injected fake was told to raise.
+    app = build_app(
+        session_factory=real_session_factory,
+        settings_factory=lambda: settings_without_dispatch_token,
+        authenticated_login=lambda: _TOKEN_LOGIN,
+        dispatch_client_factory=None,
+    )
+    webhook_client = TestClient(app)
+
+    body = build_issue_comment_payload(
+        comment_id=waiting_run.clarification_comment_id + 8000,
+        comment_body="use the primary cluster",
+        comment_user_login="a-human",
+        issue_number=_ISSUE_NUMBER,
+        owner=_OWNER,
+        repo=_REPO,
+    )
+    secret = settings_without_dispatch_token.github_webhook_secret
+    assert secret is not None
+    signature = sign_payload(secret.get_secret_value(), body)
+
+    with capture_logs() as captured:
+        response = _post(webhook_client, body, signature=signature)
+
+    assert response.status_code == 200
+    interaction = _the_interaction(engine, waiting_run.run_id)
+    assert interaction is not None
+    assert interaction.status is InteractionStatus.ANSWERED
+
+    skipped_entries = [
+        entry for entry in captured if entry.get("event") == "webhook.dispatch.skipped"
+    ]
+    assert len(skipped_entries) == 1
+    assert skipped_entries[0]["reason"] == _DISPATCH_SKIP_REASON_CREDENTIAL_NOT_CONFIGURED
+    assert skipped_entries[0]["run_id"] == str(waiting_run.run_id)
+
+    # The pair is distinguishable in a log search -- Task 2's own
+    # requirement, and the reason this test and the previous one each
+    # assert their own named constant rather than a shared literal.
+    assert (
+        _DISPATCH_SKIP_REASON_CREDENTIAL_NOT_CONFIGURED
+        != _DISPATCH_SKIP_REASON_REPOSITORY_NOT_CONFIGURED
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 6. D-02 (never over-dispatch): an ignored or unsigned delivery never
+#    dispatches -- pins the dispatch block's placement after submit_answer
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize(
+    ("build_body", "signed", "expected_status"),
+    [
+        pytest.param(
+            lambda comment_id: build_issue_comment_payload(
+                comment_id=comment_id,
+                comment_body="a fabricated answer",
+                comment_user_login=_TOKEN_LOGIN,
+                issue_number=_ISSUE_NUMBER,
+                owner=_OWNER,
+                repo=_REPO,
+            ),
+            True,
+            200,
+            id="dark-factorys-own-comment",
+        ),
+        pytest.param(
+            lambda comment_id: build_issue_comment_payload(
+                action="edited",
+                comment_id=comment_id,
+                comment_body="an edit",
+                comment_user_login="a-human",
+                issue_number=_ISSUE_NUMBER,
+                owner=_OWNER,
+                repo=_REPO,
+            ),
+            True,
+            200,
+            id="ignored-action-shape",
+        ),
+        pytest.param(
+            lambda comment_id: build_issue_comment_payload(
+                comment_id=comment_id,
+                comment_body="use staging",
+                comment_user_login="a-human",
+                issue_number=_ISSUE_NUMBER,
+                owner=_OWNER,
+                repo=_REPO,
+            ),
+            False,
+            401,
+            id="mis-signed",
+        ),
+    ],
+)
+def test_an_ignored_or_unsigned_delivery_never_dispatches(
+    build_body: Callable[[int], bytes],
+    signed: bool,
+    expected_status: int,
+    waiting_run: WaitingRun,
+    real_session_factory: SessionFactory,
+    fake_settings: Settings,
+    webhook_secret: str,
+) -> None:
+    fake_dispatch_client = FakeGitHubClient()
+    webhook_client = _build_webhook_client(
+        real_session_factory, fake_settings, fake_dispatch_client
+    )
+    body = build_body(waiting_run.clarification_comment_id + 9000)
+    signature = (
+        sign_payload(webhook_secret, body)
+        if signed
+        else sign_payload("wrong_secret_0000000000000000000", body)
+    )
+
+    response = _post(webhook_client, body, signature=signature)
+
+    assert response.status_code == expected_status
+    dispatch_calls = [
+        call for call in fake_dispatch_client.calls if call[0] == "dispatch_workflow"
+    ]
+    assert dispatch_calls == []
