@@ -474,7 +474,7 @@ Plans:
   2. CLI, webhook and CI entrypoints all funnel into the same `advance(run_id)`; there is no separate CI orchestrator and no CI-only code path.
   3. The `FakeWorker` orchestration suite covers role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, retry exhaustion and publishing, and runs green in CI with no external AI calls and no live worker credentials.
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -484,7 +484,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 11-02-PLAN.md — The dispatch degrades safely: API failure, unconfigured repository, unconfigured credential — each logged, each still 200
-- [ ] 11-03-PLAN.md — SC1's proof: a run paused by one OS process is finished by another with the worktree deleted, plus the TRIG-01 structural guard (D-06)
+- [x] 11-03-PLAN.md — SC1's proof: a run paused by one OS process is finished by another with the worktree deleted, plus the TRIG-01 structural guard (D-06)
 - [ ] 11-04-PLAN.md — CI runs the `db` marker tier via the runner's own Docker, plus the guard keeping QUAL-01's coverage claim honest (D-05/D-07)
 
 **Wave 3** *(blocked on Wave 2 completion)*
@@ -526,7 +526,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | Complete    | 2026-09-28 |
-| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 2/5 | In Progress|  |
+| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 3/5 | In Progress|  |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 
 ## Coverage
