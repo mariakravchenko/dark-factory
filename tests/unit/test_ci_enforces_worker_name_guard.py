@@ -21,7 +21,12 @@ pytestmark = pytest.mark.unit
 _WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml"
 
 _LEAK_GUARD_PATH = "tests/unit/test_no_worker_name_leak.py"
-_EXCLUDED_MARKERS = ("db", "integration")
+# `db` is deliberately selected by CI as of Phase 11 (11-CONTEXT.md D-05,
+# 11-04-PLAN.md) -- the FakeWorker orchestration suite (QUAL-01) now runs on
+# the hosted runner's own Docker via testcontainers. `integration` stays
+# excluded: it drives real agent CLIs whose credentials the hosted runner
+# does not have, unrelated to database availability.
+_EXCLUDED_MARKERS = ("integration",)
 
 
 def _load() -> dict[str, Any]:
