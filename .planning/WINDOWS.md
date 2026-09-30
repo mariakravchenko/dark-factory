@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 14
+open_count: 15
 waived_count: 0
 fixed_count: 2
-total_count: 16
-last_updated: 2026-09-28T09:00:58.039Z
+total_count: 17
+last_updated: 2026-09-30T11:26:19.558Z
 ---
 
 # Broken Windows Ledger
@@ -31,6 +31,7 @@ last_updated: 2026-09-28T09:00:58.039Z
 | 14 | 10 | unrun-verify | tests/integration/test_artifact_scope_enforcement.py |  | 10-07 Task 3 human-check (confirm the two tamper cases and no-fake-binaries case still FAIL their run for their own condition against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox | open |  | 2026-09-28T08:08:44.277Z |  |
 | 15 | 10 | unrun-verify | tests/db/test_loop04_adjacency.py |  | 10-08 Task 1 verify step (db-tier run of the promoted LOOP-04 adjacency test against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox; logic verified by static code reading and a standalone interpreter check of the assertions against real runner.py source | open |  | 2026-09-28T09:00:57.930Z |  |
 | 16 | 10 | unrun-verify | tests/integration/test_redaction_interactions.py |  | 10-08 Task 2 verify step (pytest -m integration run of the narrowed redaction guard) not run -- the module's session-scoped autouse _schema_at_head fixture forces PostgreSQL provisioning for any collected integration-marked test regardless of whether the test itself requests db fixtures; no PostgreSQL reachable in the execution sandbox. Guard logic verified by a standalone interpreter run of the extraction helper against real runner.py source (both call sites resolve to str(exc), correctly allowlisted; counterexample correctly rejected) | open |  | 2026-09-28T09:00:58.039Z |  |
+| 17 | 11 | unrun-verify | .planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-05-PLAN.md |  | Full unrestricted 'uv run pytest -q' (all tiers) stalled with ~0 forward progress after 2.5h against the real remote Neon test branch and was terminated; substituted with unit tier (incl. 5 new tests), 'unit or contract' sweep (817 passed, 1 pre-existing unrelated failure), and a standalone 'db' tier run (205 passed, 1 skipped, 0 failed) -- integration tier not re-verified this session (excluded from CI; this plan touches no integration/db/src files). | open |  | 2026-09-30T11:26:19.558Z |  |
 
 ````json
 [
@@ -224,6 +225,18 @@ last_updated: 2026-09-28T09:00:58.039Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-28T09:00:58.039Z",
+    "resolved_at": null
+  },
+  {
+    "id": 17,
+    "kind": "unrun-verify",
+    "phase": "11",
+    "file": ".planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-05-PLAN.md",
+    "line": null,
+    "description": "Full unrestricted 'uv run pytest -q' (all tiers) stalled with ~0 forward progress after 2.5h against the real remote Neon test branch and was terminated; substituted with unit tier (incl. 5 new tests), 'unit or contract' sweep (817 passed, 1 pre-existing unrelated failure), and a standalone 'db' tier run (205 passed, 1 skipped, 0 failed) -- integration tier not re-verified this session (excluded from CI; this plan touches no integration/db/src files).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-30T11:26:19.558Z",
     "resolved_at": null
   }
 ]

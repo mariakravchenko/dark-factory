@@ -474,7 +474,7 @@ Plans:
   2. CLI, webhook and CI entrypoints all funnel into the same `advance(run_id)`; there is no separate CI orchestrator and no CI-only code path.
   3. The `FakeWorker` orchestration suite covers role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, retry exhaustion and publishing, and runs green in CI with no external AI calls and no live worker credentials.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -489,7 +489,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 11-05-PLAN.md — The deployer-facing `resume.yml` reference workflow and least-privilege dispatch credential, machine-checked (D-04)
+- [x] 11-05-PLAN.md — The deployer-facing `resume.yml` reference workflow and least-privilege dispatch credential, machine-checked (D-04)
 
 **Invariants**: triggers carry zero lifecycle logic; the run's working state is re-materialized from Neon plus git on any machine.
 
@@ -526,7 +526,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | Complete    | 2026-09-28 |
-| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 4/5 | In Progress|  |
+| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 5/5 | In Progress|  |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 
 ## Coverage

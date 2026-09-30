@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
-status: executing
-stopped_at: Completed 11-04-PLAN.md
-last_updated: "2026-09-30T07:37:04.693Z"
+status: verifying
+stopped_at: "Completed 11-05-PLAN.md (Phase 11 complete: all 5 plans landed)"
+last_updated: "2026-09-30T11:27:38.264Z"
 last_activity: 2026-09-29
 last_activity_desc: Phase 11 execution started
-state_head: 4b5de2e4fb5485e56e36b367e6dcfd25a3e44f5b
+state_head: b4b4de27dc12749a7ed7b723f6159c38db4ac4e0
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 64
-  completed_plans: 63
+  completed_plans: 64
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-09-29 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (10/12 phases)
@@ -118,6 +118,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P02 | ~25min task-commits + ~1h31m full-suite verification wait | 2 tasks | 3 files |
 | Phase 11 P03 | ~20min task-commits + ~1h32m full-suite wait | 2 tasks | 2 files |
 | Phase 11 P04 | ~35min | 2 tasks | 3 files |
+| Phase 11 P05 | ~40min task-commits + ~4h10min verification wait | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -244,6 +245,8 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11]: 11-04: ci.yml gains a dedicated Database tier step (-m db) alongside Unit and contract tiers -- separate steps so the GitHub Actions log reports each tier's duration separately, both timeout-minutes marked [ASSUMED] pending a real CI run
 - [Phase 11]: [Phase 11]: 11-04: tests/unit/test_qual01_ci_coverage.py binds QUAL-01's eight scenario nouns (verbatim from REQUIREMENTS.md) to the pre-existing tests/db/ modules that cover them via an ast marker-presence check and a yaml.safe_load check of ci.yml's own selector -- so the coverage claim traces to an executed command
 - [Phase 11]: [Phase 11]: 11-04: fixed a pre-existing Phase 7 guard (test_ci_enforces_worker_name_guard.py) whose _EXCLUDED_MARKERS tuple asserted CI never selects db -- narrowed to integration only, since this plan's own ci.yml change makes db selection intentional
+- [Phase 11]: [Phase 11] 11-05: reference workflow's install step names a git+https source (pip not-yet-published), permissions: contents: read and timeout-minutes: 30 declared explicitly on the resume.yml job, and the dispatch-outcome table's log event/reason strings were read verbatim from webhook/app.py source rather than re-derived from prose
+- [Phase 11]: [Phase 11] 11-05: a full unrestricted 'uv run pytest -q' sweep stalled with near-zero progress after 2.5h against the real remote Neon branch and was terminated; superseded by unit + 'unit or contract' + a standalone 'db' tier run (205 passed, 0 failed) -- integration tier unverified this session, logged to WINDOWS.md entry #17
 
 ### Pending Todos
 
@@ -268,6 +271,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T07:37:04.601Z
-Stopped at: Completed 11-04-PLAN.md
+Last session: 2026-09-30T11:27:38.181Z
+Stopped at: Completed 11-05-PLAN.md (Phase 11 complete: all 5 plans landed)
 Resume file: None
