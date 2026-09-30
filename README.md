@@ -273,6 +273,152 @@ its last heartbeat, measured on the **database** clock. After that, any process
 `resume`s it from the last committed step. This phase has no command to force an
 earlier steal.
 
+## Finish a run in CI — the local → CI handoff
+
+### What this is
+
+A run that pauses for a human on your laptop does not have to be resumed on
+your laptop. When the human replies on the GitHub issue, the webhook receiver
+records the answer in Neon and then asks GitHub Actions to start a job that
+resumes the run — a genuinely different machine, with nothing carried over but
+the run id. The invariant holds throughout: **the trigger carries no lifecycle
+logic; every entry point — the local CLI, the webhook receiver, a dispatched CI
+job — reaches the same `advance(run_id)`.**
+
+### The deployment model
+
+Dark Factory is a pip-installable package. A deployer does **not** clone or
+check out Dark Factory's own repository. Instead:
+
+1. Install `dark-factory` as a dependency inside your own repository's own
+   toolchain (`uv add dark-factory` once published, or the equivalent for
+   your package manager).
+2. Hand-author `.dark-factory.yaml` and `.dark-factory/roles/*.yaml` in your
+   own repository, modelled on the ones this repository ships.
+3. Add one small `resume.yml` workflow to your own repository (below).
+4. Give your webhook receiver a `DISPATCH_GITHUB_TOKEN` (below).
+
+There is currently no `dark-factory init` command to scaffold steps 2 and 3 —
+a deliberate, recorded deferral for this phase, not an oversight.
+
+### The full flow
+
+1. Locally, `dark-factory run github:<owner>/<repo>#<n>` creates and drives
+   the run; it may pause `WAITING_HUMAN` with a clarifying comment on the
+   issue.
+2. The human replies on the issue.
+3. GitHub delivers an `issue_comment` webhook; the receiver verifies its
+   signature, resolves the reply to its pending interaction and records the
+   answer.
+4. The receiver reads the run's own persisted `repository.github_owner` /
+   `github_repo` and asks GitHub to dispatch `resume.yml` on that repository,
+   carrying the run id as input.
+5. A fresh GitHub Actions runner checks out the repository, installs
+   `dark-factory` and runs `dark-factory resume <run_id>`, which
+   re-materializes everything from Neon plus a fresh git worktree.
+6. The run reaches `COMPLETED` (possibly publishing a PR) or pauses again,
+   and the loop repeats from step 2.
+
+### The reference workflow
+
+Copy the block below into your own repository at
+`.github/workflows/resume.yml`. Dark Factory **neither ships nor validates**
+this file — it is a reference, and you own it. The sentinel comments
+bracketing it are load-bearing: a test in this repository extracts this
+exact block by those sentinels and asserts it still parses and still says
+what the dispatcher sends, so their spelling must not change.
+
+<!-- resume-workflow-reference: begin -->
+```yaml
+name: resume
+
+"on":
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "The Dark Factory run id to resume"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dark-factory
+        run: pip install "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"
+
+      - name: Resume the run
+        run: dark-factory resume "${{ inputs.run_id }}"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+<!-- resume-workflow-reference: end -->
+
+The trigger key is quoted (`"on":`) for the same reason this repository's own
+`ci.yml` quotes it: YAML 1.1 parses a bare `on:` as the boolean `True`.
+`permissions: contents: read` is declared explicitly rather than inherited,
+so a repository whose default permissions are broader does not silently hand
+that to an agent runtime. There is no `if:` anywhere in this workflow, no
+matrix, no second job — the workflow is a trigger, and a trigger that grows a
+branch on run state has started deciding what happens next, which is the one
+thing it must not do.
+
+The install step names a git source rather than a package index, because
+`dark-factory` is not yet published to PyPI — switch to `pip install
+dark-factory` (or `uv add dark-factory`) once it ships.
+
+The Actions secrets this job needs: `DATABASE_URL` / `DATABASE_URL_DIRECT`
+(the same Neon connection strings your local `.env` uses), `GITHUB_TOKEN`
+(for the comment/PR operations Dark Factory performs on your behalf), and
+whichever worker credential your roles' assigned worker needs (e.g.
+`ANTHROPIC_API_KEY` for `claude-code`).
+
+The step's exit code is the same contract the CLI documents above: `0` for a
+run that reached a clean terminal state — including a fresh `WAITING_HUMAN`
+pause, since the loop simply goes round again — `1` for a persisted `FAILED`,
+`2` for a bad invocation such as an unknown run id. A red Actions run here
+means `1` or `2`, never `0`.
+
+### The dispatch credential
+
+Provision a **fine-grained** personal access token, scoped to the one target
+repository, with the `Actions: Read and write` permission — nothing else.
+That permission name — `actions: write` — is the fine-grained token's own
+label and has **no equivalent checkbox on the classic-token creation
+screen**; a classic token needs the much broader `repo` scope instead, which
+works but grants far more than this call needs. Use a classic token only as a
+documented fallback if a fine-grained token is unavailable to you.
+
+Set the result as `DISPATCH_GITHUB_TOKEN` — matching `.env.example` exactly —
+on whatever process hosts your webhook receiver. It is a third credential,
+deliberately separate from `GITHUB_TOKEN` (comment/PR operations) and
+`GITHUB_WEBHOOK_SECRET` (verifying inbound deliveries): one field per
+credential purpose, so "did the infrastructure credential ever reach
+somewhere it should not" stays answerable from the field name alone.
+
+### When the resume does not fire
+
+| Outcome | Log event | Detail |
+|---|---|---|
+| Dispatched | `webhook.dispatch.requested` | The `workflow_dispatch` call succeeded. |
+| Skipped — repository not configured | `webhook.dispatch.skipped` (`reason=repository_not_configured`) | The run's persisted `workflow["repository"]` has no `github_owner`/`github_repo`/`base_branch` — ordinary for a `text:`-sourced run. |
+| Skipped — no dispatch token | `webhook.dispatch.skipped` (`reason=dispatch_github_token_not_configured`) | This receiver process has no `DISPATCH_GITHUB_TOKEN` configured. |
+| Failed | `webhook.dispatch.failed` | The `workflow_dispatch` API call itself raised (a real GitHub error). |
+
+In every one of these cases the human's answer is already durably recorded —
+a missing dispatch delays the resume, it never loses the answer. The manual
+fallback from any machine, always, is `dark-factory resume <run_id>`.
+
 ## Running the tests
 
 Dark Factory does not assume a database backend. `tests/conftest.py` walks a
@@ -299,6 +445,13 @@ Marker tiers:
 | `db` | Tests that need a reachable PostgreSQL. |
 | `integration` | End-to-end tests that drive the CLI / a full run against PostgreSQL. |
 | `contract` | The shared `CodingWorker` contract suite, parametrized over worker adapters. |
+
+`.github/workflows/ci.yml` selects `unit`, `contract` and `db` on every push
+and pull request — the `db` tier's PostgreSQL comes from the hosted runner's
+own Docker daemon through the probe ladder's testcontainers rung above, with
+no `services:` block and no new secret. `integration` is deliberately
+excluded from CI: some of its tests drive real agent CLIs whose credentials
+(e.g. `ANTHROPIC_API_KEY`) the hosted runner does not have.
 
 ```bash
 # Quick inner loop — no database needed:
