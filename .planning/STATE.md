@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Completed 11-03-PLAN.md
-last_updated: "2026-09-30T07:09:12.090Z"
+stopped_at: Completed 11-04-PLAN.md
+last_updated: "2026-09-30T07:37:04.693Z"
 last_activity: 2026-09-29
 last_activity_desc: Phase 11 execution started
-state_head: 33ecbeb6ab2575cb68df5ec506eb56bb7910f191
+state_head: 4b5de2e4fb5485e56e36b367e6dcfd25a3e44f5b
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 64
-  completed_plans: 62
+  completed_plans: 63
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-09-29 — Phase 11 execution started
 
@@ -117,6 +117,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P01 | 65min | 2 tasks | 9 files |
 | Phase 11 P02 | ~25min task-commits + ~1h31m full-suite verification wait | 2 tasks | 3 files |
 | Phase 11 P03 | ~20min task-commits + ~1h32m full-suite wait | 2 tasks | 2 files |
+| Phase 11 P04 | ~35min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -240,6 +241,9 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11]: 11-03: _PERMITTED_CALL_SITES is the one-entry {"cli.py"} frozenset, not the plan's literal two-entry set -- advance/drive are siblings (neither calls the other) and advance has zero call sites in the tree today
 - [Phase 11]: [Phase 11]: 11-03: worktree erasure uses remove_worktree(force=True), not shutil.rmtree -- a bare rm -rf leaves git's own worktree registration behind and breaks same-branch reconstruction
 - [Phase 11]: [Phase 11]: 11-03: 'worktree exists again' is asserted mid-flight (popen + DARK_FACTORY_FAKE_SLEEP_MS + wait_for) since D-04's COMPLETED cleanup removes it again before the resumed process exits
+- [Phase 11]: [Phase 11]: 11-04: ci.yml gains a dedicated Database tier step (-m db) alongside Unit and contract tiers -- separate steps so the GitHub Actions log reports each tier's duration separately, both timeout-minutes marked [ASSUMED] pending a real CI run
+- [Phase 11]: [Phase 11]: 11-04: tests/unit/test_qual01_ci_coverage.py binds QUAL-01's eight scenario nouns (verbatim from REQUIREMENTS.md) to the pre-existing tests/db/ modules that cover them via an ast marker-presence check and a yaml.safe_load check of ci.yml's own selector -- so the coverage claim traces to an executed command
+- [Phase 11]: [Phase 11]: 11-04: fixed a pre-existing Phase 7 guard (test_ci_enforces_worker_name_guard.py) whose _EXCLUDED_MARKERS tuple asserted CI never selects db -- narrowed to integration only, since this plan's own ci.yml change makes db selection intentional
 
 ### Pending Todos
 
@@ -264,6 +268,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-09-30T07:09:12.008Z
-Stopped at: Completed 11-03-PLAN.md
+Last session: 2026-09-30T07:37:04.601Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None

@@ -142,7 +142,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Quality & Testing
 
-- [ ] **QUAL-01**: Orchestration behavior is tested end-to-end with `FakeWorker` — role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing — with no external AI calls
+- [x] **QUAL-01**: Orchestration behavior is tested end-to-end with `FakeWorker` — role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing — with no external AI calls
 - [x] **QUAL-02**: A shared `CodingWorker` contract-test suite runs against every adapter (including `FakeWorker`) so `FakeWorker` cannot diverge from real adapter behavior
 - [x] **QUAL-03**: Each real worker adapter (ClaudeCode, Copilot, Hermes) has its own integration test suite, skipped when the runtime's credentials are absent
 - [x] **QUAL-04**: A CI check fails the build if worker-name branching leaks outside the adapters
@@ -271,7 +271,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | SEC-01 | Phase 6 | Complete |
 | SEC-02 | Phase 1 | Complete |
 | SEC-03 | Phase 6 | Complete |
-| QUAL-01 | Phase 11 | Pending |
+| QUAL-01 | Phase 11 | Complete |
 | QUAL-02 | Phase 7 | Complete |
 | QUAL-03 | Phase 8 | Complete |
 | QUAL-04 | Phase 7 | Complete |
