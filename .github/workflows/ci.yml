@@ -15,7 +15,13 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # [ASSUMED] 30 (raised from 15) -- headroom for the image pull, Alembic
+    # migrations, ~177 db-tier tests and plan 11-03's two subprocess spawns,
+    # on top of the pre-existing lint/mypy/unit work. Post-first-run
+    # calibration target: replace with a measured value per this phase's
+    # 11-04-PLAN.md <human-check> once a real CI run reports actual timing
+    # (11-RESEARCH.md Assumption A1 / Open Question 2).
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,11 +46,29 @@ jobs:
       - name: Worker-name leak guard (QUAL-04)
         run: uv run pytest -q tests/unit/test_no_worker_name_leak.py
 
-      # The `db` and `integration` tiers are deliberately excluded here:
-      # tests/conftest.py's probe ladder needs a reachable PostgreSQL 17
-      # (Docker, a local `initdb`, or DARK_FACTORY_TEST_DATABASE_URL) and the
-      # `integration` tier drives the CLI as a real subprocess. The hosted
-      # runner provides neither a Postgres 17 instance nor agent-CLI
-      # credentials, so only the `unit` and `contract` tiers run here.
+      # GitHub-hosted ubuntu-latest ships a running Docker daemon, so
+      # tests/conftest.py's probe ladder resolves to its testcontainers rung
+      # here and provisions PostgreSQL 17 inside this job with no `services:`
+      # block and no new secret (11-CONTEXT.md D-05). The `db` tier
+      # (the FakeWorker orchestration suite, QUAL-01) therefore runs in CI
+      # starting this phase.
+      #
+      # The `integration` tier is still excluded -- for a reason unrelated to
+      # database availability: some of its tests drive real agent CLIs whose
+      # credentials (e.g. ANTHROPIC_API_KEY) this hosted runner does not have.
+      # Do not "fix" this omission by adding `integration` to a selector below
+      # without first provisioning those credentials.
       - name: Unit and contract tiers
         run: uv run pytest -q -m "unit or contract"
+
+      # Split into its own step (rather than folding into a single
+      # "unit or contract or db" selector) so the GitHub Actions log reports
+      # this tier's duration separately -- the number this phase's
+      # <human-check> needs to calibrate the timeouts below. The fast tiers
+      # above also still fail fast, before any container is pulled.
+      #
+      # [ASSUMED] timeout-minutes: 20 -- see the job-level timeout comment
+      # above for the same post-first-run calibration note.
+      - name: Database tier (FakeWorker orchestration suite, QUAL-01)
+        timeout-minutes: 20
+        run: uv run pytest -q -m db
