@@ -259,7 +259,9 @@ def test_the_ci_handoff_section_names_every_worker_binary(runtime: LiveRuntime) 
     LIVE_RUNTIMES.values(),
     ids=[runtime.worker_name for runtime in LIVE_RUNTIMES.values()],
 )
-def test_the_ci_handoff_section_names_every_worker_credential(runtime: LiveRuntime) -> None:
+def test_the_ci_handoff_section_names_every_worker_credential(
+    runtime: LiveRuntime,
+) -> None:
     """Distinct from the binary test above on purpose: live_runtime.py's own
     skip_reason() treats "binary absent" and "credential absent" as
     separately diagnosable preconditions, and collapsing the two checks into
@@ -302,7 +304,9 @@ def test_the_install_guidance_precedes_the_resume_step() -> None:
         "guidance)"
     )
 
-    resume_indices = [index for index, line in enumerate(lines) if "dark-factory resume" in line]
+    resume_indices = [
+        index for index, line in enumerate(lines) if "dark-factory resume" in line
+    ]
     assert resume_indices, (
         "expected a line invoking 'dark-factory resume' in the reference workflow block"
     )
