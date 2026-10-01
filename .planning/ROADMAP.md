@@ -474,7 +474,7 @@ Plans:
   2. CLI, webhook and CI entrypoints all funnel into the same `advance(run_id)`; there is no separate CI orchestrator and no CI-only code path.
   3. The `FakeWorker` orchestration suite covers role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, retry exhaustion and publishing, and runs green in CI with no external AI calls and no live worker credentials.
 
-**Plans**: 7/7 plans executed — 5 executed, 2 gap closure pending (from 11-UAT.md: G-11-1, G-11-2)
+**Plans**: 10 plans — 7 executed, 3 gap closure pending (from 11-UAT.md: G-11-3)
 
 Plans:
 **Wave 1**
@@ -491,10 +491,19 @@ Plans:
 
 - [x] 11-05-PLAN.md — The deployer-facing `resume.yml` reference workflow and least-privilege dispatch credential, machine-checked (D-04)
 
-**Gap closure — Wave 1** *(from 11-UAT.md; the two plans share no files and run in parallel)*
+**Gap closure (G-11-1 / G-11-2) — Wave 1** *(the two plans share no files and run in parallel)*
 
 - [x] 11-06-PLAN.md — G-11-1: the webhook module no longer needs a database to be imported, so CI's unit/contract step reaches the `db` tier (QUAL-01)
 - [x] 11-07-PLAN.md — G-11-2: the reference `resume.yml` and its README guidance document the worker runtime a resumed role needs, guarded against drift (D-04)
+
+**Gap closure (G-11-3) — Wave 1** *(11-08 and 11-09 share no files and run in parallel)*
+
+- [ ] 11-08-PLAN.md — G-11-3 production sink: `run_publish_step` takes its push token as a parameter, plus one declared inventory of every process-global settings read (QUAL-01)
+- [ ] 11-09-PLAN.md — G-11-3 test-infrastructure sinks: the shared real-sink log helper, the clarification driver's all-branches override, and the live-runtime probe that aborted collection (QUAL-01)
+
+**Gap closure (G-11-3) — Wave 2** *(blocked on 11-08 and 11-09)*
+
+- [ ] 11-10-PLAN.md — G-11-3's deliverable: the runtime analogue of 11-06's import-time guard — CI's own selector proven green in a database-free child process, with a positive control (QUAL-01)
 
 **Invariants**: triggers carry zero lifecycle logic; the run's working state is re-materialized from Neon plus git on any machine.
 
