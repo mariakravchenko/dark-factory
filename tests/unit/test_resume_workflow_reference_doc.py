@@ -23,6 +23,8 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.support.live_runtime import LIVE_RUNTIMES, LiveRuntime
+
 pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -35,7 +37,44 @@ _ENV_EXAMPLE_PATH = _REPO_ROOT / ".env.example"
 _SENTINEL_BEGIN = "<!-- resume-workflow-reference: begin -->"
 _SENTINEL_END = "<!-- resume-workflow-reference: end -->"
 
+# The "Finish a run in CI" section's own heading and the next top-level
+# heading after it (11-07, G-11-2). Module-level constants beside the
+# sentinels above for the same reason: a future README restructure that
+# renames either heading must fail this guard loudly, here, rather than
+# silently narrowing _ci_handoff_section()'s search region to the wrong text.
+_CI_HANDOFF_SECTION_HEADING = "## Finish a run in CI — the local → CI handoff"
+_CI_HANDOFF_SECTION_NEXT_HEADING = "## Running the tests"
+
+# The exact phrase Task 1's commented install-guidance step names itself with
+# (its "- name:" line in the reference workflow). Chosen as the load-bearing
+# substring for test_the_install_guidance_precedes_the_resume_step below --
+# see that test's docstring for the full reasoning.
+_INSTALL_GUIDANCE_SUBSTRING = "Install the worker runtime"
+
 _DISPATCH_TOKEN_NAME = "DISPATCH_GITHUB_TOKEN"
+
+
+def _ci_handoff_section() -> str:
+    """Return the text of the "Finish a run in CI" section, bounded by its
+    own heading and the next top-level heading in README.md.
+
+    Raises an ``AssertionError`` naming what it looked for and did not find,
+    mirroring :func:`_extract_reference_workflow_yaml`'s existing refusal to
+    return an empty string on a failed extraction -- a silently-empty
+    section here would make the binary/credential assertions below pass
+    against nothing (see test_the_ci_handoff_section_extractor_is_non_vacuous).
+    """
+    text = _README_PATH.read_text(encoding="utf-8")
+    assert _CI_HANDOFF_SECTION_HEADING in text, (
+        f"expected to find heading {_CI_HANDOFF_SECTION_HEADING!r} in README.md"
+    )
+    _, _, after_heading = text.partition(_CI_HANDOFF_SECTION_HEADING)
+    assert _CI_HANDOFF_SECTION_NEXT_HEADING in after_heading, (
+        f"expected to find heading {_CI_HANDOFF_SECTION_NEXT_HEADING!r} "
+        "after the CI handoff section's own heading in README.md"
+    )
+    section, _, _ = after_heading.partition(_CI_HANDOFF_SECTION_NEXT_HEADING)
+    return section
 
 
 def _extract_reference_workflow_yaml() -> str:
@@ -179,4 +218,97 @@ def test_the_dispatch_credential_is_named_consistently() -> None:
     )
     assert _DISPATCH_TOKEN_NAME in env_example_text, (
         f"expected {_DISPATCH_TOKEN_NAME!r} to appear in .env.example"
+    )
+
+
+def test_the_ci_handoff_section_extractor_is_non_vacuous() -> None:
+    """A broken extractor that returned an empty (or whitespace-only) region
+    would make the two parametrized tests below pass vacuously -- zero
+    runtimes to check, trivially satisfied. This guards against that failure
+    mode directly, the same way the existing jobs-emptiness checks above
+    guard the YAML-based assertions."""
+    section = _ci_handoff_section()
+    assert section.strip(), (
+        "expected the CI handoff section (bounded by "
+        f"{_CI_HANDOFF_SECTION_HEADING!r} and "
+        f"{_CI_HANDOFF_SECTION_NEXT_HEADING!r}) to be non-empty"
+    )
+
+
+@pytest.mark.parametrize(
+    "runtime",
+    LIVE_RUNTIMES.values(),
+    ids=[runtime.worker_name for runtime in LIVE_RUNTIMES.values()],
+)
+def test_the_ci_handoff_section_names_every_worker_binary(runtime: LiveRuntime) -> None:
+    """Derived from LIVE_RUNTIMES by parametrization (11-07, G-11-2, T-11-31):
+    registering a fourth adapter there turns this into a failing case, named
+    by its own worker, until README documents the new binary."""
+    section = _ci_handoff_section()
+    assert runtime.binary in section, (
+        f"expected the worker-runtime binary {runtime.binary!r} (required by "
+        f"the {runtime.worker_name!r} worker) to be named in README's "
+        f"{_CI_HANDOFF_SECTION_HEADING!r} section -- a deployer assigning a "
+        "role to this worker needs to know, at the copy-paste site, which "
+        "binary must end up on PATH"
+    )
+
+
+@pytest.mark.parametrize(
+    "runtime",
+    LIVE_RUNTIMES.values(),
+    ids=[runtime.worker_name for runtime in LIVE_RUNTIMES.values()],
+)
+def test_the_ci_handoff_section_names_every_worker_credential(runtime: LiveRuntime) -> None:
+    """Distinct from the binary test above on purpose: live_runtime.py's own
+    skip_reason() treats "binary absent" and "credential absent" as
+    separately diagnosable preconditions, and collapsing the two checks into
+    one is the exact mistake that produced G-11-2 (README named a credential
+    but never a binary)."""
+    section = _ci_handoff_section()
+    credential_env_var = runtime.credential_field.upper()
+    assert credential_env_var in section, (
+        f"expected the credential environment variable {credential_env_var!r} "
+        f"(required by the {runtime.worker_name!r} worker) to be named in "
+        f"README's {_CI_HANDOFF_SECTION_HEADING!r} section"
+    )
+
+
+def test_the_install_guidance_precedes_the_resume_step() -> None:
+    """Asserted on the raw extracted block text, not the parsed YAML, because
+    the worker-runtime install guidance is a YAML comment and
+    ``yaml.safe_load`` discards comments entirely -- parsing the block first
+    would make the guidance invisible to this guard.
+
+    The load-bearing substring this test keys on is
+    ``_INSTALL_GUIDANCE_SUBSTRING`` (``"Install the worker runtime"``): the
+    name Task 1 gives the commented-out install step in the reference
+    workflow. It is matched as a substring of a line, not a whole-line
+    equality, so ordinary rewording of the step's explanatory comments does
+    not break this guard -- while deleting the step, or renaming it away
+    from "worker runtime", does. The next editor of README should treat this
+    phrase as load-bearing, the same way the module docstring already
+    documents the sentinel strings as load-bearing.
+    """
+    raw = _extract_reference_workflow_yaml()
+    lines = raw.splitlines()
+
+    guidance_indices = [
+        index for index, line in enumerate(lines) if _INSTALL_GUIDANCE_SUBSTRING in line
+    ]
+    assert guidance_indices, (
+        f"expected a line containing {_INSTALL_GUIDANCE_SUBSTRING!r} in the "
+        "reference workflow block (the commented worker-runtime install "
+        "guidance)"
+    )
+
+    resume_indices = [index for index, line in enumerate(lines) if "dark-factory resume" in line]
+    assert resume_indices, (
+        "expected a line invoking 'dark-factory resume' in the reference workflow block"
+    )
+
+    assert max(guidance_indices) < min(resume_indices), (
+        "expected the worker-runtime install guidance (found at line(s) "
+        f"{guidance_indices!r}) to precede the 'dark-factory resume' "
+        f"invocation (found at line(s) {resume_indices!r})"
     )
