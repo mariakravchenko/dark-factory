@@ -1,9 +1,9 @@
 ---
-status: partial
+status: diagnosed
 phase: 11-one-orchestrator-many-triggers-cross-machine-resume
 source: [11-VERIFICATION.md]
 started: 2026-10-01T11:35:00Z
-updated: 2026-10-01T12:20:00Z
+updated: 2026-10-01T12:35:00Z
 ---
 
 ## Current Test
@@ -91,5 +91,48 @@ blocked: 1
   reason: "Real CI run (https://github.com/mariakravchenko/dark-factory/actions/runs/36850439597) failed with 12 tests raising pydantic_core.ValidationError (database_url/database_url_direct Field required) across tests/unit/test_clarification_comment.py, test_publish_idempotency.py, test_publish_step_unit.py, and test_webhook_signature.py — the identical error signature G-11-1 diagnosed, in modules 11-06's fix did not cover. This branch had never been pushed to CI before this run, so the gap was latent since whichever phase introduced each of these tests, invisible locally because every local run inherits this repo's git-ignored .env."
   severity: blocker
   test: 1
-  artifacts: []
-  missing: []
+  root_cause: |
+    A three-condition AND, confirmed 3/3 with control runs (removing any one condition makes
+    all 12 failures vanish): (1) three production call sites invoke the process-global
+    get_settings() on conditionally-taken branches that unit tests legitimately reach --
+    src/dark_factory/logging.py:37/:28 (_configured_level / _redaction_processor, reached via
+    tests/support/log_sink.py::real_log_sink -- 5 failures), src/dark_factory/orchestrator/
+    publish.py:272 (the push-token read in run_publish_step, taken when the git spy returns a
+    commit SHA and published_commit_sha is unset -- 6 failures), and
+    src/dark_factory/orchestrator/runner.py:1685 (the except GitHubError fail-soft redaction
+    in _run_current_role's NEEDS_INPUT arm -- 1 failure); (2) the four offending test files
+    adopted neither of the two settings-override idioms already used at 14 other unit-tier
+    sites (monkeypatch.setenv + get_settings.cache_clear(), or monkeypatch.setattr on
+    get_settings itself); (3) Settings.model_config's env_file=".env" is CWD-relative, so this
+    repo's git-ignored .env silently satisfies both required fields on every local run --
+    purely the masking mechanism, not the defect. All four offending files are Phase 10
+    (plans 10-02/03/04/06); three open with an explicit "No database:" docstring claim that is
+    true about never opening a Postgres connection and wrong about Settings construction
+    requiring a DATABASE_URL *string* to be present. 11-06's import-time guard
+    (test_webhook_import_needs_no_database.py) could not have caught this: it proves an
+    import-time property via pkgutil.walk_packages over the dark_factory package and never
+    imports anything under tests/, so it cannot observe a call made during test *execution*.
+    Two findings beyond the originally reported scope: runner.py:1415 is a fourth armed
+    landmine on the same _run_current_role path test_clarification_comment.py already drives
+    (survived only because the fake worker's commit_run_artifacts returns None); and
+    tests/support/live_runtime.py:89's credential_missing() is a strictly worse sibling that
+    raises the same ValidationError at *module import* for live-CLI integration tests when a
+    worker binary is on PATH (Interrupted: N errors during collection, 0 tests run) -- CI
+    escapes this only because the hosted runner lacks the agent CLIs, but any environment that
+    installs them (ci.yml:56-60 contemplates this for a future phase) would hit it.
+  artifacts:
+    - path: src/dark_factory/orchestrator/publish.py
+      issue: "run_publish_step's push-token read at line 272 calls get_settings() directly instead of using the settings-derived values the function's caller (runner.py:1340-1348) already computed and the function already threads through for known_secrets (used at :331, :358) -- the one call site violating the function's own existing contract"
+    - path: src/dark_factory/orchestrator/runner.py
+      issue: "_run_current_role has four existing injection seams but three un-injected get_settings() calls remain on conditionally-taken branches: line 1685 (the reported failure) and line 1415 (undiagnosed landmine on the same code path, armed whenever a worker's commit_run_artifacts returns non-None)"
+    - path: src/dark_factory/logging.py
+      issue: "_configured_level (line 37) and _redaction_processor (line 28) call get_settings() with no override seam; reached via tests/support/log_sink.py::real_log_sink, a shared test-support fixture used by 5 of the 12 failing tests"
+    - path: tests/support/live_runtime.py
+      issue: "credential_missing() (line 89) calls get_settings() at a point reached during module IMPORT for live-CLI integration tests (test_claude_code_live.py, test_copilot_live.py) -- strictly worse than a test-execution failure, since it would abort collection entirely (0 tests run) the moment a worker binary is on PATH, e.g. once CI provisions agent CLIs for a later phase"
+  missing:
+    - "Thread the already-available settings-derived push_token value into run_publish_step's token read at publish.py:272, removing that get_settings() call (closes 6 of 12 -- the only sink where the fix is a production design improvement, not just a test mock)"
+    - "Add a settings-override seam (or apply Idiom B: monkeypatch.setattr(..., 'get_settings', ...)) covering BOTH runner.py:1685 and runner.py:1415 together -- a fix touching only :1685 leaves :1415 armed for the next test that exercises a worker whose commit_run_artifacts returns non-None"
+    - "Fix tests/support/log_sink.py::real_log_sink once (not each of its 5 call sites) to supply a fake DATABASE_URL/DATABASE_URL_DIRECT via monkeypatch + get_settings.cache_clear() when they are absent -- never override when present, since tests/unit/test_log_redaction.py deliberately sets its own FAKE_LIVE_DB_URL and asserts it is scrubbed; an unconditional override would make those assertions vacuous"
+    - "Fix tests/support/live_runtime.py's credential_missing() to check for a missing ANTHROPIC_API_KEY/credential field without triggering a full Settings() construction that also requires database_url -- or supply a database-free settings path for this specific probe"
+    - "Add the actual G-11-3 deliverable: a runtime analogue of 11-06's import-time guard -- a child `pytest -m \"unit or contract\"` process spawned with cwd=tmp_path and an explicit env allowlist omitting DATABASE_URL/DATABASE_URL_DIRECT, reusing test_webhook_import_needs_no_database.py's _ENV_ALLOWLIST/_sanitized_env idiom, with a positive control mirroring that file's Test 4, so this defect class cannot return silently a third time"
+  debug_session: .planning/debug/ci-unit-tier-settings-validation-g-11-3.md
