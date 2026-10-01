@@ -297,6 +297,10 @@ check out Dark Factory's own repository. Instead:
    own repository, modelled on the ones this repository ships.
 3. Add one small `resume.yml` workflow to your own repository (below).
 4. Give your webhook receiver a `DISPATCH_GITHUB_TOKEN` (below).
+5. Make your roles' assigned worker runtime available wherever
+   `dark-factory resume` runs, because that is a requirement this contract
+   (D-04) names but a credential alone does not satisfy — see "The worker
+   runtime" below.
 
 There is currently no `dark-factory init` command to scaffold steps 2 and 3 —
 a deliberate, recorded deferral for this phase, not an oversight.
@@ -354,6 +358,14 @@ jobs:
       - name: Install dark-factory
         run: pip install "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"
 
+      # - name: Install the worker runtime
+      #   # Required whenever a role is assigned to a worker that shells out
+      #   # to a CLI binary -- see "The worker runtime" below for the binary
+      #   # name your roles need on PATH. The install command itself comes
+      #   # from that runtime's own documentation: Dark Factory neither
+      #   # ships nor verifies it.
+      #   run: <install your worker runtime's CLI here, per its own docs>
+
       - name: Resume the run
         run: dark-factory resume "${{ inputs.run_id }}"
         env:
@@ -388,6 +400,37 @@ run that reached a clean terminal state — including a fresh `WAITING_HUMAN`
 pause, since the loop simply goes round again — `1` for a persisted `FAILED`,
 `2` for a bad invocation such as an unknown run id. A red Actions run here
 means `1` or `2`, never `0`.
+
+### The worker runtime
+
+This completes the deployer contract D-04 already defines, which names
+worker credentials but not the worker runtime itself — a gap that produced
+an observed failure: a live run dispatched and authenticated correctly, then
+recorded a `FAILED` BA role execution whose error was an operating-system
+"no such file or directory" naming a binary README never mentioned. Dark
+Factory does not implement a coding agent; the worker adapter assigned to a
+role spawns that runtime's own CLI as a subprocess inside the job, and the
+binary must already be on `PATH` there. A missing binary surfaces exactly
+the same way it did on that run — a `FAILED` role execution whose recorded
+error names the missing binary — so that error text is what to search for
+if a resumed run fails immediately after this step.
+
+Every worker this repository registers, the binary its adapter shells out
+to, and the credential environment variable it reads:
+
+| `worker:` value | Binary required on `PATH` | Credential environment variable |
+|---|---|---|
+| `claude-code` | `claude` | `ANTHROPIC_API_KEY` |
+| `copilot` | `copilot` | `COPILOT_GITHUB_TOKEN` |
+| `hermes` | `hermes` | `ANTHROPIC_API_KEY` — shared with `claude-code`; Hermes has no dedicated credential of its own |
+
+(`fake`, the fourth registered worker, needs neither a binary nor a
+credential — it scripts its results in-process, which is exactly how the
+`db`-tier suite runs in CI with no agent credentials configured at all.)
+
+This table says nothing about `DISPATCH_GITHUB_TOKEN`; that credential
+belongs to the webhook receiver that dispatches this job, not to the job
+itself, and is documented in its own subsection next.
 
 ### The dispatch credential
 
