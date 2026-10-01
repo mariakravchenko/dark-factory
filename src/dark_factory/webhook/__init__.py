@@ -3,10 +3,9 @@
 This package is a *separate deployable* (D-01): it shares only the database
 with the orchestrator core, is run as its own ASGI process (``uvicorn
 dark_factory.webhook.app:build_app --factory``, see ``app.py``'s module
-docstring for the exact command and required environment), and lives behind
-the optional
-``webhook`` dependency extra (``uv sync --extra webhook``) -- uninstalling
-that extra must leave the orchestrator core fully functional, mirroring the
+docstring for the exact command and required environment), and lives behind the
+optional ``webhook`` dependency extra (``uv sync --extra webhook``) --
+uninstalling that extra must leave the orchestrator core fully functional, mirroring the
 ``mcp`` extra's isolation rule (TOOL-05, D-13).
 
 Its only mutation is a call to :func:`dark_factory.orchestrator.answers.submit_answer`

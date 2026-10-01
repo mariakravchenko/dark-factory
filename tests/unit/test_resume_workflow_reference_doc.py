@@ -266,12 +266,27 @@ def test_the_ci_handoff_section_names_every_worker_credential(
     skip_reason() treats "binary absent" and "credential absent" as
     separately diagnosable preconditions, and collapsing the two checks into
     one is the exact mistake that produced G-11-2 (README named a credential
-    but never a binary)."""
+    but never a binary).
+
+    Scoped to the worker's own table row, not the whole section: ``hermes``
+    shares its credential (``ANTHROPIC_API_KEY``) with ``claude-code``, so a
+    whole-section substring check would still pass if the ``hermes`` row were
+    deleted outright -- the credential string would still be found via
+    ``claude-code``'s row. Scoping to the row that names this worker closes
+    that gap; the binary test already catches a deleted row via the binary
+    name, which is unique per worker."""
     section = _ci_handoff_section()
     credential_env_var = runtime.credential_field.upper()
-    assert credential_env_var in section, (
+    worker_rows = [
+        line for line in section.splitlines() if f"`{runtime.worker_name}`" in line
+    ]
+    assert worker_rows, (
+        f"expected a table row naming the {runtime.worker_name!r} worker in "
+        f"README's {_CI_HANDOFF_SECTION_HEADING!r} section"
+    )
+    assert any(credential_env_var in line for line in worker_rows), (
         f"expected the credential environment variable {credential_env_var!r} "
-        f"(required by the {runtime.worker_name!r} worker) to be named in "
+        f"(required by the {runtime.worker_name!r} worker) on its own row in "
         f"README's {_CI_HANDOFF_SECTION_HEADING!r} section"
     )
 
