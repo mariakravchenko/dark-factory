@@ -1,11 +1,14 @@
 """The receiver's single POST route -- verify, parse, resolve, submit_answer
 and stop (GIT-06, D-01/D-02).
 
-**How this process is run.** ``dark_factory.webhook.app:app`` is the ASGI
-application object an ASGI server points at, e.g.::
+**How this process is run.** ``build_app`` is an ASGI application *factory*,
+not a pre-built application object -- importing this module must never
+require a reachable database, because the unit and contract test tiers
+import it with no ``DATABASE_URL`` configured. Point an ASGI server at the
+factory with uvicorn's ``--factory`` flag, e.g.::
 
     uv sync --extra webhook
-    uv run uvicorn dark_factory.webhook.app:app --host 0.0.0.0 --port 8000
+    uv run uvicorn dark_factory.webhook.app:build_app --factory --host 0.0.0.0 --port 8000
 
 It needs ``DATABASE_URL``, ``DATABASE_URL_DIRECT`` (``Settings`` requires
 both -- the direct URL is unused by this process but is still a required
@@ -92,7 +95,7 @@ from dark_factory.persistence.engine import new_session
 from dark_factory.persistence.repositories import load_run_state
 from dark_factory.webhook.resolve import ResolvedAnswer, resolve_issue_comment
 
-__all__ = ["app", "build_app"]
+__all__ = ["build_app"]
 
 _log = structlog.get_logger(__name__)
 
@@ -411,6 +414,3 @@ def build_app(
     return Starlette(
         routes=[Route("/webhooks/github", _handle_issue_comment, methods=["POST"])]
     )
-
-
-app = build_app()
