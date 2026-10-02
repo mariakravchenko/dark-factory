@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Completed 11-07-PLAN.md
-last_updated: "2026-10-01T07:31:08.681Z"
-last_activity: 2026-10-01
+stopped_at: Completed 11-08-PLAN.md
+last_updated: "2026-10-02T08:13:20.956Z"
+last_activity: 2026-10-02
 last_activity_desc: Phase 11 execution started
-state_head: 2b8edc822659cc2d6af130ac4f1f2638bfe8e871
+state_head: 7e9a76df7c754f06e33f3ca918aeffc03496c34a
 progress:
   total_phases: 12
   completed_phases: 0
-  total_plans: 66
-  completed_plans: 66
+  total_plans: 69
+  completed_plans: 67
   percent: 0
 ---
 
@@ -28,9 +28,9 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
-Plan: 3 of 7
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-10-01 — Phase 11 execution started
+Last activity: 2026-10-02 — Phase 11 execution started
 
 Progress: [░░░░░░░░░░] 0% (10/12 phases)
 
@@ -121,6 +121,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P05 | ~40min task-commits + ~4h10min verification wait | 2 tasks | 2 files |
 | Phase 11 P06 | ~20min task-commits + ~1h04m db-tier verification wait | 2 tasks | 3 files |
 | Phase 11 P07 | 9min | 2 tasks | 2 files |
+| Phase 11 P08 | 70min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -251,6 +252,8 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11] 11-05: a full unrestricted 'uv run pytest -q' sweep stalled with near-zero progress after 2.5h against the real remote Neon branch and was terminated; superseded by unit + 'unit or contract' + a standalone 'db' tier run (205 passed, 0 failed) -- integration tier unverified this session, logged to WINDOWS.md entry #17
 - [Phase 11]: [Phase 11]: 11-06: deferred webhook/app.py ASGI construction to a build_app() factory (uvicorn --factory) closing G-11-1; added tests/unit/test_webhook_import_needs_no_database.py as a package-wide child-process import sweep (0 offenders, 1 tolerated mcp extra); db tier re-confirmed green (205 passed/1 skipped, external Neon rung, 1:04:05)
 - [Phase 11]: 11-07: Resolved G-11-2 as 'both, commented' -- README's reference resume.yml carries an inert, fully-commented install step plus a worker-runtime table (claude-code/claude, copilot/copilot, hermes/hermes) derived from LIVE_RUNTIMES, naming no third-party install command (T-11-28)
+- [Phase 11]: 11-08: push_token threaded as required kw-only param (no default) on run_publish_step, sourced from runner.py's existing gate_settings object -- closes 6 of G-11-3's 12 CI failures (Sink B)
+- [Phase 11]: 11-08: declared-inventory AST guard keys each get_settings() call by (relative path, enclosing-function qualname, per-scope occurrence counter) -- not bare qualname -- so orchestrator/runner.py's 3 same-function reads stay 3 distinct entries (18 total across 12 modules), matching the plan's stated cardinality while never embedding a raw line number
 
 ### Pending Todos
 
@@ -275,6 +278,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-01T07:31:08.583Z
-Stopped at: Completed 11-07-PLAN.md
+Last session: 2026-10-02T08:13:20.865Z
+Stopped at: Completed 11-08-PLAN.md
 Resume file: None
