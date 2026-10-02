@@ -141,6 +141,17 @@ None — plan executed exactly as written. All three tasks' `<verify>` blocks ra
 - The `tests/support/log_sink.py`-dependent integration-tier redaction sweep was reachable in this execution sandbox (`DARK_FACTORY_TEST_DATABASE_URL` set, external Postgres rung) and was run: `tests/integration/test_redaction_interactions.py`, `test_secret_redaction_e2e.py`, and `test_capability_denial_no_secret_leak.py` — 14 passed in 93.40s. No deferred verification needed for that rung.
 - No blockers for 11-10.
 
+## Self-Check: PASSED
+
+- FOUND: tests/support/log_sink.py
+- FOUND: tests/unit/test_clarification_comment.py
+- FOUND: tests/support/live_runtime.py
+- FOUND: .planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-09-SUMMARY.md
+- FOUND: commit 3d7f459 (Task 1)
+- FOUND: commit 48fc416 (Task 2)
+- FOUND: commit 0470db7 (Task 3)
+- FOUND: commit a7d489a (plan metadata)
+
 ---
 *Phase: 11-one-orchestrator-many-triggers-cross-machine-resume*
 *Completed: 2026-10-02*
