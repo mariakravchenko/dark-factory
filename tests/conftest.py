@@ -31,7 +31,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from dark_factory.config.settings import Settings
+from dark_factory.config.settings import Settings, get_settings
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
 from tests.support.git_repo import make_git_repo
@@ -194,6 +194,58 @@ def _alembic_config(url: str) -> Config:
     cfg.set_main_option("script_location", str(_REPO_ROOT / "migrations"))
     cfg.set_main_option("sqlalchemy.url", url)
     return cfg
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _database_url_env(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Propagate the provisioned ``pg_url`` into ``DATABASE_URL`` /
+    ``DATABASE_URL_DIRECT`` for ``db`` / ``integration`` tests (G-11-4).
+
+    The ``pg_url`` fixture yields a connection URL for a test's own direct
+    SQLAlchemy use, but production code reached by ``db``-marked tests (e.g.
+    ``orchestrator.runner.advance``/``drive``, via ``get_settings()``) has no
+    other path to that URL. Locally this repository's git-ignored ``.env``
+    has always silently supplied *some* value for both required `Settings`
+    fields, masking the gap — identical masking mechanism to G-11-1/G-11-3,
+    just reached through the db tier's own provisioning path instead of the
+    unit/contract tier's test-support layer. CI has no ``.env``, so without
+    this fixture every db-tier test that drives such production code fails
+    with ``pydantic_core.ValidationError: database_url / database_url_direct
+    Field required`` (first observed in CI run 36994498994, 2026-10-02).
+
+    Supplies both vars only when absent — mirrors the only-when-absent
+    convention ``tests/support/log_sink.py`` established for the identical
+    class of gap (G-11-3) — so a developer whose own ``.env`` already points
+    at a real database is unaffected, and this fixture never masks a genuine
+    local misconfiguration. Unlike ``log_sink.py``'s fake constants, the
+    value supplied here is the real provisioned ``pg_url`` — db-tier tests
+    actually connect to it, so a fake value would break them outright.
+    """
+    wants_database = any(
+        item.get_closest_marker("db") or item.get_closest_marker("integration")
+        for item in request.session.items
+    )
+    if not wants_database:
+        yield
+        return
+
+    url = request.getfixturevalue("pg_url")
+    supplied = [
+        name
+        for name in ("DATABASE_URL", "DATABASE_URL_DIRECT")
+        if name not in os.environ
+    ]
+    for name in supplied:
+        os.environ[name] = url
+    if supplied:
+        get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        for name in supplied:
+            del os.environ[name]
+        if supplied:
+            get_settings.cache_clear()
 
 
 @pytest.fixture(scope="session", autouse=True)
