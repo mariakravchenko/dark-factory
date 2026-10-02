@@ -74,6 +74,13 @@ CLAUDE_CREDENTIAL_ENV_VAR = "ANTHROPIC_API_KEY"
 CLAUDE_BINARY = "claude"
 PERMISSION_MODE = "dontAsk"
 
+# G-11-5: the CLI's own stderr text when `--resume <id>` names a session it
+# has no local record of -- the signature a cross-machine resume (pause on
+# a laptop, resume inside CI) hits every time, since Claude Code's session
+# transcripts are local-filesystem state that never crosses machines.
+# Matched as a substring of `WorkerResult.error`, never parsed further.
+_SESSION_NOT_FOUND_MARKER = "No conversation found with session ID"
+
 # Metadata keys copied verbatim from the CLI's ResultMessage object when
 # present -- never a hardcoded superset, so an absent field is simply absent
 # from metadata rather than appearing as a fabricated None.
@@ -220,6 +227,19 @@ def _base_argv(context: object) -> list[str]:
     if settings.claude_model:
         argv.extend(["--model", settings.claude_model])
     return argv
+
+
+def _is_session_not_found(result: WorkerResult) -> bool:
+    """True when ``result`` is a native ``--resume`` attempt's failure
+    specifically because the CLI has no local record of the named session
+    (G-11-5) -- never true for any other failure (timeout, auth, a genuine
+    CLI crash), which must surface to the caller unchanged rather than
+    trigger a retry that could mask a real bug."""
+    return (
+        result.status is WorkerResultStatus.FAILED
+        and result.error is not None
+        and _SESSION_NOT_FOUND_MARKER in result.error
+    )
 
 
 class ClaudeCodeWorker(CodingWorker):
@@ -407,14 +427,37 @@ class ClaudeCodeWorker(CodingWorker):
                 "-p",
                 answer or RESUME_CONTINUATION_PROMPT,
             ]
-        else:
-            # HITL-05: the context-reconstruction branch -- no --resume
-            # element at all.
-            argv = [
-                *_base_argv(context),
-                "-p",
-                build_resume_prompt(context, previous, answer),
-            ]
+            result = self._spawn_and_parse(argv, context)
+            if _is_session_not_found(result):
+                # G-11-5: the session a previous attempt recorded is Claude
+                # Code's own local-filesystem state on the machine that
+                # created it -- 07-COVERAGE.md already rejected --continue
+                # for exactly this reason ("process-local state, incompatible
+                # with a durable orchestrator that resumes ... on a different
+                # machine"); an explicit --resume <id> has the identical
+                # constraint, the id just makes it explicit instead of
+                # implicit. A laptop-pause -> CI-resume hits this every time;
+                # same-machine resume never does. Fall through to HITL-05
+                # context reconstruction rather than surfacing the native
+                # failure as this role's own result -- everything that
+                # reconstruction needs (task, prior summary, questions,
+                # answer) already travels through Neon/git, independent of
+                # Claude's own session memory.
+                argv = [
+                    *_base_argv(context),
+                    "-p",
+                    build_resume_prompt(context, previous, answer),
+                ]
+                return self._spawn_and_parse(argv, context)
+            return result
+
+        # HITL-05: the context-reconstruction branch -- no --resume
+        # element at all.
+        argv = [
+            *_base_argv(context),
+            "-p",
+            build_resume_prompt(context, previous, answer),
+        ]
         return self._spawn_and_parse(argv, context)
 
     def capabilities(self) -> WorkerCapabilities:
