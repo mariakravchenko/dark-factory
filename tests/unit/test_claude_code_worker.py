@@ -9,6 +9,8 @@ every test drives a fake ``claude`` executable written by
 from __future__ import annotations
 
 import json
+import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -680,6 +682,130 @@ def test_resume_without_session_id_reconstructs_context(
     assert "need a decision about clusters" in prompt
     assert "which cluster should I target?" in prompt
     assert "the primary cluster" in prompt
+
+
+def _write_resume_aware_fake_claude(
+    directory: Path, *, resume_stderr: str, success_payload: str, calls_log: Path
+) -> Path:
+    """A fake ``claude`` whose behaviour depends on whether ``--resume`` is
+    present in argv (G-11-5): exits 1 with ``resume_stderr`` when it is,
+    exits 0 with ``success_payload`` otherwise. Unlike
+    :func:`~tests.support.fake_claude_cli.write_fake_claude` (one fixed
+    behaviour per script), this is what proving a *fallback* needs -- two
+    sequential invocations of the same binary with different outcomes.
+    ``calls_log`` is appended to (not overwritten) once per invocation, as a
+    JSON-lines file of each call's full argv, so a test can assert both the
+    order and the content of every invocation, not just the last.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    script_path = directory / "claude"
+    script = f"""#!{sys.executable}
+import json
+import sys
+
+with open({str(calls_log)!r}, "a", encoding="utf-8") as log_fh:
+    log_fh.write(json.dumps(sys.argv) + "\\n")
+
+if "--resume" in sys.argv:
+    sys.stderr.write({resume_stderr!r})
+    sys.exit(1)
+else:
+    sys.stdout.write({success_payload!r})
+    sys.exit(0)
+"""
+    script_path.write_text(script, encoding="utf-8")
+    mode = script_path.stat().st_mode
+    script_path.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    return directory
+
+
+def test_resume_falls_back_to_context_reconstruction_when_native_session_not_found(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """G-11-5: the session a previous attempt recorded is Claude Code's own
+    local-filesystem state on the machine that created it (COVERAGE.md's
+    rejection of ``--continue`` for process-local state applies equally to
+    an explicit ``--resume <id>`` -- the id just makes the same locality
+    constraint explicit instead of implicit). A cross-machine resume (pause
+    on a laptop, resume inside CI) therefore cannot find that session, and
+    this is Claude Code's own real failure signature for it -- reproduced
+    verbatim from a live cross-machine resume attempt that hit exactly this
+    (dark-factory run 472dc760-8b4e-4473-b5ad-63b8247ba1fe, 2026-10-02):
+    the CLI exits 1 with "No conversation found with session ID: <id>" on
+    stderr, never reaching its JSON stdout contract at all. Falling back to
+    HITL-05's context-reconstruction branch (not simply failing the role)
+    preserves the phase's stated goal -- "a run started on a laptop finishes
+    in CI" -- without pretending Claude's own conversational memory
+    travelled with it.
+    """
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    calls_log = tmp_path / "calls.jsonl"
+    _write_resume_aware_fake_claude(
+        fake_dir,
+        resume_stderr="No conversation found with session ID: sess-abc\n",
+        success_payload=_SUCCESS_PAYLOAD,
+        calls_log=calls_log,
+    )
+
+    previous = _paused_with_session_id("sess-abc")
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().resume(_context(), previous, "the primary cluster")
+
+    calls = [json.loads(line) for line in calls_log.read_text("utf-8").splitlines()]
+    assert len(calls) == 2, (
+        "expected exactly one retry: the native attempt, then the fallback"
+    )
+
+    first_argv, second_argv = calls
+    assert first_argv[first_argv.index("--resume") + 1] == "sess-abc"
+    assert "--resume" not in second_argv
+    fallback_prompt = second_argv[second_argv.index("-p") + 1]
+    assert "need a decision about clusters" in fallback_prompt
+    assert "which cluster should I target?" in fallback_prompt
+    assert "the primary cluster" in fallback_prompt
+
+    # The final result reflects the FALLBACK call's (successful) outcome,
+    # not the native attempt's failure -- the caller never sees the
+    # session-not-found error as this role's own result.
+    assert result.status is WorkerResultStatus.COMPLETED
+    assert result.summary == "done"
+    assert result.worker_session_id == "sess-abc"
+
+
+def test_resume_does_not_fall_back_on_an_unrelated_native_failure(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fallback above must be scoped to the one known cross-machine
+    signature -- a native resume that fails for any OTHER reason (a crash, a
+    real bug, an unrelated CLI error) must surface as a normal failure, not
+    silently retry and potentially mask it. Only one invocation should ever
+    occur in this case.
+    """
+    from dark_factory.domain.worker import WorkerResultStatus
+    from dark_factory.workers.claude_code import ClaudeCodeWorker
+
+    fake_dir = tmp_path / "fakebin"
+    calls_log = tmp_path / "calls.jsonl"
+    _write_resume_aware_fake_claude(
+        fake_dir,
+        resume_stderr="internal error: unexpected panic\n",
+        success_payload=_SUCCESS_PAYLOAD,
+        calls_log=calls_log,
+    )
+
+    previous = _paused_with_session_id("sess-abc")
+
+    with fake_claude_env(monkeypatch, fake_dir):
+        result = ClaudeCodeWorker().resume(_context(), previous, "the primary cluster")
+
+    calls = [json.loads(line) for line in calls_log.read_text("utf-8").splitlines()]
+    assert len(calls) == 1, "an unrelated failure must not trigger the fallback retry"
+    assert result.status is WorkerResultStatus.FAILED
+    assert "internal error: unexpected panic" in (result.error or "")
 
 
 def test_resume_with_null_answer_yields_non_empty_prompt_on_both_branches(
