@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Completed 11-08-PLAN.md
-last_updated: "2026-10-02T08:13:20.956Z"
+stopped_at: Completed 11-09-PLAN.md
+last_updated: "2026-10-02T08:35:51.620Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 11 execution started
-state_head: 7e9a76df7c754f06e33f3ca918aeffc03496c34a
+state_head: 0470db787d9536f70341639b59494c52b059324e
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 69
-  completed_plans: 67
+  completed_plans: 68
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 11 execution started
 
@@ -122,6 +122,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P06 | ~20min task-commits + ~1h04m db-tier verification wait | 2 tasks | 3 files |
 | Phase 11 P07 | 9min | 2 tasks | 2 files |
 | Phase 11 P08 | 70min | 2 tasks | 6 files |
+| Phase 11 P09 | 25min task-commits + 10min verification | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -254,6 +255,9 @@ Recent decisions affecting current work:
 - [Phase 11]: 11-07: Resolved G-11-2 as 'both, commented' -- README's reference resume.yml carries an inert, fully-commented install step plus a worker-runtime table (claude-code/claude, copilot/copilot, hermes/hermes) derived from LIVE_RUNTIMES, naming no third-party install command (T-11-28)
 - [Phase 11]: 11-08: push_token threaded as required kw-only param (no default) on run_publish_step, sourced from runner.py's existing gate_settings object -- closes 6 of G-11-3's 12 CI failures (Sink B)
 - [Phase 11]: 11-08: declared-inventory AST guard keys each get_settings() call by (relative path, enclosing-function qualname, per-scope occurrence counter) -- not bare qualname -- so orchestrator/runner.py's 3 same-function reads stay 3 distinct entries (18 total across 12 modules), matching the plan's stated cardinality while never embedding a raw line number
+- [Phase 11]: [Phase 11] 11-09: real_log_sink() supplies DATABASE_URL/DATABASE_URL_DIRECT only when absent (never overriding a value a test set on purpose), fixed once at the shared-helper layer so all current and future real-sink callers inherit the property with zero edit to test_webhook_signature.py
+- [Phase 11]: [Phase 11] 11-09: test_clarification_comment.py's _drive_needs_input patches runner_module.get_settings with the shared fake_settings fixture, covering all three of _run_current_role's conditionally-taken settings reads in one patch; runner.py left unmodified
+- [Phase 11]: [Phase 11] 11-09: credential_missing() catches pydantic.ValidationError specifically (never bare Exception) and reports an unconstructible Settings as credential-absent, closing a latent collection-abort sibling worse than G-11-3's 12 reported failures; skip_reason's two-arm contract unchanged
 
 ### Pending Todos
 
@@ -278,6 +282,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:13:20.865Z
-Stopped at: Completed 11-08-PLAN.md
+Last session: 2026-10-02T08:35:51.517Z
+Stopped at: Completed 11-09-PLAN.md
 Resume file: None

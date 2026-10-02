@@ -474,7 +474,7 @@ Plans:
   2. CLI, webhook and CI entrypoints all funnel into the same `advance(run_id)`; there is no separate CI orchestrator and no CI-only code path.
   3. The `FakeWorker` orchestration suite covers role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, retry exhaustion and publishing, and runs green in CI with no external AI calls and no live worker credentials.
 
-**Plans**: 8/10 plans executed — 7 executed, 3 gap closure pending (from 11-UAT.md: G-11-3)
+**Plans**: 9/10 plans executed — 7 executed, 3 gap closure pending (from 11-UAT.md: G-11-3)
 
 Plans:
 **Wave 1**
@@ -499,7 +499,7 @@ Plans:
 **Gap closure (G-11-3) — Wave 1** *(11-08 and 11-09 share no files and run in parallel)*
 
 - [x] 11-08-PLAN.md — G-11-3 production sink: `run_publish_step` takes its push token as a parameter, plus one declared inventory of every process-global settings read (QUAL-01)
-- [ ] 11-09-PLAN.md — G-11-3 test-infrastructure sinks: the shared real-sink log helper, the clarification driver's all-branches override, and the live-runtime probe that aborted collection (QUAL-01)
+- [x] 11-09-PLAN.md — G-11-3 test-infrastructure sinks: the shared real-sink log helper, the clarification driver's all-branches override, and the live-runtime probe that aborted collection (QUAL-01)
 
 **Gap closure (G-11-3) — Wave 2** *(blocked on 11-08 and 11-09)*
 
@@ -540,7 +540,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Copilot & Hermes — Worker Independence Proven | 6/6 | Complete    | 2026-09-22 |
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | Complete    | 2026-09-28 |
-| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 8/10 | In Progress|  |
+| 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 9/10 | In Progress|  |
 | 12. Observability & Audit Surface | 0/TBD | Not started | - |
 
 ## Coverage
