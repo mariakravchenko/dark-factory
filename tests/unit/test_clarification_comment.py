@@ -3,11 +3,15 @@
 ``Signal.ROLE_NEEDS_INPUT`` branch inside ``orchestrator/runner.py``'s
 ``_run_current_role``.
 
-No database: :class:`~dark_factory.persistence.repositories.RunState` is a
-frozen pydantic model constructed directly (the same idiom
-``tests/unit/test_publish_idempotency.py`` established for GIT-04), and
+This module opens no PostgreSQL connection and constructs no ``Settings``
+object of its own: :class:`~dark_factory.persistence.repositories.RunState` is
+a frozen pydantic model constructed directly (the same idiom
+``tests/unit/test_publish_idempotency.py`` established for GIT-04),
 ``apply_transition`` is monkeypatched to a recording spy rather than exercised
-against a real Postgres row -- what this plan's own db-tier proof
+against a real Postgres row, and ``_drive_needs_input`` supplies a
+``fake_settings`` object in place of the runner module's own process-global
+``get_settings`` accessor (G-11-3, plan 11-09) -- so this module needs no
+database URL present in the environment. What this plan's own db-tier proof
 (``tests/db/test_ask_posts_comment.py``) covers against real PostgreSQL, this
 file assumes and instead proves the *decision* each branch makes, fast and
 deterministically. :class:`~tests.support.fake_github.FakeGitHubClient` (built
@@ -18,6 +22,13 @@ still used for the worktree ``_run_current_role`` unconditionally creates
 (GIT-01) -- a mock cannot reproduce ``ensure_worktree``'s real git behaviour,
 and the role's declared ``inputs``/``outputs`` are both empty here, so no
 database read is ever needed inside ``build_role_context`` either.
+
+The ``monkeypatch.setattr(runner_module, "get_settings", ...)`` patch in
+``_drive_needs_input`` covers *every* branch of ``_run_current_role`` that
+resolves the accessor through the runner module's own global name -- the
+quality-gate timeout/redaction read, the push-token read after the artifact
+commit, and the clarification-failure redaction read below -- not only the one
+this test exercises, because all three resolve the same patched name.
 """
 
 from __future__ import annotations
@@ -30,6 +41,7 @@ from uuid import UUID, uuid4
 import pytest
 
 import dark_factory.orchestrator.runner as runner_module
+from dark_factory.config.settings import Settings
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.task import NormalizedTask
 from dark_factory.domain.worker import WorkerResult, WorkerResultStatus
@@ -139,6 +151,7 @@ def _run_state(
 def _drive_needs_input(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fake_settings: Settings,
     *,
     source_kind: str,
     metadata: dict[str, Any],
@@ -148,6 +161,11 @@ def _drive_needs_input(
 ) -> tuple[RunStatus, list[dict[str, Any]]]:
     """Drive ``_run_current_role`` once against a scripted ``NEEDS_INPUT``
     result and return ``(new_status, apply_transition_call_kwargs)``."""
+    # Patches the settings accessor the runner module itself resolves (the
+    # same module-attribute override idiom tests/unit/test_load_github.py
+    # already uses), covering all three of _run_current_role's conditionally
+    # -taken get_settings() reads with one patch rather than one per branch.
+    monkeypatch.setattr(runner_module, "get_settings", lambda: fake_settings)
     repo_root = make_git_repo(tmp_path / "repo", base_branch="main")
     run_id = uuid4()
     role_execution_id = uuid4()
@@ -236,12 +254,13 @@ def test_body_never_contains_run_role_worker_worktree_or_branch_values() -> None
 
 
 def test_github_sourced_run_posts_one_comment_and_threads_the_id(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     fake = FakeGitHubClient(issue=_scripted_issue())
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
@@ -275,7 +294,7 @@ def test_github_sourced_run_posts_one_comment_and_threads_the_id(
 
 
 def test_an_already_posted_own_comment_is_adopted_without_a_second_post(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     """CR-01 (10-REVIEW.md): the crash-safety-net existence check finds a
     comment Dark Factory's own identity already posted, carrying the exact
@@ -292,6 +311,7 @@ def test_an_already_posted_own_comment_is_adopted_without_a_second_post(
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
@@ -311,7 +331,7 @@ def test_an_already_posted_own_comment_is_adopted_without_a_second_post(
 
 
 def test_a_comment_from_someone_else_with_the_same_text_is_not_adopted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     """The existence check matches on author identity, not text alone -- a
     look-alike comment posted by a different login (e.g. a human who quoted
@@ -323,6 +343,7 @@ def test_a_comment_from_someone_else_with_the_same_text_is_not_adopted(
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
@@ -342,7 +363,7 @@ def test_a_comment_from_someone_else_with_the_same_text_is_not_adopted(
 
 
 def test_pending_comment_id_already_set_skips_the_post(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     """D-05: a pending interaction that already carries a
     ``clarification_comment_id`` is never re-posted -- an empty client call log."""
@@ -350,6 +371,7 @@ def test_pending_comment_id_already_set_skips_the_post(
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
@@ -369,7 +391,7 @@ def test_pending_comment_id_already_set_skips_the_post(
 
 
 def test_text_sourced_run_never_calls_the_client_factory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     def _raising_factory() -> GitHubClient:
         raise AssertionError("github_client_factory must not be called for a text: run")
@@ -377,6 +399,7 @@ def test_text_sourced_run_never_calls_the_client_factory(
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="text",
         metadata={},
         github_client_factory=_raising_factory,
@@ -390,7 +413,7 @@ def test_text_sourced_run_never_calls_the_client_factory(
 
 
 def test_raising_create_comment_still_pauses_with_no_id_recorded(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     fake = FakeGitHubClient(
         issue=_scripted_issue(),
@@ -404,6 +427,7 @@ def test_raising_create_comment_still_pauses_with_no_id_recorded(
     new_status, calls = _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
@@ -433,7 +457,7 @@ def test_raising_create_comment_still_pauses_with_no_id_recorded(
 
 
 def test_no_scenario_ever_calls_a_comment_update_method(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_settings: Settings
 ) -> None:
     """D-08: each ``ROLE_NEEDS_INPUT`` posts a fresh comment and never edits a
     prior one. ``GitHubClient`` (and its fake) expose no update/edit method at
@@ -444,6 +468,7 @@ def test_no_scenario_ever_calls_a_comment_update_method(
     _drive_needs_input(
         tmp_path,
         monkeypatch,
+        fake_settings,
         source_kind="github",
         metadata={
             "owner": _OWNER,
