@@ -238,3 +238,12 @@ No blockers for 11-09 or 11-10. The two pre-existing out-of-scope conditions doc
 ---
 *Phase: 11-one-orchestrator-many-triggers-cross-machine-resume*
 *Completed: 2026-10-02*
+
+## Self-Check: PASSED
+
+- FOUND: `src/dark_factory/orchestrator/publish.py`
+- FOUND: `tests/unit/test_global_settings_reads_are_declared.py`
+- FOUND: `.planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-08-SUMMARY.md`
+- FOUND commit: `50ebbdc` (Task 1)
+- FOUND commit: `7e9a76d` (Task 2)
+- FOUND commit: `cfcf885` (plan metadata)
