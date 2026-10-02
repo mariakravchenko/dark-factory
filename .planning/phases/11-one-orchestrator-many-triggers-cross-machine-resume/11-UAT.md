@@ -28,7 +28,30 @@ expected: |
 result: issue
 reported: "test fsiled"
 severity: blocker
-ci_run: https://github.com/mariakravchenko/dark-factory/actions/runs/36850439597
+ci_run: https://github.com/mariakravchenko/dark-factory/actions/runs/36994498994
+observed_2026_10_02: |
+  Re-ran after the G-11-3 fix (plans 11-08/09/10) landed and was pushed for the first time.
+  Progress: the `Unit and contract tiers` step now PASSES (the literal G-11-3 failure is
+  confirmed fixed on a real hosted runner — all 12 originally-failing tests green, plus
+  lint/mypy/worker-name-leak guard all green). This is new evidence this truth is partially
+  met.
+  However, the `Database tier (FakeWorker orchestration suite, QUAL-01)` step — reached for
+  the first time ever in CI, since it always aborted earlier before this fix — now fails:
+  101 failed, 90 passed, 14 errors, all with the identical
+  `pydantic_core.ValidationError: 2 validation errors for Settings (database_url,
+  database_url_direct Field required)` signature. Root cause (confirmed by reading
+  tests/conftest.py): the testcontainers-provisioned Postgres URL is yielded only through
+  the `pg_url`/`engine` pytest fixtures for the test's OWN direct SQLAlchemy use — nothing
+  in conftest.py ever writes it into `os.environ["DATABASE_URL"]`/`DATABASE_URL_DIRECT`, so
+  any db-tier test that exercises production code calling `get_settings()` (e.g.
+  `orchestrator.runner.advance`/`drive`/`start_run`) still needs that env var set, same as
+  G-11-3's pattern — but this repo's local `.env` has always silently supplied one,
+  masking the gap in the db tier exactly as it did in the unit/contract tier. This is a
+  SIBLING gap, not G-11-3 itself: G-11-3's 3 gap-closure plans were explicitly scoped to
+  the unit/contract tier only (`tests/db/test_publish_idempotency.py` was touched only to
+  keep one call site compiling, nothing about this db-tier-wide env propagation gap).
+  Logged as a new gap below (G-11-4) rather than reopening G-11-3.
+  CI run: https://github.com/mariakravchenko/dark-factory/actions/runs/36994498994
 observed: |
   Pushed the branch (first time ever — 16 commits, never previously on origin) and watched
   the real `quality` job run. The `Unit and contract tiers` step itself FAILED (not the
@@ -153,3 +176,29 @@ blocked: 1
     - "Fix tests/support/live_runtime.py's credential_missing() to check for a missing ANTHROPIC_API_KEY/credential field without triggering a full Settings() construction that also requires database_url -- or supply a database-free settings path for this specific probe"
     - "Add the actual G-11-3 deliverable: a runtime analogue of 11-06's import-time guard -- a child `pytest -m \"unit or contract\"` process spawned with cwd=tmp_path and an explicit env allowlist omitting DATABASE_URL/DATABASE_URL_DIRECT, reusing test_webhook_import_needs_no_database.py's _ENV_ALLOWLIST/_sanitized_env idiom, with a positive control mirroring that file's Test 4, so this defect class cannot return silently a third time"
   debug_session: .planning/debug/ci-unit-tier-settings-validation-g-11-3.md
+
+- gap_id: G-11-4
+  truth: "The `Database tier (FakeWorker orchestration suite, QUAL-01)` CI step passes when DATABASE_URL/DATABASE_URL_DIRECT are not pre-set in the environment (same no-stray-.env constraint G-11-1/G-11-3 established, now for the db tier's own provisioning path)."
+  status: failed
+  reason: "First-ever real CI run of this step (https://github.com/mariakravchenko/dark-factory/actions/runs/36994498994, 2026-10-02) — reached for the first time because G-11-3's fix let the prior `Unit and contract tiers` step pass — failed with 101 failed, 90 passed, 14 errors, all `pydantic_core.ValidationError: database_url / database_url_direct Field required`."
+  severity: blocker
+  test: 1
+  root_cause: |
+    tests/conftest.py's testcontainers-backed `pg_url`/`engine` fixtures yield a Postgres URL
+    for a test's OWN direct SQLAlchemy use, but nothing writes that URL into
+    os.environ["DATABASE_URL"]/["DATABASE_URL_DIRECT"]. Any db-tier test that drives
+    production code calling get_settings() (orchestrator.runner.advance/drive/start_run, and
+    transitively anything they call) still needs those two env vars set — identical defect
+    class to G-11-1/G-11-3, just in the db tier's own harness instead of the unit/contract
+    tier's test-support layer. This repository's git-ignored .env has, until this run,
+    silently supplied values for every local db-tier run (the same masking mechanism G-11-3's
+    root_cause already documented), so the gap was invisible locally and never previously
+    reached in CI (every prior CI run aborted at an earlier step).
+  artifacts:
+    - path: tests/conftest.py
+      issue: "pg_url/engine fixtures (session-scoped) never propagate the testcontainers-provisioned URL into os.environ['DATABASE_URL']/['DATABASE_URL_DIRECT'], so get_settings() calls reached by db-marked tests still require those vars from elsewhere"
+  missing:
+    - "Decide and implement the propagation mechanism: either an autouse db-scoped fixture that sets os.environ['DATABASE_URL']/['DATABASE_URL_DIRECT'] from the resolved pg_url before any db-marked test body runs (restoring on teardown), or audit whether orchestrator.runner's db-tier-reached call sites actually need get_settings().database_url at all versus just the SQLAlchemy engine/session already provided by fixtures"
+    - "A sanitized-environment reproduction of the db tier (DATABASE_URL/DATABASE_URL_DIRECT absent, cwd with no .env, testcontainers rung) to confirm the fix and prevent recurrence, mirroring 11-10's unit/contract guard but for -m db"
+  debug_session: null
+
