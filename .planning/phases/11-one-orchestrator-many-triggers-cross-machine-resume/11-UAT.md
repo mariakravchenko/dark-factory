@@ -1,14 +1,17 @@
 ---
-status: diagnosed
+status: partial
 phase: 11-one-orchestrator-many-triggers-cross-machine-resume
 source: [11-VERIFICATION.md]
 started: 2026-10-01T11:35:00Z
-updated: 2026-10-02T00:00:00Z
+updated: 2026-10-02T13:15:00Z
 ---
 
 ## Current Test
 
-[testing paused — blocked on external billing issue, see Test 2]
+[testing complete for this session — Test 1's gap (G-11-3) resolved by plans 11-08/09/10;
+Test 2 still externally blocked on Anthropic Console billing. Both require a live/human
+action outside this session's authority: pushing this branch to re-run real CI (Test 1),
+and resolving the billing issue (Test 2). Re-run /gsd-verify-work 11 after either happens.]
 
 ## Tests
 
