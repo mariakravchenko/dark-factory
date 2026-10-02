@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 11
 current_phase_name: One Orchestrator, Many Triggers — Cross-Machine Resume
 status: executing
-stopped_at: Completed 11-09-PLAN.md
-last_updated: "2026-10-02T08:35:51.620Z"
+stopped_at: Completed 11-10-PLAN.md
+last_updated: "2026-10-02T09:08:52.920Z"
 last_activity: 2026-10-02
 last_activity_desc: Phase 11 execution started
-state_head: 0470db787d9536f70341639b59494c52b059324e
+state_head: 8a4f313f2d0085f22d89f6268b0c352633c9b5db
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 69
-  completed_plans: 68
+  completed_plans: 69
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 11 (One Orchestrator, Many Triggers — Cross-Machine Resume) — EXECUTING
-Plan: 3 of 10
+Plan: 4 of 10
 Status: Ready to execute
 Last activity: 2026-10-02 — Phase 11 execution started
 
@@ -123,6 +123,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P07 | 9min | 2 tasks | 2 files |
 | Phase 11 P08 | 70min | 2 tasks | 6 files |
 | Phase 11 P09 | 25min task-commits + 10min verification | 3 tasks | 3 files |
+| Phase 11 P10 | 35min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -258,6 +259,7 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11] 11-09: real_log_sink() supplies DATABASE_URL/DATABASE_URL_DIRECT only when absent (never overriding a value a test set on purpose), fixed once at the shared-helper layer so all current and future real-sink callers inherit the property with zero edit to test_webhook_signature.py
 - [Phase 11]: [Phase 11] 11-09: test_clarification_comment.py's _drive_needs_input patches runner_module.get_settings with the shared fake_settings fixture, covering all three of _run_current_role's conditionally-taken settings reads in one patch; runner.py left unmodified
 - [Phase 11]: [Phase 11] 11-09: credential_missing() catches pydantic.ValidationError specifically (never bare Exception) and reports an unconstructible Settings as credential-absent, closing a latent collection-abort sibling worse than G-11-3's 12 reported failures; skip_reason's two-arm contract unchanged
+- [Phase 11]: 11-10: Included all three live-CLI integration modules (claude-code, copilot, hermes) in Test 2's adversary, not just the two originally observed failing, since all three carry the identical import-time skip_reason() exposure.
 
 ### Pending Todos
 
@@ -272,6 +274,8 @@ None yet.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). [Phase 10] 10-07/10-08's deferred db-tier verification (no PostgreSQL reachable in the execution sandbox) — resolved: user ran the full unrestricted suite against real Neon PostgreSQL 17 during manual UAT (1171 passed, 1 skipped, 0 failed, no marker filter), confirming all four previously gate-exhausted integration tests reach `COMPLETED` and both gap-closure db-tier tests pass. Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
+- 11-10: Human check pending -- push branch / open PR and let ci.yml's quality job run on a real GitHub-hosted runner to confirm Unit and contract tiers passes, Database tier reaches testcontainers, db tier passes, and record 3 measured durations + run URL (11-VERIFICATION.md status: human_needed).
+
 ## Deferred Items
 
 Items acknowledged and deferred at milestone close, most recent first:
@@ -282,6 +286,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-02T08:35:51.517Z
-Stopped at: Completed 11-09-PLAN.md
+Last session: 2026-10-02T09:08:52.816Z
+Stopped at: Completed 11-10-PLAN.md
 Resume file: None
