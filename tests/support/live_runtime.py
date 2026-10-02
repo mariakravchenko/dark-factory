@@ -26,7 +26,7 @@ from __future__ import annotations
 import shutil
 from collections.abc import Mapping
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from dark_factory.config.settings import get_settings
 
@@ -85,8 +85,26 @@ def credential_missing(runtime: LiveRuntime) -> bool:
 
     Reads through :func:`~dark_factory.config.settings.get_settings` (never
     ``os.environ`` directly), so an operator's ``.env`` file counts.
+
+    An unconstructible ``Settings`` object (no ``DATABASE_URL`` /
+    ``DATABASE_URL_DIRECT`` and no readable ``.env``) is also reported as the
+    credential being absent -- a credential that cannot even be read is by
+    definition not configured. This matters for reachability, not just
+    correctness: :func:`skip_reason` calls this function at *module import
+    time* for the live suites (``tests/integration/test_claude_code_live.py``
+    and friends), so letting the ``ValidationError`` propagate aborts
+    collection for the *entire* ``unit or contract`` selector rather than
+    skipping the one suite that cannot run -- a worse defect than any single
+    runtime failure sitting beside it (G-11-3, plan 11-09). Only pydantic's
+    own validation error is caught here, never a bare ``Exception`` -- that
+    would also swallow a genuine misconfiguration (e.g. a renamed credential
+    field) and turn it into a silent skip instead of a loud failure.
     """
-    return getattr(get_settings(), runtime.credential_field) is None
+    try:
+        settings = get_settings()
+    except ValidationError:
+        return True
+    return getattr(settings, runtime.credential_field) is None
 
 
 def skip_reason(runtime: LiveRuntime) -> str | None:
