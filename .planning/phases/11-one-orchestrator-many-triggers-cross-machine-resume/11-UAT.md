@@ -3,15 +3,16 @@ status: partial
 phase: 11-one-orchestrator-many-triggers-cross-machine-resume
 source: [11-VERIFICATION.md]
 started: 2026-10-01T11:35:00Z
-updated: 2026-10-02T13:15:00Z
+updated: 2026-10-02T13:20:00Z
 ---
 
 ## Current Test
 
-[testing complete for this session — Test 1's gap (G-11-3) resolved by plans 11-08/09/10;
-Test 2 still externally blocked on Anthropic Console billing. Both require a live/human
-action outside this session's authority: pushing this branch to re-run real CI (Test 1),
-and resolving the billing issue (Test 2). Re-run /gsd-verify-work 11 after either happens.]
+[testing complete — Test 1 PASSED on real CI (run 37011371774) after closing both G-11-3
+and the newly-discovered sibling gap G-11-4 (db tier env propagation). Test 2 remains
+externally blocked on Anthropic Console billing, outside this session's authority to
+resolve. Re-run /gsd-verify-work 11 once that billing issue is fixed and a live resume
+test can be attempted.]
 
 ## Tests
 
@@ -25,7 +26,19 @@ expected: |
   budgets (20/30 min). This is the exact scenario UAT test 1 originally ran and found broken
   (G-11-1): the branch carrying the fix commits has never been pushed, so no CI run has ever
   seen the corrected `webhook/app.py`.
-result: issue
+result: pass
+observed_2026_10_02_final: |
+  CI run https://github.com/mariakravchenko/dark-factory/actions/runs/37011371774 — green,
+  whole `quality` job in 3m23s. `Unit and contract tiers`: 849 passed, 0 failed, 73.24s
+  (confirms G-11-3 closed on a real runner). `Database tier`: 205 passed, 0 failed, 69.30s
+  (matches 11-06-SUMMARY.md's local 205-passed baseline exactly — confirms G-11-4 closed).
+  Both step durations sit inside their `[ASSUMED]` budgets (20/30 min) with large margin;
+  `ci.yml`'s two `[ASSUMED]` comments have been replaced with these measured values.
+  This followed one intermediate run (36994498994) that caught G-11-4 (db tier failing with
+  the same "Field required" signature as G-11-3, for a sibling reason: tests/conftest.py
+  never propagated the testcontainers URL into DATABASE_URL env for production code reached
+  by db-tier tests) — fixed in commit d66c959, re-pushed, and confirmed green above.
+result_history: "issue"
 reported: "test fsiled"
 severity: blocker
 ci_run: https://github.com/mariakravchenko/dark-factory/actions/runs/36994498994
@@ -103,8 +116,8 @@ next_step: "Once the ANTHROPIC_API_KEY account issue is resolved (likely needs A
 ## Summary
 
 total: 2
-passed: 0
-issues: 1
+passed: 1
+issues: 0
 pending: 0
 skipped: 0
 blocked: 1
@@ -179,7 +192,16 @@ blocked: 1
 
 - gap_id: G-11-4
   truth: "The `Database tier (FakeWorker orchestration suite, QUAL-01)` CI step passes when DATABASE_URL/DATABASE_URL_DIRECT are not pre-set in the environment (same no-stray-.env constraint G-11-1/G-11-3 established, now for the db tier's own provisioning path)."
-  status: failed
+  status: resolved
+  resolved_by: "tests/conftest.py commit d66c959 (_database_url_env autouse fixture)"
+  resolved_at: 2026-10-02
+  resolution_note: |
+    Added an autouse, db/integration-scoped session fixture that propagates the
+    testcontainers-provisioned pg_url into os.environ["DATABASE_URL"]/["DATABASE_URL_DIRECT"]
+    only when absent (same only-when-absent idiom as G-11-3's real_log_sink fix). Verified
+    locally against a 12-test sanitized subset (was failing, now passing) and against the
+    real CI run (37011371774): Database tier 205 passed, 0 failed, 69.30s -- matches
+    11-06-SUMMARY.md's known-good baseline exactly.
   reason: "First-ever real CI run of this step (https://github.com/mariakravchenko/dark-factory/actions/runs/36994498994, 2026-10-02) — reached for the first time because G-11-3's fix let the prior `Unit and contract tiers` step pass — failed with 101 failed, 90 passed, 14 errors, all `pydantic_core.ValidationError: database_url / database_url_direct Field required`."
   severity: blocker
   test: 1

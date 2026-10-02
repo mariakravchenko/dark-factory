@@ -15,12 +15,11 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    # [ASSUMED] 30 (raised from 15) -- headroom for the image pull, Alembic
-    # migrations, ~177 db-tier tests and plan 11-03's two subprocess spawns,
-    # on top of the pre-existing lint/mypy/unit work. Post-first-run
-    # calibration target: replace with a measured value per this phase's
-    # 11-04-PLAN.md <human-check> once a real CI run reports actual timing
-    # (11-RESEARCH.md Assumption A1 / Open Question 2).
+    # MEASURED (run 37011371774, 2026-10-02): whole job completed in 3m23s
+    # (lint+mypy+worker-name-guard+unit/contract 73.24s, db tier 69.30s, plus
+    # setup/teardown overhead). 30 keeps ~9x headroom over the observed time;
+    # left unchanged rather than tightened, since CI runner variance is real
+    # and a tight budget just reintroduces flaky timeouts for no benefit.
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -67,8 +66,10 @@ jobs:
       # <human-check> needs to calibrate the timeouts below. The fast tiers
       # above also still fail fast, before any container is pulled.
       #
-      # [ASSUMED] timeout-minutes: 20 -- see the job-level timeout comment
-      # above for the same post-first-run calibration note.
+      # MEASURED (run 37011371774, 2026-10-02): 205 passed in 69.30s --
+      # matches 11-06-SUMMARY.md's 205-passed local baseline exactly. 20
+      # keeps ~17x headroom; left unchanged for the same runner-variance
+      # reason as the job-level timeout above.
       - name: Database tier (FakeWorker orchestration suite, QUAL-01)
         timeout-minutes: 20
         run: uv run pytest -q -m db
