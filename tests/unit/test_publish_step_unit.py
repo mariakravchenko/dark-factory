@@ -31,6 +31,10 @@ _OWNER = "acme"
 _REPO = "widgets"
 _ISSUE_NUMBER = 5
 _BASE_BRANCH = "main"
+# Obviously-fake, greppable push token -- reuses tests/conftest.py's own
+# fake-GitHub-token shape (``ghp_FAKE...``) rather than inventing a new
+# spelling (T-11-33).
+_FAKE_PUSH_TOKEN = "ghp_FAKEfakeFAKEfake3333333333333333333333"
 
 
 def _run_state(run_id: UUID, *, working_branch: str) -> RunState:
@@ -108,6 +112,7 @@ def test_create_pr_true_returns_pushed_sha_and_pr_identifiers_from_one_call(
         client=fake,
         create_pr=True,
         known_secrets={},
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     assert isinstance(result, PublishResult)
@@ -145,6 +150,7 @@ def test_pr_body_links_the_source_issue_and_carries_no_execution_scoped_data(
         client=fake,
         create_pr=True,
         known_secrets={},
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     _, kwargs = next(c for c in fake.calls if c[0] == "create_pull_request")
@@ -171,6 +177,7 @@ def test_create_pr_false_makes_no_github_call_and_returns_an_all_none_success(
         client=None,
         create_pr=False,
         known_secrets={},
+        push_token=None,  # create_pr=False early return: no push
     )
 
     assert result == PublishResult(
@@ -200,6 +207,7 @@ def test_create_pull_request_raising_github_api_error_does_not_re_raise(
         client=fake,
         create_pr=True,
         known_secrets={},
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     assert result.pr_number is None

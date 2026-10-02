@@ -1346,6 +1346,11 @@ def _run_current_role(
                                         known_secrets=(
                                             gate_settings.known_secret_values()
                                         ),
+                                        push_token=(
+                                            gate_settings.github_token.get_secret_value()
+                                            if gate_settings.github_token is not None
+                                            else None
+                                        ),
                                     )
                                 if publish_result.error is None:
                                     gate_events.append(

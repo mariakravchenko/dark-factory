@@ -51,7 +51,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from dark_factory.config.settings import get_settings
 from dark_factory.events.redaction import redact
 from dark_factory.git.diff import commit_run_artifacts, push_working_branch
 from dark_factory.git.lifecycle import head_sha
@@ -125,6 +124,7 @@ def run_publish_step(
     client: GitHubClient | None,
     create_pr: bool,
     known_secrets: Mapping[str, str],
+    push_token: str | None,
 ) -> PublishResult:
     """Commit, push and open exactly one pull request -- at most once ever,
     even across a crash (GIT-03, GIT-04, D-06, D-09).
@@ -156,12 +156,14 @@ def run_publish_step(
     1. When ``published_commit_sha`` is ``None``, reuses the existing git
        primitives verbatim -- never duplicates them:
        :func:`~dark_factory.git.diff.commit_run_artifacts` and
-       :func:`~dark_factory.git.diff.push_working_branch` (the same call
-       shape ``orchestrator/runner.py`` already uses for every role's own
-       artifact commit, including reading the push token as
-       ``settings.github_token.get_secret_value() if settings.github_token
-       is not None else None``), and :func:`~dark_factory.git.lifecycle.head_sha`
-       to capture the pushed SHA. This function is called from inside the
+       :func:`~dark_factory.git.diff.push_working_branch` (passing this
+       function's own ``push_token`` parameter straight through as the
+       ``token`` argument -- this function must be callable in a process
+       that has no database configured at all, because the unit tier calls
+       it directly, so the token arrives as a parameter rather than a
+       process-global settings read), and
+       :func:`~dark_factory.git.lifecycle.head_sha` to capture the pushed
+       SHA. This function is called from inside the
        terminal role's gate-PASS arm, before ``runner.py``'s own generic
        per-role commit runs -- so this is the commit that actually carries
        the role's own artifacts plus the just-written
@@ -269,12 +271,6 @@ def run_publish_step(
     if state.published_commit_sha is None:
         artifact_sha = commit_run_artifacts(work_dir, run_id, role=_PUBLISH_ROLE_LABEL)
         if artifact_sha is not None:
-            settings = get_settings()
-            push_token = (
-                settings.github_token.get_secret_value()
-                if settings.github_token is not None
-                else None
-            )
             push_working_branch(
                 work_dir, working_branch=working_branch, token=push_token
             )

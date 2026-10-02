@@ -454,6 +454,7 @@ def test_a_run_with_all_three_identifiers_recorded_reenters_with_an_empty_call_l
         client=fake,
         create_pr=True,
         known_secrets={},
+        push_token=None,  # fast path: all three identifiers recorded, no push
     )
 
     assert result.pr_number == 42

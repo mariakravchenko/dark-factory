@@ -2,17 +2,22 @@
 the three-way persisted-identifier fast path plus the GitHub-side
 existing-PR safety net inside ``orchestrator/publish.py::run_publish_step``.
 
-No database: :class:`~dark_factory.persistence.repositories.RunState` is a
-frozen pydantic model constructed directly, and the git primitives
-(``commit_run_artifacts`` / ``push_working_branch`` / ``head_sha``) are
-monkeypatched with recording spies rather than exercised against a real git
-repository -- what plan 10-06's own ``tests/unit/test_publish_step_unit.py``
-proves against a real throwaway repo, this file assumes and instead proves
-the *decision* each partial-completion point makes, fast and deterministically.
-:class:`~tests.support.fake_github.FakeGitHubClient` (built complete by plan
-10-01) stands in for GitHub itself; call *order* is asserted positionally,
-not just membership, because the claim under test is that the existence
-check precedes the create.
+No database and no ``Settings`` construction: this module opens no
+PostgreSQL connection and constructs no ``Settings`` object at all --
+:class:`~dark_factory.persistence.repositories.RunState` is a frozen pydantic
+model constructed directly, the git primitives (``commit_run_artifacts`` /
+``push_working_branch`` / ``head_sha``) are monkeypatched with recording
+spies rather than exercised against a real git repository (what plan
+10-06's own ``tests/unit/test_publish_step_unit.py`` proves against a real
+throwaway repo, this file assumes and instead proves the *decision* each
+partial-completion point makes, fast and deterministically), and the push
+token is passed as an explicit ``push_token`` keyword rather than read off a
+settings object -- so this module needs no ``DATABASE_URL`` present in the
+environment at all (a required URL string is not the same as a reachable
+server). :class:`~tests.support.fake_github.FakeGitHubClient` (built
+complete by plan 10-01) stands in for GitHub itself; call *order* is
+asserted positionally, not just membership, because the claim under test is
+that the existence check precedes the create.
 """
 
 from __future__ import annotations
@@ -42,6 +47,10 @@ _BASE_BRANCH = "main"
 _WORK_DIR = Path("/dark-factory-test/never-touched")
 _COMMIT_SHA = "cafef00d" * 5  # a 40-character placeholder SHA
 _KNOWN_SECRETS: dict[str, str] = {}
+# Obviously-fake, greppable push token -- reuses tests/conftest.py's own
+# fake-GitHub-token shape (``ghp_FAKE...``) rather than inventing a new
+# spelling (T-11-33).
+_FAKE_PUSH_TOKEN = "ghp_FAKEfakeFAKEfake2222222222222222222222"
 
 
 def _run_state(
@@ -152,11 +161,17 @@ def _install_git_spies(
     order: list[str],
     *,
     commit_sha: str = _COMMIT_SHA,
+    received_tokens: list[str | None] | None = None,
 ) -> None:
     """Replace the three git primitives ``publish.py`` calls with recording
     spies that touch no real filesystem or git repository -- ``commit``
     always finds "something new" (so the ordering scenario also exercises
-    the push call), returning a fixed SHA."""
+    the push call), returning a fixed SHA.
+
+    When ``received_tokens`` is supplied, ``_push``'s own ``token`` keyword
+    is appended to it -- the channel a test reads back to prove the value
+    supplied as ``run_publish_step``'s ``push_token`` is the exact value
+    ``push_working_branch`` receives."""
 
     def _commit(work_dir: Path, run_id: UUID, *, role: str) -> str | None:
         order.append("commit_run_artifacts")
@@ -164,6 +179,8 @@ def _install_git_spies(
 
     def _push(work_dir: Path, *, working_branch: str, token: str | None) -> None:
         order.append("push_working_branch")
+        if received_tokens is not None:
+            received_tokens.append(token)
 
     def _head_sha(work_dir: Path) -> str:
         order.append("head_sha")
@@ -220,6 +237,7 @@ def test_all_three_identifiers_recorded_returns_them_with_no_client_calls(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=None,  # fast path: no git command, no push
     )
 
     assert result == PublishResult(
@@ -256,6 +274,7 @@ def test_pushed_but_unrecorded_pr_adopts_an_existing_pull_request(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=None,  # already pushed by an earlier attempt: no second push
     )
 
     assert result.pr_number == 99
@@ -291,6 +310,7 @@ def test_pushed_but_unrecorded_pr_creates_when_none_found(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=None,  # already pushed by an earlier attempt: no second push
     )
 
     assert result.pr_number == 7
@@ -318,6 +338,7 @@ def test_nothing_recorded_commits_pushes_checks_then_creates_in_order(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     assert result.pr_number == 1
@@ -330,6 +351,36 @@ def test_nothing_recorded_commits_pushes_checks_then_creates_in_order(
         "find_pull_request_for_branch",
         "create_pull_request",
     ]
+
+
+def test_push_working_branch_receives_the_token_the_caller_supplied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one new assertion this task adds: the exact value passed as
+    ``run_publish_step``'s ``push_token`` is the exact value
+    ``push_working_branch`` receives as its ``token`` keyword. Before this
+    task, the spy discarded the token and nothing proved the wire; breaking
+    it now fails this test rather than silently pushing unauthenticated."""
+    run_id = uuid4()
+    working_branch = working_branch_name(run_id)
+    order: list[str] = []
+    received_tokens: list[str | None] = []
+    _install_git_spies(monkeypatch, order, received_tokens=received_tokens)
+    state = _run_state(run_id, working_branch=working_branch)
+    new_pr = GitHubPullRequest(number=1, url="https://example.invalid/pr/1")
+    fake = _OrderedFakeGitHubClient(order=order, pull_request=new_pr)
+
+    run_publish_step(
+        run_id=run_id,
+        state=state,
+        work_dir=_WORK_DIR,
+        client=fake,
+        create_pr=True,
+        known_secrets=_KNOWN_SECRETS,
+        push_token=_FAKE_PUSH_TOKEN,
+    )
+
+    assert received_tokens == [_FAKE_PUSH_TOKEN]
 
 
 def test_existing_pr_on_a_different_head_branch_is_not_adopted(
@@ -358,6 +409,7 @@ def test_existing_pr_on_a_different_head_branch_is_not_adopted(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     assert result.pr_number == 8
@@ -384,6 +436,7 @@ def test_create_pr_false_short_circuits_before_any_check_or_call(
         client=None,
         create_pr=False,
         known_secrets=_KNOWN_SECRETS,
+        push_token=None,  # create_pr=False early return: no push
     )
 
     assert result == PublishResult(
@@ -424,6 +477,7 @@ def test_github_api_error_from_find_pull_request_does_not_fall_through_to_create
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        push_token=None,  # already pushed by an earlier attempt: no second push
     )
 
     assert result.pr_number is None
@@ -463,6 +517,10 @@ def test_no_client_call_besides_find_or_create(
         client=fake,
         create_pr=True,
         known_secrets=_KNOWN_SECRETS,
+        # point-a actually pushes (nothing recorded); point-b does not
+        # (already pushed by an earlier attempt) -- the fake token is
+        # harmless on the path that never reads it.
+        push_token=_FAKE_PUSH_TOKEN,
     )
 
     assert {name for name, _ in fake.calls} <= {
