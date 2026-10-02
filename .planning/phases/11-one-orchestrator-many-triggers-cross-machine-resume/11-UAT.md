@@ -3,7 +3,7 @@ status: diagnosed
 phase: 11-one-orchestrator-many-triggers-cross-machine-resume
 source: [11-VERIFICATION.md]
 started: 2026-10-01T11:35:00Z
-updated: 2026-10-01T12:35:00Z
+updated: 2026-10-02T00:00:00Z
 ---
 
 ## Current Test
@@ -87,7 +87,21 @@ blocked: 1
 
 - gap_id: G-11-3
   truth: "The `Unit and contract tiers` CI step passes with no `DATABASE_URL` configured — the same no-database constraint G-11-1 established, generalized to every test the unit/contract tier selects."
-  status: failed
+  status: resolved
+  resolved_by: 11-08-PLAN.md, 11-09-PLAN.md, 11-10-PLAN.md
+  resolved_at: 2026-10-02
+  resolution_note: |
+    All 5 `missing:` items below are now closed locally: 11-08 threaded push_token as a
+    parameter (closes the publish.py sink) and added the declared settings-read inventory
+    guard; 11-09 fixed real_log_sink (only-when-absent), the clarification-comment driver
+    (all 3 _run_current_role reads), and credential_missing (unconstructible Settings ->
+    absent, not a raise); 11-10 added the actual recurrence guard
+    (test_unit_tier_needs_no_database.py) spawning a child process that proves the whole
+    unit/contract tier is green with no DATABASE_URL and no .env. Sanitized full-tier run:
+    835 passed, 1 skipped, 374 deselected, 0 of the original 12 failures remain (one
+    unrelated pre-existing failure documented separately). NOT yet re-observed on a real
+    GitHub-hosted runner — Test 1 below still requires a fresh push to close that loop; this
+    branch has not been pushed since the last CI run that originally reported G-11-3.
   reason: "Real CI run (https://github.com/mariakravchenko/dark-factory/actions/runs/36850439597) failed with 12 tests raising pydantic_core.ValidationError (database_url/database_url_direct Field required) across tests/unit/test_clarification_comment.py, test_publish_idempotency.py, test_publish_step_unit.py, and test_webhook_signature.py — the identical error signature G-11-1 diagnosed, in modules 11-06's fix did not cover. This branch had never been pushed to CI before this run, so the gap was latent since whichever phase introduced each of these tests, invisible locally because every local run inherits this repo's git-ignored .env."
   severity: blocker
   test: 1
