@@ -100,27 +100,34 @@ expected: |
   state. This is the exact live path UAT test 2 originally ran and found broken (G-11-2): no
   second live attempt against a real repository has been recorded since the README fix
   landed.
-result: blocked
-blocked_by: third-party
-reason: "Anthropic Console account's ANTHROPIC_API_KEY cannot currently make API calls ('Your credit balance is too low to access the Anthropic API', HTTP 400) despite the account showing a $5.97 balance. Confirmed via direct Messages API call (bypassing both the claude CLI and Dark Factory entirely) that this is Anthropic's own live billing answer, not a local cache/propagation issue: reproduced identically across two different API keys (original + freshly regenerated), across multiple retries spanning several minutes, with the user confirming same account, single default workspace, no multi-workspace spend-limit split. This blocks only the LOCAL run needed to reach a WAITING_HUMAN pause in this sandbox -- it is an external account/billing issue, unrelated to any phase 11 code or documentation."
+result: issue
+severity: blocker
+reason_historical_blocked: "Anthropic Console account's ANTHROPIC_API_KEY cannot currently make API calls ('Your credit balance is too low to access the Anthropic API', HTTP 400) despite the account showing a $5.97 balance. Confirmed via direct Messages API call (bypassing both the claude CLI and Dark Factory entirely) that this is Anthropic's own live billing answer, not a local cache/propagation issue: reproduced identically across two different API keys (original + freshly regenerated), across multiple retries spanning several minutes, with the user confirming same account, single default workspace, no multi-workspace spend-limit split. This blocks only the LOCAL run needed to reach a WAITING_HUMAN pause in this sandbox -- it is an external account/billing issue, unrelated to any phase 11 code or documentation."
 progress_made: |
-  Significant real progress before hitting this blocker:
+  Significant real progress before hitting the original billing blocker:
   - Found and fixed the webhook receiver invocation itself needed `dark_factory.webhook.app:build_app --factory` (not `:app`) to match 11-06's factory refactor -- confirmed via a live GitHub webhook ping returning 200 OK.
   - Found and fixed a database mismatch: the local receiver's DATABASE_URL and app-new's GitHub Actions `DATABASE_URL` secret pointed at different Neon projects; realigned to the same `ep-holy-bread-ae7sz0rt` instance.
   - Pushed the actual G-11-2 fix to the real target repo (`mariakravchenko/app-new`, commit 4e82ee6): added the `npm install -g @anthropic-ai/claude-code` step to `resume.yml`, matching README's corrected reference block.
   - Confirmed the webhook mechanism itself works end-to-end: redelivered a real GitHub `issue_comment` webhook event and got a 200 response from the live receiver.
   - Confirmed `claude` CLI itself is healthy (works fine under the user's own logged-in session) -- the failure is specific to the `ANTHROPIC_API_KEY` env var the worker adapter injects per CLAUDE.md's credential-boundary design, whose account cannot currently bill.
   - Discovered a secondary, unrelated fact: issue #15 (the original test issue) can no longer produce a fresh `WAITING_HUMAN` pause, because `dark-factory run`'s github source reader folds the entire existing comment thread (including the already-posted answer) into the initial task body -- opened issue #16 as a clean replacement for future retries.
-next_step: "Once the ANTHROPIC_API_KEY account issue is resolved (likely needs Anthropic support, since the discrepancy between displayed balance and live API billing enforcement could not be explained by key regeneration, workspace limits, or propagation delay), re-run: `dark-factory run github:16` from /Users/maryiakrauchanka/portfolio/app-new, wait for a WAITING_HUMAN pause, reply on the issue, then redeliver/wait for the webhook, and watch https://github.com/mariakravchenko/app-new/actions for the dispatched resume.yml run."
+observed_2026_10_02: |
+  Billing issue resolved externally (confirmed via a direct Messages API call returning HTTP 200). Retried the full live path with a fresh issue (#18, replacing #16):
+  - `dark-factory run github:18` reached `WAITING_HUMAN` on the first try -- but only after discovering app-new's own `.env` held a SEPARATE, stale/invalid ANTHROPIC_API_KEY (401 "API key is invalid", distinct from the earlier 400 billing error) -- the first attempt failed outright with that error before this was found and the key was synced to match the working one.
+  - Posted a reply on issue #18 via `gh issue comment`.
+  - The webhook -> workflow_dispatch chain WORKED END TO END: the local receiver's own logs show `run.resumed role=BA run_id=472dc760-...` followed by `webhook.dispatch.requested run_id=472dc760-... workflow=resume.yml`, and GitHub Actions genuinely ran `dark-factory resume "472dc760-..."` inside a real CI job -- this is the core G-11-2/HITL-06 claim, proven for the first time.
+  - BUT that CI-side resume then failed: `claude exited 1: No conversation found with session ID: f3acabd4-...`. Root cause: Claude Code's own session transcripts are local-filesystem state on the machine that creates them -- never synced anywhere, not even through Neon. BA's original attempt ran on the laptop and recorded that session id; CI is a different, ephemeral machine that has never seen it. `ClaudeCodeWorker._resume`'s native branch (`--resume <session_id>`) assumed any recorded session id was reachable from anywhere, which this test disproves. Logged as a new gap (G-11-5) rather than folding into G-11-2 (a different symptom: G-11-2 was a missing binary; this is a missing session on an otherwise-correct binary).
+  - Confirmed via code read: the actual files/branch state is NOT missing anything -- `ensure_worktree` (`src/dark_factory/git/worktree.py:46`) already has a dedicated "local->CI-handoff / ephemeral-runner" path that fetches the run's branch from `origin` when reconstructing on a new machine, and the existing HITL-05 context-reconstruction fallback (`build_resume_prompt`) already rebuilds a complete, self-sufficient prompt (task, prior summary, questions, answer) with no dependency on Claude's own session memory. Only Claude's own conversational memory of *how it was reasoning* during the first attempt is genuinely local-only and unrecoverable -- not any task/file state.
+next_step: "G-11-5 is fixed (see Gaps below) -- re-run the live path once more: `dark-factory run github:<new-issue>` from /Users/maryiakrauchanka/portfolio/app-new, wait for WAITING_HUMAN, reply on the issue, wait for the webhook-dispatched resume.yml run, and confirm `dark-factory status <run_id>` shows the run actually advanced past BA this time."
 
 ## Summary
 
 total: 2
 passed: 1
-issues: 0
+issues: 1
 pending: 0
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 
@@ -222,5 +229,59 @@ blocked: 1
   missing:
     - "Decide and implement the propagation mechanism: either an autouse db-scoped fixture that sets os.environ['DATABASE_URL']/['DATABASE_URL_DIRECT'] from the resolved pg_url before any db-marked test body runs (restoring on teardown), or audit whether orchestrator.runner's db-tier-reached call sites actually need get_settings().database_url at all versus just the SQLAlchemy engine/session already provided by fixtures"
     - "A sanitized-environment reproduction of the db tier (DATABASE_URL/DATABASE_URL_DIRECT absent, cwd with no .env, testcontainers rung) to confirm the fix and prevent recurrence, mirroring 11-10's unit/contract guard but for -m db"
+  debug_session: null
+
+- gap_id: G-11-5
+  truth: "`dark-factory resume <run_id>` succeeds when the paused role's recorded worker_session_id was created on a DIFFERENT machine than the one performing the resume (the HITL-06 / phase-goal claim: a run started on a laptop finishes in CI)."
+  status: resolved
+  resolved_by: "src/dark_factory/workers/claude_code.py commit 457dbf5 (_resume fallback) + tests/unit/test_claude_code_worker.py commit 5192fd0"
+  resolved_at: 2026-10-02
+  reason: "Live attempt (dark-factory run 472dc760-8b4e-4473-b5ad-63b8247ba1fe, 2026-10-02, app-new#18): the webhook -> workflow_dispatch -> CI chain worked end to end (receiver logs show run.resumed then webhook.dispatch.requested; GitHub Actions genuinely ran dark-factory resume inside a real job), but that CI-side resume failed with `claude exited 1: No conversation found with session ID: f3acabd4-...`."
+  severity: blocker
+  test: 2
+  root_cause: |
+    Claude Code's own session transcripts are local-filesystem state on the machine that
+    creates them -- never synced to Neon or anywhere else. `ClaudeCodeWorker._resume`'s
+    native branch (HITL-04) calls `claude --resume <session_id>` whenever a previous
+    attempt recorded a worker_session_id, with no check for whether that session is
+    reachable from the current machine. A laptop-pause -> CI-resume hits this every time;
+    same-machine resume never does.
+    This is the identical constraint `07-COVERAGE.md` already named when it explicitly
+    rejected Claude Code's `--continue` flag ("process-local state, incompatible with a
+    durable orchestrator that resumes ... on a different machine") -- but that reasoning
+    was never applied to `--resume <session-id>`, which has the same locality constraint,
+    just addressed explicitly instead of implicitly. Confirmed genuinely new (not a known,
+    accepted limitation) via a dedicated research pass over `.planning/`: no ADR, no
+    PITFALLS.md entry, no accepted-limitation note connects the two. `HITL-06`'s own proof
+    (`tests/db/test_cross_machine_resume.py`) uses `FakeWorker`, which never shells out to
+    the real `claude` binary -- structurally incapable of catching this, which is why it
+    went undetected until a real live attempt against a real `claude-code` worker.
+  artifacts:
+    - path: src/dark_factory/workers/claude_code.py
+      issue: "_resume's native branch (HITL-04) had no fallback when claude --resume <session_id> fails because the session is unreachable from the current machine -- the failure propagated as a generic FAILED role execution with no retry"
+  missing:
+    - "A fallback from the native --resume attempt to the existing HITL-05 context-reconstruction path, specifically when (and only when) the failure is the CLI's own session-not-found signature -- never for any other native-resume failure, which must still surface unchanged"
+  fix_note: |
+    Implemented as: on `--resume` failure, check whether `WorkerResult.error` contains the
+    CLI's literal "No conversation found with session ID" text; if so, retry once via the
+    existing HITL-05 argv (no --resume element) instead of returning the native failure.
+    Verified nothing else needed reconstructing: `ensure_worktree`
+    (`src/dark_factory/git/worktree.py:46`) already has a dedicated path for "the local->CI-
+    handoff / ephemeral-runner case" that fetches the run's branch from `origin`, and
+    `build_resume_prompt` already assembles a complete, self-sufficient prompt (task, prior
+    summary, questions, human answer) with no dependency on Claude's own session memory --
+    only Claude's own reasoning-trace memory is genuinely unrecoverable, and the fallback
+    never needed it.
+    Unit-tested with a resume-aware fake `claude` binary whose behaviour depends on whether
+    `--resume` is in argv (two sequential invocations, not a single fixed response) --
+    proving both the fallback fires on the exact real-world signature and that it does NOT
+    fire on an unrelated native failure (no masking of genuine bugs). Full regression:
+    `pytest -q -m "unit or contract"` -> 840 passed (+2 from the new tests), 1 skipped, 374
+    deselected, the one pre-existing unrelated failure unchanged. `mypy src/dark_factory`:
+    clean (2 pre-existing unrelated errors, mcp extra not installed). `ruff check .` /
+    `ruff format --check .`: clean.
+    NOT yet re-confirmed live end-to-end (a fresh dark-factory run -> WAITING_HUMAN -> reply
+    -> webhook dispatch -> CI resume actually advancing past BA) -- that live re-attempt is
+    Test 2's own remaining next_step.
   debug_session: null
 
