@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 
 from dark_factory.domain.status import RunStatus
 
-__all__ = ["NULL_MARKER", "RunView"]
+__all__ = ["NULL_MARKER", "EventRow", "RunView"]
 
 NULL_MARKER = "-"
 
@@ -86,3 +86,38 @@ class RunView(BaseModel):
         with no preamble and no trailing text. Datetimes and the status enum
         serialise as strings via the model's own JSON mode."""
         return json.dumps(self._rendered_fields(redactor))
+
+
+class EventRow(BaseModel):
+    """One ``run_events`` row, read back for ``dark-factory events`` (Plan
+    12-01, OBS-02 / OBS-03) -- a frozen sibling of :class:`RunView` carrying
+    exactly what :func:`dark_factory.events.reader.read_events` selects,
+    nothing synthesized. ``type`` is typed ``str``, not ``EventType``:
+    ``RunEvent.type`` is a ``String(64)`` column, and this module must keep
+    importing nothing from ``dark_factory.events``."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seq: int
+    created_at: datetime
+    type: str
+    role_execution_id: UUID | None
+    payload: dict[str, Any]
+
+    def as_line(self, *, redactor: Redactor | None = None) -> str:
+        """One line: ``seq``, the ISO-8601 ``created_at`` at second precision,
+        ``type``, and a short payload summary. The whole payload is passed
+        through ``redactor`` once -- ``redact`` is recursive over mappings, so
+        one call covers every key. The ``role`` value is surfaced on its own
+        when the payload carries one."""
+        payload: dict[str, Any] = (
+            redactor(self.payload) if redactor is not None else self.payload
+        )
+        timestamp = self.created_at.isoformat(timespec="seconds")
+        role = payload.get("role") if isinstance(payload, dict) else None
+        line = f"{self.seq} {timestamp} {self.type}"
+        if role is not None:
+            line = f"{line} role={role}"
+        if self.role_execution_id is not None:
+            line = f"{line} role_execution_id={self.role_execution_id}"
+        return f"{line} payload={payload}"

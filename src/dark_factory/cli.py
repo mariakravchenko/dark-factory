@@ -22,6 +22,7 @@ from __future__ import annotations
 import functools
 import sys
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -30,10 +31,12 @@ import typer
 from dark_factory.config.loader import ConfigError, load_effective_config
 from dark_factory.config.settings import get_settings
 from dark_factory.domain.status import RunStatus
+from dark_factory.events.reader import read_events
 from dark_factory.events.redaction import redact
 from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
+from dark_factory.observability.render import render_events_text
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.answers import (
     NoPendingInteraction,
@@ -83,6 +86,24 @@ _ORCHESTRATION_ERRORS = (
     LookupError,
     ValueError,
 )
+
+
+def _redactor() -> functools.partial[Any]:
+    """The one redactor every read command's output passes through before it
+    reaches stdout -- ``functools.partial(redact, known_secrets=...)``,
+    factored out of ``status`` so there is exactly one copy of it (Plan
+    12-01, T-12-01)."""
+    return functools.partial(redact, known_secrets=get_settings().known_secret_values())
+
+
+def _parse_run_id(run_id: str) -> UUID:
+    """Parse ``run_id`` or echo ``not a run id: <value>`` to stderr and exit 2
+    -- factored out of ``status`` so there is exactly one copy of it."""
+    try:
+        return UUID(run_id)
+    except ValueError as exc:
+        typer.echo(f"not a run id: {run_id}", err=True)
+        raise typer.Exit(code=2) from exc
 
 
 def _echo_transition(previous: RunStatus, new: RunStatus) -> None:
@@ -235,22 +256,36 @@ def status(
     a read command grow a decision is exactly what Phase 11's single-``advance``
     funnel starts by refusing.
     """
-    try:
-        parsed = UUID(run_id)
-    except ValueError as exc:
-        typer.echo(f"not a run id: {run_id}", err=True)
-        raise typer.Exit(code=2) from exc
+    parsed = _parse_run_id(run_id)
     try:
         view = read_status(parsed)
     except UnknownRunError as exc:
         typer.echo(f"unknown run: {run_id}", err=True)
         raise typer.Exit(code=2) from exc
 
-    redactor = functools.partial(
-        redact, known_secrets=get_settings().known_secret_values()
-    )
+    redactor = _redactor()
     if output_json:
         _route_logs_to_stderr()
         typer.echo(view.as_json(redactor=redactor))
     else:
         typer.echo(view.as_text(redactor=redactor))
+
+
+@app.command()
+def events(run_id: str) -> None:
+    """Retell everything that happened to a run -- the ``run_events`` audit
+    trail, in ``seq`` order (Plan 12-01, OBS-02 / OBS-03).
+
+    A pure read: it calls ``read_events`` and renders. It never inspects the
+    run's status to decide on an action -- the same posture ``status``
+    keeps, for the same reason.
+    """
+    _route_logs_to_stderr()
+    parsed = _parse_run_id(run_id)
+    try:
+        rows = read_events(parsed)
+    except UnknownRunError as exc:
+        typer.echo(f"unknown run: {run_id}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    typer.echo(render_events_text(rows, redactor=_redactor()))

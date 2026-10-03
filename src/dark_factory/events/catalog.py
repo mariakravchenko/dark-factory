@@ -42,7 +42,13 @@ attempt ran at all. Phase 12 is now a *consumer* of these three events,
 never their origin. A member present in the enum but never written is a
 false signal in the audit surface, so the not-yet-reachable types are
 deliberately not pre-declared here; that rule is what keeps the Phase 12
-observability claim honest.
+observability claim honest. Phase 12 (plan 12-01) adds exactly one more --
+ARTIFACT_CREATED (D-06) -- the artifact-write audit tie
+``orchestrator/runner.py`` genuinely writes: one event per
+``ArtifactReferenceWrite`` an attempt produces, in the same
+``apply_transition`` call that inserts the matching ``artifacts`` row, so
+the two can never drift apart. The remainder listed in PROJECT.md --
+QA_FAILED/QA_PASSED -- still arrive later in Phase 12.
 """
 
 from enum import StrEnum
@@ -84,3 +90,6 @@ class EventType(StrEnum):
     PUBLISH_STARTED = "PUBLISH_STARTED"
     PR_CREATED = "PR_CREATED"
     PUBLISH_FAILED = "PUBLISH_FAILED"
+
+    # Phase 12 -- the artifact-write audit tie (D-06).
+    ARTIFACT_CREATED = "ARTIFACT_CREATED"

@@ -1508,6 +1508,26 @@ def _run_current_role(
             counter_increments = {}
             bounce_reason = None
 
+    # Phase 12 (plan 12-01), D-06, Pitfall 3: built ONCE from the final
+    # `artifact_writes` value, after every arm above that can reset it to an
+    # empty list has already run (the `WriteScopeViolation` block
+    # immediately above included) and before `transition()` below -- so an
+    # `ARTIFACT_CREATED` event is never emitted for an artifact row this
+    # attempt will not actually write. One event per write, mirroring
+    # `gate_events`'s own accumulate-then-splice shape; spliced into the
+    # `ROLE_COMPLETED` and `ROLE_BOUNCED` arms only, never `ROLE_FAILED` /
+    # `ROLE_NEEDS_INPUT` -- `artifact_writes` is already empty by the time
+    # either of those runs, so an empty splice there would be dead code
+    # claiming a decision it is not making.
+    artifact_events = [
+        EventWrite(
+            type=EventType.ARTIFACT_CREATED,
+            role_execution_id=latest.id,
+            payload={"role": node.name, "type": w.type, "path": w.path},
+        )
+        for w in artifact_writes
+    ]
+
     next_status, next_role, next_step = transition(state, signal, pipeline)
 
     human_interaction: HumanInteractionWrite | None = None
@@ -1527,6 +1547,11 @@ def _run_current_role(
         # then the run completed". Empty for every role but the pipeline's
         # terminal one, so this is a no-op for BA/ARCHITECTURE/DEVELOPMENT.
         events.extend(gate_events)
+        # Phase 12 (plan 12-01), D-06: one ARTIFACT_CREATED per artifact this
+        # attempt actually wrote, rides the same apply_transition call as the
+        # artifacts rows below it ties to -- empty for an attempt that wrote
+        # no declared machine artifact.
+        events.extend(artifact_events)
         # RUN_COMPLETED belongs only to the transition that actually reaches the
         # terminal COMPLETED state -- i.e. the last node in the pipeline. For any
         # earlier role, transition() returns the next role status and the run
@@ -1608,6 +1633,12 @@ def _run_current_role(
         # Audit order: "the role finished, then the gate ran (if it ran),
         # then the run bounced" -- mirrors the ROLE_COMPLETED arm's ordering.
         events.extend(gate_events)
+        # Phase 12 (plan 12-01), D-06: same splice as the ROLE_COMPLETED arm
+        # -- a bounced attempt's own artifacts are still durable (ROLE-05's
+        # enforce_write_scope already ran above and left artifact_writes
+        # intact for this signal), so its ARTIFACT_CREATED events must still
+        # be emitted.
+        events.extend(artifact_events)
         (bounced_counter_name, bounced_counter_delta) = next(
             iter(counter_increments.items())
         )
