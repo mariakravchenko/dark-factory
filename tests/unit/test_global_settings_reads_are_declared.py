@@ -35,10 +35,10 @@ only shifts when a ``get_settings()`` call is added or removed inside that
 *same* enclosing scope, which is exactly the deliberate edit this guard
 exists to flag.
 
-Declared inventory, by category (18 entries across 12 modules):
+Declared inventory, by category (19 entries across 12 modules):
 
 * **Process entry points that legitimately own settings construction** --
-  the CLI's redactor (``cli.py::status``), the engine factory
+  the CLI's redactor (``cli.py::_redactor``), the engine factory
   (``persistence/engine.py::build_engine``), the lease configuration read
   (``orchestrator/lease.py::run_lease``), the GitHub-sourced task loader's
   client construction (``input/loaders.py::_load_github``), and the
@@ -59,10 +59,14 @@ Declared inventory, by category (18 entries across 12 modules):
 * **The git diff layer's redaction read** --
   ``git/diff.py::push_working_branch`` (the push-failure redaction path).
 * **The reads reached on conditionally-taken branches inside
-  ``orchestrator/runner.py``'s ``_run_current_role``** (three entries,
-  ``#1``/``#2``/``#3``) -- this is the gap G-11-3 names. A unit test that
-  drives one of these branches must supply a settings override via one of
-  the two idioms this repository already uses at 14 sites: Idiom A
+  ``orchestrator/runner.py``'s ``_run_current_role``** (four entries,
+  ``#1``/``#2``/``#3``/``#4``) -- this is the gap G-11-3 names. ``#3`` was
+  added by plan 12-03 (OBS-01, T-12-08): the clarification-comment body's
+  redaction read, inserted ahead of the pre-existing GitHub-failure
+  redaction read (now ``#4``, in source order) inside the same
+  ``ROLE_NEEDS_INPUT`` branch. A unit test that drives one of these
+  branches must supply a settings override via one of the two idioms this
+  repository already uses at 14 sites: Idiom A
   (``monkeypatch.setenv("DATABASE_URL", ...)`` + ``get_settings.cache_clear()``)
   or Idiom B (``monkeypatch.setattr(<module>, "get_settings", ...)``).
 """
@@ -82,7 +86,7 @@ _ACCESSOR_NAME = "get_settings"
 _DECLARED_SETTINGS_READS: frozenset[str] = frozenset(
     {
         # Process entry points that legitimately own settings construction.
-        "cli.py::status#1",
+        "cli.py::_redactor#1",
         "persistence/engine.py::build_engine#1",
         "orchestrator/lease.py::run_lease#1",
         "input/loaders.py::_load_github#1",
@@ -102,15 +106,17 @@ _DECLARED_SETTINGS_READS: frozenset[str] = frozenset(
         "workers/cli_runtime.py::scrub_log_in_place#1",
         # The git diff layer's redaction read.
         "git/diff.py::push_working_branch#1",
-        # orchestrator/runner.py::_run_current_role -- three reads on
+        # orchestrator/runner.py::_run_current_role -- four reads on
         # conditionally-taken branches (quality-gate timeout/known_secrets,
-        # the terminal-role artifact-commit push token, and the
+        # the terminal-role artifact-commit push token, the
+        # clarification-comment body redaction (plan 12-03, OBS-01), and the
         # clarification-failure redaction). A unit test that drives any of
         # these branches must supply a settings override via Idiom A or B
         # (see module docstring).
         "orchestrator/runner.py::_run_current_role#1",
         "orchestrator/runner.py::_run_current_role#2",
         "orchestrator/runner.py::_run_current_role#3",
+        "orchestrator/runner.py::_run_current_role#4",
     }
 )
 
@@ -208,10 +214,10 @@ def test_declared_settings_reads_match_discovered_calls() -> None:
     )
 
 
-def test_eighteen_entries_across_twelve_modules() -> None:
+def test_nineteen_entries_across_twelve_modules() -> None:
     """Pins the shape of the inventory this gap-closure plan established, so
     a future change to the count is a deliberate, reviewed edit."""
-    assert len(_DECLARED_SETTINGS_READS) == 18
+    assert len(_DECLARED_SETTINGS_READS) == 19
     modules = {key.split("::", 1)[0] for key in _DECLARED_SETTINGS_READS}
     assert len(modules) == 12
 

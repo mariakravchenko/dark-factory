@@ -1694,7 +1694,19 @@ def _run_current_role(
         issue_ref = _github_issue_ref(state)
         if issue_ref is not None and clarification_comment_id is None:
             owner, repo, issue_number = issue_ref
-            comment_body = build_clarification_comment(result.questions)
+            # T-12-08 (OBS-01, SEC-01/SEC-02): a GitHub issue comment is an
+            # external, public, non-revocable sink -- scrub once, before the
+            # idempotency lookup, so both ``_find_own_clarification_comment``
+            # and ``create_comment`` consume the identical scrubbed value.
+            # Redacting only at the ``create_comment`` call (and not before
+            # the lookup) would make a resumed attempt compare raw text
+            # against its own already-posted *scrubbed* body, fail to match,
+            # and post a duplicate comment to a real GitHub issue (D-05).
+            clarification_body = build_clarification_comment(result.questions)
+            comment_body = redact(
+                clarification_body,
+                known_secrets=get_settings().known_secret_values(),
+            )
             try:
                 client = github_client_factory()
                 existing_comment = _find_own_clarification_comment(

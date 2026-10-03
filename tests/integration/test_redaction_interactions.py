@@ -325,11 +325,18 @@ def _extract_redact_first_args(source: str) -> list[str]:
 #   folded into ``PublishResult.error`` before it is ever persisted.
 # * plan 10-03 (GIT-05): the clarification-comment failure, folded into the
 #   ``QUESTION_CREATED`` payload's ``clarification_comment_error`` key.
+# * plan 12-03 (OBS-01, T-12-08): ``clarification_body`` -- the assembled
+#   clarification-comment text (the question list joined with
+#   ``CLARIFICATION_COMMENT_PREFIX``) -- scrubbed once before both the
+#   ``_find_own_clarification_comment`` existence check and the
+#   ``create_comment`` call, closing the gap where a GitHub issue comment
+#   (an external, non-revocable sink) was posted from unredacted text while
+#   the sibling ``human_interactions.question`` write was already scrubbed.
 #
 # A new ``redact(`` call site scrubbing anything else -- including a renamed
 # exception variable -- trips this guard and must be added here deliberately,
 # never silently widened.
-_RUNNER_PERMITTED_REDACT_ARGUMENTS = frozenset({"str(exc)"})
+_RUNNER_PERMITTED_REDACT_ARGUMENTS = frozenset({"str(exc)", "clarification_body"})
 
 _HUMAN_INTERACTION_FIELD_MARKERS = ("question", "answer")
 
