@@ -1,5 +1,6 @@
 """``dark-factory events <run-id>`` -- the Typer wiring and exit-code contract,
-proven through a real subprocess (Plan 12-01, Task 2, OBS-03 / TRIG-02).
+proven through a real subprocess (Plan 12-01, Task 2 / Plan 12-02, Task 2,
+OBS-03 / TRIG-02).
 
 The CLI is invoked as a real subprocess against the provisioned PostgreSQL,
 mirroring ``tests/integration/test_status_cli.py``'s own idiom exactly: the
@@ -9,6 +10,7 @@ connection string is hardcoded or printed.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -140,3 +142,120 @@ def test_events_for_a_run_parked_mid_flight_exits_0_with_a_short_event_list(
     # ROLE_COMPLETED or RUN_COMPLETED.
     assert "ROLE_COMPLETED" not in joined
     assert "RUN_COMPLETED" not in joined
+
+
+# --------------------------------------------------------------------------- #
+# --json: one clean array, same content as text mode, column-shaped keys
+# (Plan 12-02, Task 2)
+# --------------------------------------------------------------------------- #
+
+_EVENT_ROW_KEYS = {"seq", "created_at", "type", "role_execution_id", "payload"}
+
+
+def test_json_mode_emits_exactly_one_clean_json_array(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(["events", run_id, "--json"], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    stripped = proc.stdout.strip()
+    assert stripped.startswith("[") and stripped.endswith("]")
+    assert len(stripped.splitlines()) == 1, "extra lines on the --json stdout stream"
+    payload = json.loads(proc.stdout)  # no preamble, no trailing text
+    assert isinstance(payload, list)
+    assert payload, "expected at least one event for a completed run"
+
+
+def test_json_element_count_and_seq_order_match_text_mode(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    text_proc = _cli(["events", run_id], pg_url)
+    json_proc = _cli(["events", run_id, "--json"], pg_url)
+
+    assert text_proc.returncode == 0 and json_proc.returncode == 0
+    text_lines = [line for line in text_proc.stdout.splitlines() if line.strip()]
+    elements = json.loads(json_proc.stdout)
+
+    assert len(elements) == len(text_lines)
+
+    text_seqs = [int(line.split(maxsplit=1)[0]) for line in text_lines]
+    json_seqs = [element["seq"] for element in elements]
+    assert json_seqs == text_seqs
+    assert json_seqs == sorted(json_seqs)
+
+
+def test_every_json_element_key_set_equals_the_five_name_column_set(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(["events", run_id, "--json"], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    elements = json.loads(proc.stdout)
+    assert elements
+    for element in elements:
+        assert set(element.keys()) == _EVENT_ROW_KEYS
+
+
+# --------------------------------------------------------------------------- #
+# --type: filters, repeatable, rejects an unknown name before any query
+# --------------------------------------------------------------------------- #
+
+
+def test_type_filter_returns_only_matching_events(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(["events", run_id, "--type", "ROLE_COMPLETED"], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    assert lines, "expected at least one ROLE_COMPLETED event"
+    assert all("ROLE_COMPLETED" in line for line in lines)
+
+
+def test_type_filter_is_repeatable_and_returns_both_types(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(
+        [
+            "events",
+            run_id,
+            "--type",
+            "ROLE_COMPLETED",
+            "--type",
+            "RUN_COMPLETED",
+        ],
+        pg_url,
+    )
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    assert "ROLE_COMPLETED" in proc.stdout
+    assert "RUN_COMPLETED" in proc.stdout
+
+
+def test_unknown_type_exits_2_with_empty_stdout_before_any_query(pg_url: str) -> None:
+    proc = _cli(["events", _UNKNOWN_ID, "--type", "NOT_A_TYPE"], pg_url)
+
+    assert proc.returncode == 2
+    assert proc.stdout.strip() == ""
+    assert "NOT_A_TYPE" in proc.stderr
+
+
+def test_type_filter_matching_nothing_exits_0_with_an_empty_event_list(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(["events", run_id, "--type", "WIP_COMMIT_CREATED", "--json"], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    assert json.loads(proc.stdout) == []

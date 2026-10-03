@@ -13,6 +13,7 @@ the read path that folds the append-only log into control state.
 from __future__ import annotations
 
 import io
+import json
 from collections.abc import Sequence
 from typing import IO
 
@@ -21,7 +22,12 @@ from rich.table import Table
 
 from dark_factory.domain.views import EventRow, Redactor, RunListRow
 
-__all__ = ["DEFAULT_RENDER_WIDTH", "render_events_text", "render_runs_table"]
+__all__ = [
+    "DEFAULT_RENDER_WIDTH",
+    "render_events_json",
+    "render_events_text",
+    "render_runs_table",
+]
 
 # The explicit-width test seam (A1, 12-RESEARCH.md): ``rich`` auto-detects 80
 # columns for a non-tty pipe and ellipsizes an over-wide cell with "..."
@@ -55,6 +61,29 @@ def render_events_text(
     for event in events:
         console.print(event.as_line(redactor=redactor), markup=False, soft_wrap=True)
     return buffer.getvalue().rstrip("\n")
+
+
+def render_events_json(
+    events: Sequence[EventRow], *, redactor: Redactor | None = None
+) -> str:
+    """A single JSON array, one object per event, keys mirroring the
+    ``run_events`` columns the DTO carries (``seq``, ``created_at``,
+    ``type``, ``role_execution_id``, ``payload``) -- no preamble, no
+    trailing text.
+
+    Follows :meth:`RunView.as_json`'s ``model_dump(mode="json")``
+    discipline, so UUIDs and datetimes serialise as strings. ``redactor``,
+    when supplied, is applied to the whole dumped structure in one call --
+    ``redact`` is recursive over mappings and lists, so the nested
+    ``payload`` is covered without a per-key walk.
+
+    Takes no ``width``: JSON is not a terminal rendering and must never be
+    wrapped, ellipsized or boxed.
+    """
+    dumped = [event.model_dump(mode="json") for event in events]
+    if redactor is not None:
+        dumped = redactor(dumped)
+    return json.dumps(dumped)
 
 
 def render_runs_table(

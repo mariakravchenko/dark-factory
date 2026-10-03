@@ -31,12 +31,17 @@ import typer
 from dark_factory.config.loader import ConfigError, load_effective_config
 from dark_factory.config.settings import get_settings
 from dark_factory.domain.status import RunStatus
+from dark_factory.events.catalog import EventType
 from dark_factory.events.reader import read_events
 from dark_factory.events.redaction import redact
 from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
-from dark_factory.observability.render import render_events_text, render_runs_table
+from dark_factory.observability.render import (
+    render_events_json,
+    render_events_text,
+    render_runs_table,
+)
 from dark_factory.observability.run_detail import read_run_list
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.answers import (
@@ -273,9 +278,17 @@ def status(
 
 
 @app.command()
-def events(run_id: str) -> None:
+def events(
+    run_id: str,
+    output_json: bool = typer.Option(
+        False, "--json", help="Emit one JSON array instead of the text line list."
+    ),
+    event_type: list[str] | None = typer.Option(  # noqa: B008
+        None, "--type", help="Only include this event type. Repeatable."
+    ),
+) -> None:
     """Retell everything that happened to a run -- the ``run_events`` audit
-    trail, in ``seq`` order (Plan 12-01, OBS-02 / OBS-03).
+    trail, in ``seq`` order (Plan 12-01/12-02, OBS-02 / OBS-03).
 
     A pure read: it calls ``read_events`` and renders. It never inspects the
     run's status to decide on an action -- the same posture ``status``
@@ -283,13 +296,25 @@ def events(run_id: str) -> None:
     """
     _route_logs_to_stderr()
     parsed = _parse_run_id(run_id)
+
+    parsed_types: list[EventType] = []
+    for value in event_type or []:
+        try:
+            parsed_types.append(EventType(value))
+        except ValueError as exc:
+            typer.echo(f"not an event type: {value}", err=True)
+            raise typer.Exit(code=2) from exc
+
     try:
-        rows = read_events(parsed)
+        rows = read_events(parsed, event_types=parsed_types or None)
     except UnknownRunError as exc:
         typer.echo(f"unknown run: {run_id}", err=True)
         raise typer.Exit(code=2) from exc
 
-    typer.echo(render_events_text(rows, redactor=_redactor()))
+    if output_json:
+        typer.echo(render_events_json(rows, redactor=_redactor()))
+    else:
+        typer.echo(render_events_text(rows, redactor=_redactor()))
 
 
 @app.command()
