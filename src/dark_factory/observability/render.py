@@ -17,10 +17,11 @@ from collections.abc import Sequence
 from typing import IO
 
 from rich.console import Console
+from rich.table import Table
 
-from dark_factory.domain.views import EventRow, Redactor
+from dark_factory.domain.views import EventRow, Redactor, RunListRow
 
-__all__ = ["DEFAULT_RENDER_WIDTH", "render_events_text"]
+__all__ = ["DEFAULT_RENDER_WIDTH", "render_events_text", "render_runs_table"]
 
 # The explicit-width test seam (A1, 12-RESEARCH.md): ``rich`` auto-detects 80
 # columns for a non-tty pipe and ellipsizes an over-wide cell with "..."
@@ -53,4 +54,56 @@ def render_events_text(
     console = _console(buffer, width)
     for event in events:
         console.print(event.as_line(redactor=redactor), markup=False, soft_wrap=True)
+    return buffer.getvalue().rstrip("\n")
+
+
+def render_runs_table(
+    rows: Sequence[RunListRow],
+    *,
+    redactor: Redactor | None = None,
+    width: int | None = None,
+) -> str:
+    """A ``rich`` table of every run -- ``id``, ``status``, ``source``,
+    ``created_at``, ``updated_at`` -- in the order ``rows`` is given (newest
+    first, per :func:`dark_factory.observability.run_detail.read_run_list`).
+
+    ``min_width`` is declared on the first four columns -- ``36`` on ``id``
+    (a UUID's exact rendered length), ``13`` on ``status`` (the longest
+    ``RunStatus`` value, ``WAITING_HUMAN``), and ``20`` on each timestamp
+    column -- and this is the single most important detail here, not a
+    stylistic choice: with no ``min_width``, ``rich`` ellipsizes an
+    over-wide cell with a ``...`` character rather than wrapping it, and a
+    five-column row containing a UUID and two ISO-8601 timestamps overflows
+    at both width 80 and width 120. An ellipsized id cannot be pasted into
+    ``resume``.
+
+    Each timestamp is rendered with ``isoformat(timespec="seconds")`` --
+    second precision is the declared contract for this table; a reader who
+    needs exact event timing should use ``events --json``, which carries
+    ``seq``-ordered, unrounded timestamps.
+
+    ``source_kind`` is passed through ``redactor`` when one is supplied,
+    mirroring how :meth:`RunView._rendered_fields` already scrubs that
+    field.
+    """
+    table = Table()
+    table.add_column("id", min_width=36)
+    table.add_column("status", min_width=13)
+    table.add_column("source", min_width=0)
+    table.add_column("created_at", min_width=20)
+    table.add_column("updated_at", min_width=20)
+
+    for row in rows:
+        source = redactor(row.source_kind) if redactor is not None else row.source_kind
+        table.add_row(
+            str(row.run_id),
+            row.status.value,
+            str(source),
+            row.created_at.isoformat(timespec="seconds"),
+            row.updated_at.isoformat(timespec="seconds"),
+        )
+
+    buffer = io.StringIO()
+    console = _console(buffer, width)
+    console.print(table)
     return buffer.getvalue().rstrip("\n")

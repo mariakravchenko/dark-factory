@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 
 from dark_factory.domain.status import RunStatus
 
-__all__ = ["NULL_MARKER", "EventRow", "RunView"]
+__all__ = ["NULL_MARKER", "EventRow", "RunListRow", "RunView"]
 
 NULL_MARKER = "-"
 
@@ -86,6 +86,23 @@ class RunView(BaseModel):
         with no preamble and no trailing text. Datetimes and the status enum
         serialise as strings via the model's own JSON mode."""
         return json.dumps(self._rendered_fields(redactor))
+
+
+class RunListRow(BaseModel):
+    """One ``runs`` row, read back for ``dark-factory runs`` (Plan 12-02,
+    OBS-03 / D-03) -- a frozen sibling of :class:`RunView` carrying only the
+    triage-relevant columns. Deliberately carries no ``source_ref``: the
+    table's job is "which of my runs needs attention", and a long free-text
+    task reference is exactly what would force the ``id`` column to shrink
+    below its 36-character minimum."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_id: UUID
+    status: RunStatus
+    source_kind: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class EventRow(BaseModel):

@@ -36,7 +36,8 @@ from dark_factory.events.redaction import redact
 from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
-from dark_factory.observability.render import render_events_text
+from dark_factory.observability.render import render_events_text, render_runs_table
+from dark_factory.observability.run_detail import read_run_list
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.answers import (
     NoPendingInteraction,
@@ -289,3 +290,30 @@ def events(run_id: str) -> None:
         raise typer.Exit(code=2) from exc
 
     typer.echo(render_events_text(rows, redactor=_redactor()))
+
+
+@app.command()
+def runs(
+    status: str | None = typer.Option(
+        None, "--status", help="Only list runs in this status."
+    ),
+) -> None:
+    """List every run -- newest first, with a deterministic tiebreak (Plan
+    12-02, OBS-03 / D-03).
+
+    The entry point to every other command in the set: it is the only
+    command that produces a run id without the operator already knowing
+    one. A pure read: it calls ``read_run_list`` and renders, never
+    inspecting a run's status to decide on an action.
+    """
+    _route_logs_to_stderr()
+    parsed_status: RunStatus | None = None
+    if status is not None:
+        try:
+            parsed_status = RunStatus(status)
+        except ValueError as exc:
+            typer.echo(f"not a status: {status}", err=True)
+            raise typer.Exit(code=2) from exc
+
+    rows = read_run_list(status=parsed_status)
+    typer.echo(render_runs_table(rows, redactor=_redactor()))
