@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 current_phase: 12
 current_phase_name: Observability & Audit Surface
 status: executing
-stopped_at: Phase 12 context gathered
-last_updated: "2026-10-03T10:06:08.400Z"
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-10-03T10:49:34.144Z"
 last_activity: 2026-10-03
-last_activity_desc: Phase 11 complete, transitioned to Phase 12
-state_head: 64606217d25bbc9a3654328065ff8045b87192cb
+last_activity_desc: Phase 12 execution started
+state_head: 59b9fad8e22be80361133161a5789ea40809ae31
 progress:
   total_phases: 12
   completed_phases: 0
@@ -23,14 +23,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-09-28)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 11 — One Orchestrator, Many Triggers — Cross-Machine Resume
+**Current focus:** Phase 12 — Observability & Audit Surface
 
 ## Current Position
 
-Phase: 12 (Observability & Audit Surface) — READY TO EXECUTE
-Plan: Not started
+Phase: 12 (Observability & Audit Surface) — EXECUTING
+Plan: 2 of 7
 Status: Ready to execute
-Last activity: 2026-10-03 — Phase 11 complete, transitioned to Phase 12
+Last activity: 2026-10-03 — Phase 12 execution started
 
 Progress: [░░░░░░░░░░] 0% (10/12 phases)
 
@@ -125,6 +125,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P08 | 70min | 2 tasks | 6 files |
 | Phase 11 P09 | 25min task-commits + 10min verification | 3 tasks | 3 files |
 | Phase 11 P10 | 35min | 1 tasks | 2 files |
+| Phase 12 P01 | 40min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -261,6 +262,9 @@ Recent decisions affecting current work:
 - [Phase 11]: [Phase 11] 11-09: test_clarification_comment.py's _drive_needs_input patches runner_module.get_settings with the shared fake_settings fixture, covering all three of _run_current_role's conditionally-taken settings reads in one patch; runner.py left unmodified
 - [Phase 11]: [Phase 11] 11-09: credential_missing() catches pydantic.ValidationError specifically (never bare Exception) and reports an unconstructible Settings as credential-absent, closing a latent collection-abort sibling worse than G-11-3's 12 reported failures; skip_reason's two-arm contract unchanged
 - [Phase 11]: 11-10: Included all three live-CLI integration modules (claude-code, copilot, hermes) in Test 2's adversary, not just the two originally observed failing, since all three carry the identical import-time skip_reason() exposure.
+- [Phase 12]: 12-01: events/reader.py is a sibling of observability/status.py, not a member of the observability package -- the one new module permitted to query run_events, keeping the status read path's events-free closure trivially provable
+- [Phase 12]: 12-01: ARTIFACT_CREATED events are built once from the final artifact_writes value, after every arm that can clear it to [] has already run, then spliced into ROLE_COMPLETED/ROLE_BOUNCED only -- a late write-scope failure after collect_role_artifacts succeeded leaves zero artifacts rows and zero ARTIFACT_CREATED events (ART-04 honesty)
+- [Phase 12]: 12-01: render_events_text prints each EventRow.as_line with markup=False and soft_wrap=True so payload content (e.g. a list-shaped value) is never misread as rich markup and a line is never wrapped -- one line per event holds for any configured width
 
 ### Pending Todos
 
@@ -287,6 +291,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T09:12:37.997Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-observability-audit-surface/12-CONTEXT.md
+Last session: 2026-10-03T10:49:34.039Z
+Stopped at: Completed 12-01-PLAN.md
+Resume file: None

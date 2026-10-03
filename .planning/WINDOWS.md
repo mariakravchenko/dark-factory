@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 15
+open_count: 17
 waived_count: 0
 fixed_count: 2
-total_count: 17
-last_updated: 2026-09-30T11:26:19.558Z
+total_count: 19
+last_updated: 2026-10-03T10:51:03.880Z
 ---
 
 # Broken Windows Ledger
@@ -32,6 +32,8 @@ last_updated: 2026-09-30T11:26:19.558Z
 | 15 | 10 | unrun-verify | tests/db/test_loop04_adjacency.py |  | 10-08 Task 1 verify step (db-tier run of the promoted LOOP-04 adjacency test against a reachable PostgreSQL) not run -- no PostgreSQL reachable in the execution sandbox; logic verified by static code reading and a standalone interpreter check of the assertions against real runner.py source | open |  | 2026-09-28T09:00:57.930Z |  |
 | 16 | 10 | unrun-verify | tests/integration/test_redaction_interactions.py |  | 10-08 Task 2 verify step (pytest -m integration run of the narrowed redaction guard) not run -- the module's session-scoped autouse _schema_at_head fixture forces PostgreSQL provisioning for any collected integration-marked test regardless of whether the test itself requests db fixtures; no PostgreSQL reachable in the execution sandbox. Guard logic verified by a standalone interpreter run of the extraction helper against real runner.py source (both call sites resolve to str(exc), correctly allowlisted; counterexample correctly rejected) | open |  | 2026-09-28T09:00:58.039Z |  |
 | 17 | 11 | unrun-verify | .planning/phases/11-one-orchestrator-many-triggers-cross-machine-resume/11-05-PLAN.md |  | Full unrestricted 'uv run pytest -q' (all tiers) stalled with ~0 forward progress after 2.5h against the real remote Neon test branch and was terminated; substituted with unit tier (incl. 5 new tests), 'unit or contract' sweep (817 passed, 1 pre-existing unrelated failure), and a standalone 'db' tier run (205 passed, 1 skipped, 0 failed) -- integration tier not re-verified this session (excluded from CI; this plan touches no integration/db/src files). | open |  | 2026-09-30T11:26:19.558Z |  |
+| 18 | 12 | deviation | tests/unit/test_worker_registry_names.py |  | test_claude_code_resolves_to_a_real_adapter_not_a_placeholder expects FAILED with no ANTHROPIC_API_KEY, but this execution environment has a real credential available so the live adapter completes instead; pre-existing, unrelated to plan 12-01's observability changes | open |  | 2026-10-03T10:51:03.768Z |  |
+| 19 | 12 | unrun-verify | tests/unit/test_unit_tier_needs_no_database.py |  | Plan 12-01: full unfiltered 'pytest -m unit' could not complete standalone this session -- this module's own nested 'pytest -m unit or contract' child process did not return in a practical window. A pytest -m unit run with the 18 subprocess-spawning modules excluded passed 594/595 (1 pre-existing unrelated skip/failure) in 26s; the targeted plan-level file set (26 tests) passed cleanly. | open |  | 2026-10-03T10:51:03.880Z |  |
 
 ````json
 [
@@ -237,6 +239,30 @@ last_updated: 2026-09-30T11:26:19.558Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-30T11:26:19.558Z",
+    "resolved_at": null
+  },
+  {
+    "id": 18,
+    "kind": "deviation",
+    "phase": "12",
+    "file": "tests/unit/test_worker_registry_names.py",
+    "line": null,
+    "description": "test_claude_code_resolves_to_a_real_adapter_not_a_placeholder expects FAILED with no ANTHROPIC_API_KEY, but this execution environment has a real credential available so the live adapter completes instead; pre-existing, unrelated to plan 12-01's observability changes",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-03T10:51:03.768Z",
+    "resolved_at": null
+  },
+  {
+    "id": 19,
+    "kind": "unrun-verify",
+    "phase": "12",
+    "file": "tests/unit/test_unit_tier_needs_no_database.py",
+    "line": null,
+    "description": "Plan 12-01: full unfiltered 'pytest -m unit' could not complete standalone this session -- this module's own nested 'pytest -m unit or contract' child process did not return in a practical window. A pytest -m unit run with the 18 subprocess-spawning modules excluded passed 594/595 (1 pre-existing unrelated skip/failure) in 26s; the targeted plan-level file set (26 tests) passed cleanly.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-03T10:51:03.880Z",
     "resolved_at": null
   }
 ]
