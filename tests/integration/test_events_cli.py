@@ -1,0 +1,142 @@
+"""``dark-factory events <run-id>`` -- the Typer wiring and exit-code contract,
+proven through a real subprocess (Plan 12-01, Task 2, OBS-03 / TRIG-02).
+
+The CLI is invoked as a real subprocess against the provisioned PostgreSQL,
+mirroring ``tests/integration/test_status_cli.py``'s own idiom exactly: the
+child ``DATABASE_URL`` / ``DATABASE_URL_DIRECT`` come from ``pg_url`` so no
+connection string is hardcoded or printed.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from uuid import UUID
+
+import pytest
+
+pytestmark = pytest.mark.integration
+
+_UNKNOWN_ID = "00000000-0000-0000-0000-000000000000"
+
+
+def _cli(
+    args: list[str],
+    pg_url: str,
+    *,
+    extra_env: dict[str, str] | None = None,
+    cwd: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env = {
+        **os.environ,
+        "DATABASE_URL": pg_url,
+        "DATABASE_URL_DIRECT": pg_url,
+    }
+    env.pop("DARK_FACTORY_FAKE_SCRIPT", None)
+    env.pop("DARK_FACTORY_CRASH_AFTER", None)
+    if extra_env:
+        env.update(extra_env)
+    return subprocess.run(
+        [sys.executable, "-m", "dark_factory", *args],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=cwd,
+        timeout=120,
+        check=False,
+    )
+
+
+def _start_run(pg_url: str, cwd: Path, source: str = "text:where is this run") -> str:
+    proc = _cli(["run", source], pg_url, cwd=cwd)
+    assert proc.returncode == 0, f"exit={proc.returncode}\n{proc.stdout}\n{proc.stderr}"
+    return proc.stdout.splitlines()[0].strip()
+
+
+# --------------------------------------------------------------------------- #
+# happy path: a driven run's full audit trail, in order, one seq-prefixed
+# line per event
+# --------------------------------------------------------------------------- #
+
+
+def test_events_for_a_completed_run_names_role_and_run_lifecycle_in_order(
+    pg_url: str, config_root: Path
+) -> None:
+    run_id = _start_run(pg_url, config_root)
+
+    proc = _cli(["events", run_id], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    assert lines, "expected at least one event line for a completed run"
+
+    # Exactly one trailing newline discipline: every non-blank line begins
+    # with its `seq` value, so a script can parse the stream.
+    for line in lines:
+        assert re.match(r"^\d+\s", line), (
+            f"line does not start with a seq value: {line!r}"
+        )
+
+    joined = "\n".join(lines)
+    # The shipped `FakeWorker` declares no outputs for the default
+    # one-role config, so this run has no artifacts and therefore no
+    # ARTIFACT_CREATED lines -- that cardinality is Task 1's db-tier proof.
+    role_started_idx = joined.find("ROLE_STARTED")
+    role_completed_idx = joined.find("ROLE_COMPLETED")
+    run_completed_idx = joined.find("RUN_COMPLETED")
+    assert -1 not in (role_started_idx, role_completed_idx, run_completed_idx)
+    assert role_started_idx < role_completed_idx < run_completed_idx
+
+
+# --------------------------------------------------------------------------- #
+# unknown / malformed ids reserve exit 2 with an empty stdout
+# --------------------------------------------------------------------------- #
+
+
+def test_unknown_run_id_exits_2_with_empty_stdout(pg_url: str) -> None:
+    proc = _cli(["events", _UNKNOWN_ID], pg_url)
+
+    assert proc.returncode == 2
+    assert proc.stdout.strip() == ""
+    assert _UNKNOWN_ID in proc.stderr
+
+
+def test_malformed_run_id_exits_2_with_empty_stdout(pg_url: str) -> None:
+    proc = _cli(["events", "not-a-uuid"], pg_url)
+
+    assert proc.returncode == 2
+    assert proc.stdout.strip() == ""
+
+
+# --------------------------------------------------------------------------- #
+# the empty/short edge: a run parked mid-flight by the Plan-07 crash hook has
+# "nothing much to show" -- that is success, not a bad invocation
+# --------------------------------------------------------------------------- #
+
+
+def test_events_for_a_run_parked_mid_flight_exits_0_with_a_short_event_list(
+    pg_url: str,
+) -> None:
+    p1 = _cli(
+        ["run", "text:park me right after CREATED -> BA"],
+        pg_url,
+        extra_env={"DARK_FACTORY_CRASH_AFTER": "CREATED_BA"},
+    )
+    assert p1.returncode != 0
+    run_id = p1.stdout.splitlines()[0].strip()
+    UUID(run_id)
+
+    proc = _cli(["events", run_id], pg_url)
+
+    assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    joined = "\n".join(lines)
+    assert "RUN_CREATED" in joined
+    assert "ROLE_STARTED" in joined
+    # The run was parked before the worker ever ran -- it never reached
+    # ROLE_COMPLETED or RUN_COMPLETED.
+    assert "ROLE_COMPLETED" not in joined
+    assert "RUN_COMPLETED" not in joined
