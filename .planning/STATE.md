@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 12
 current_phase_name: Observability & Audit Surface
 status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-10-03T10:49:34.144Z"
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-10-03T13:04:19.949Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 12 execution started
-state_head: 59b9fad8e22be80361133161a5789ea40809ae31
+state_head: 798c168e66ffb5c4bf62ff35c46c3244d6f8582f
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 76
-  completed_plans: 69
+  completed_plans: 71
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 12 (Observability & Audit Surface) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 12 execution started
 
@@ -126,6 +126,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P09 | 25min task-commits + 10min verification | 3 tasks | 3 files |
 | Phase 11 P10 | 35min | 1 tasks | 2 files |
 | Phase 12 P01 | 40min | 3 tasks | 11 files |
+| Phase 12 P02 | 35min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -265,6 +266,8 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-01: events/reader.py is a sibling of observability/status.py, not a member of the observability package -- the one new module permitted to query run_events, keeping the status read path's events-free closure trivially provable
 - [Phase 12]: 12-01: ARTIFACT_CREATED events are built once from the final artifact_writes value, after every arm that can clear it to [] has already run, then spliced into ROLE_COMPLETED/ROLE_BOUNCED only -- a late write-scope failure after collect_role_artifacts succeeded leaves zero artifacts rows and zero ARTIFACT_CREATED events (ART-04 honesty)
 - [Phase 12]: 12-01: render_events_text prints each EventRow.as_line with markup=False and soft_wrap=True so payload content (e.g. a list-shaped value) is never misread as rich markup and a line is never wrapped -- one line per event holds for any configured width
+- [Phase 12]: Phase 12: 12-02: render_runs_table declares explicit min_width per column (36/13/20/20) so a UUID is never ellipsized by rich at any configured render width; RunListRow omits source_ref to keep that minimum achievable
+- [Phase 12]: Phase 12: 12-02: events --type is validated through EventType per repeatable value before read_events runs, so an unknown filter name exits 2 before any query while a filter matching zero rows stays a valid empty answer
 
 ### Pending Todos
 
@@ -291,6 +294,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T10:49:34.039Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-10-03T13:04:05.842Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
