@@ -523,12 +523,26 @@ Plans:
 **Plans**: 7 plans in 5 waves
 
 Plans:
+**Wave 1**
+
 - [ ] 12-01-PLAN.md — TRACER: `ARTIFACT_CREATED` emitted, read and rendered end-to-end through a new `events` command
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 12-02-PLAN.md — the `runs` list with a copy-pasteable id, plus `events --json` / `--type`
 - [ ] 12-03-PLAN.md — redact the GitHub clarification-comment body before it leaves the process (high-severity gap)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 12-04-PLAN.md — `QA_FAILED` / `QA_PASSED` emitted alongside `ROLE_COMPLETED`, completing the catalog
 - [ ] 12-05-PLAN.md — `artifacts` / `--show`, reading committed content through a production `git show`
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 12-06-PLAN.md — the full `rich` `status` report with text/JSON content parity
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 12-07-PLAN.md — SC4: one seeded run swept across every sink, plus the per-tier green gate
 
 **Invariants**: read models never mutate anything; the event log stays audit-only and is never used to compute control state.
