@@ -520,7 +520,17 @@ Plans:
   3. Every event type in the catalog (RUN_CREATED through RUN_FAILED, including ROLE_*, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED, HUMAN_ANSWER_RECEIVED, RUN_RESUMED, QA_*, QUALITY_GATE_*, PUBLISH_STARTED, PR_CREATED) is emitted at the right moment, and a finished run's story is reconstructable from the event stream alone.
   4. An end-to-end run seeded with realistically-shaped fake secrets leaves zero occurrences of them across artifacts, events, logs, GitHub comments and test reports.
 
-**Plans**: TBD
+**Plans**: 7 plans in 5 waves
+
+Plans:
+- [ ] 12-01-PLAN.md — TRACER: `ARTIFACT_CREATED` emitted, read and rendered end-to-end through a new `events` command
+- [ ] 12-02-PLAN.md — the `runs` list with a copy-pasteable id, plus `events --json` / `--type`
+- [ ] 12-03-PLAN.md — redact the GitHub clarification-comment body before it leaves the process (high-severity gap)
+- [ ] 12-04-PLAN.md — `QA_FAILED` / `QA_PASSED` emitted alongside `ROLE_COMPLETED`, completing the catalog
+- [ ] 12-05-PLAN.md — `artifacts` / `--show`, reading committed content through a production `git show`
+- [ ] 12-06-PLAN.md — the full `rich` `status` report with text/JSON content parity
+- [ ] 12-07-PLAN.md — SC4: one seeded run swept across every sink, plus the per-tier green gate
+
 **Invariants**: read models never mutate anything; the event log stays audit-only and is never used to compute control state.
 
 ## Progress
