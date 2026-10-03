@@ -354,6 +354,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install dark-factory
         run: pip install "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"
@@ -384,6 +386,16 @@ that to an agent runtime. There is no `if:` anywhere in this workflow, no
 matrix, no second job — the workflow is a trigger, and a trigger that grows a
 branch on run state has started deciding what happens next, which is the one
 thing it must not do.
+
+`persist-credentials: false` on the checkout step is load-bearing, not
+cosmetic: `actions/checkout`'s default (`true`) writes the job's own
+restricted, read-only token into git's credential config, and git consults
+that config for any later push before it ever asks the `GIT_ASKPASS`
+credential Dark Factory's own push mechanism supplies from `GITHUB_TOKEN`
+below. Leave the default in place and `dark-factory resume` completes the
+role but its artifact push then fails with "Write access to repository not
+granted" — the role's own work succeeds while the only visible symptom is a
+push error that looks unrelated to checkout entirely.
 
 The install step names a git source rather than a package index, because
 `dark-factory` is not yet published to PyPI — switch to `pip install
