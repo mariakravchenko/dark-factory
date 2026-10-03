@@ -1,18 +1,18 @@
 ---
-status: partial
+status: complete
 phase: 11-one-orchestrator-many-triggers-cross-machine-resume
 source: [11-VERIFICATION.md]
 started: 2026-10-01T11:35:00Z
-updated: 2026-10-02T13:20:00Z
+updated: 2026-10-03T06:35:00Z
 ---
 
 ## Current Test
 
-[testing complete — Test 1 PASSED on real CI (run 37011371774) after closing both G-11-3
-and the newly-discovered sibling gap G-11-4 (db tier env propagation). Test 2 remains
-externally blocked on Anthropic Console billing, outside this session's authority to
-resolve. Re-run /gsd-verify-work 11 once that billing issue is fixed and a live resume
-test can be attempted.]
+[testing complete — both tests PASSED. Test 1 on real CI (run 37011371774) after closing
+G-11-3 and G-11-4 (db tier env propagation). Test 2 on a real GitHub Actions resume (run
+37103322812) after closing G-11-5 (cross-machine session resume) and G-11-6 (reference
+workflow git-configuration gaps, two parts). The Anthropic Console billing issue that
+originally blocked Test 2 resolved externally before this session's retest.]
 
 ## Tests
 
@@ -100,7 +100,29 @@ expected: |
   state. This is the exact live path UAT test 2 originally ran and found broken (G-11-2): no
   second live attempt against a real repository has been recorded since the README fix
   landed.
-result: issue
+result: pass
+observed_2026_10_03_final: |
+  Full live chain confirmed, after fixing three real bugs this attempt uncovered in
+  sequence (G-11-5, G-11-6 parts a/b -- see Gaps below):
+  - `dark-factory run github:21` locally: CREATED -> BA -> ARCHITECTURE -> WAITING_HUMAN
+    (BA completed and pushed locally; ARCHITECTURE paused with a clarifying question).
+  - Replied on the issue; the receiver's own log showed `run.resumed` then
+    `webhook.dispatch.requested workflow=resume.yml` -- the automatic laptop -> CI dispatch,
+    confirmed working.
+  - `dark-factory resume` inside a real GitHub Actions job (run 37103322812) advanced:
+    ARCHITECTURE -> COMPLETED (pushed) -> DEVELOPMENT -> FAILED. The FAILED is a real,
+    expected guardrail catching a scope mismatch in app-new's OWN config ("role DEVELOPMENT
+    attempt 1 wrote outside its configured write_scope ['src/**', 'package.json',
+    'supabase/migrations/**']: ['contact.html']") -- not an infra defect, not related to
+    cross-machine resume, and outside this test's own claim.
+  - `dark-factory status 43321bac-...` confirmed the run reached DEVELOPMENT (its next
+    state past BA/ARCHITECTURE) before that unrelated scope guardrail stopped it -- exactly
+    the literal claim this test exists to prove.
+  This is the first real CI run that ever advanced a laptop-paused run this far. The three
+  bugs found and fixed along the way (G-11-5 native-resume session locality; G-11-6a
+  checkout credential scope; G-11-6b shallow-clone merge-base) are now also fixed in
+  dark-factory's own README reference workflow, so a future deployer following the docs
+  inherits all three fixes rather than rediscovering them.
 severity: blocker
 reason_historical_blocked: "Anthropic Console account's ANTHROPIC_API_KEY cannot currently make API calls ('Your credit balance is too low to access the Anthropic API', HTTP 400) despite the account showing a $5.97 balance. Confirmed via direct Messages API call (bypassing both the claude CLI and Dark Factory entirely) that this is Anthropic's own live billing answer, not a local cache/propagation issue: reproduced identically across two different API keys (original + freshly regenerated), across multiple retries spanning several minutes, with the user confirming same account, single default workspace, no multi-workspace spend-limit split. This blocks only the LOCAL run needed to reach a WAITING_HUMAN pause in this sandbox -- it is an external account/billing issue, unrelated to any phase 11 code or documentation."
 progress_made: |
@@ -123,8 +145,8 @@ next_step: "G-11-5 is fixed (see Gaps below) -- re-run the live path once more: 
 ## Summary
 
 total: 2
-passed: 1
-issues: 1
+passed: 2
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -280,8 +302,61 @@ blocked: 0
     deselected, the one pre-existing unrelated failure unchanged. `mypy src/dark_factory`:
     clean (2 pre-existing unrelated errors, mcp extra not installed). `ruff check .` /
     `ruff format --check .`: clean.
-    NOT yet re-confirmed live end-to-end (a fresh dark-factory run -> WAITING_HUMAN -> reply
-    -> webhook dispatch -> CI resume actually advancing past BA) -- that live re-attempt is
-    Test 2's own remaining next_step.
+    Re-confirmed live end-to-end on 2026-10-03 (run 43321bac-c4fd-4bbe-a79e-4632859fc837,
+    CI run 37103322812): ARCHITECTURE's native --resume attempt against a session created
+    on the laptop correctly fell back and completed, producing a fresh session id and
+    pushing real work -- see Test 2's final observed_2026_10_03_final entry above.
+  debug_session: null
+
+- gap_id: G-11-6
+  truth: "`dark-factory resume` inside a GitHub Actions job, dispatched from a laptop-paused run, completes a role (push included) and lets a later role's quality-gate diff collection succeed -- the full local->CI handoff, not just the resume call itself."
+  status: resolved
+  resolved_by: "app-new commits 0e583b6 + 0a21f48; dark-factory README.md commits 1ab7784 + 0670376"
+  resolved_at: 2026-10-03
+  reason: "Live attempts against app-new#20/#21 (2026-10-03) surfaced two further CI-only git-configuration gaps in the reference resume.yml, past G-11-5: a push-credential scope problem and a shallow-clone merge-base problem. Neither is a dark-factory code defect -- both are gaps in the reference resume.yml's own actions/checkout configuration, which every deployer copies verbatim."
+  severity: blocker
+  test: 2
+  root_cause: |
+    Part a (push credential scope): the reference resume.yml declared `permissions:
+    contents: read`. `actions/checkout@v4`'s default (`persist-credentials: true`) writes
+    git's own credential config from exactly that scope, and git consults that config for
+    ANY later push before ever trying dark-factory's own GIT_ASKPASS-based push token --
+    so the push used the wrong (read-only) credential and failed with "Write access to
+    repository not granted", even though the custom push token itself was valid. A first
+    attempted fix (`persist-credentials: false`) treated this as "remove the interfering
+    credential" and broke something worse: `ensure_worktree`'s git-level branch
+    reconstruction (fetching a run's branch when resuming on a machine that never created
+    it) has NO credential channel of its own -- it relies entirely on whatever checkout
+    configured. With no credential at all, that fetch failed silently, `ensure_worktree`
+    fell through to creating an empty worktree off `main`, and the next role's
+    `read_artifact_text` failed with `MissingArtifactContentError` -- a different, harder
+    failure than the one being fixed. The correct fix is `permissions: contents: write`,
+    which makes checkout's own default credential satisfy both halves at once.
+    Part b (shallow clone): `actions/checkout@v4`'s other default, `fetch-depth: 1`, fetches
+    only the tip of the default branch. Once a role actually completed (part a fixed) and a
+    later role's quality-gate after-hook ran `collect_pr_diff`'s `git diff
+    main...dark-factory/run-<id>` (a merge-base, triple-dot diff), the shallow clone had no
+    shared ancestor to find at all, since `main` had moved on since the run branch forked
+    from it: `fatal: main...dark-factory/run-<id>: no merge base`. `fetch-depth: 0` is the
+    fix; any fixed shallow depth only relocates the same failure further out.
+    Both gaps are specifically CI-only: a local resume on the machine that created the
+    worktree never exercises checkout's credential config or a shallow clone at all, which
+    is why neither surfaced until this phase's actual live CI resume attempt -- the same
+    "invisible until proven live" pattern as G-11-1/G-11-3/G-11-4/G-11-5, just one layer
+    further out (the reference workflow's own git plumbing, not dark-factory's own code).
+  artifacts:
+    - path: README.md
+      issue: "the resume-workflow-reference block declared permissions: contents: read (too narrow for the push this job performs) and omitted fetch-depth entirely (defaulting to a shallow clone too thin for a later merge-base diff) -- every deployer following the docs verbatim would hit both"
+  missing:
+    - "permissions: contents: write on the reference workflow (closes the push-credential gap without the persist-credentials:false detour that breaks fetch instead)"
+    - "fetch-depth: 0 on the reference workflow's checkout step (closes the shallow-clone merge-base gap)"
+  fix_note: |
+    Both fixes verified live: app-new#21 / run 43321bac-c4fd-4bbe-a79e-4632859fc837 advanced
+    ARCHITECTURE -> COMPLETED (real push) -> DEVELOPMENT -> FAILED (an unrelated, legitimate
+    write_scope guardrail, not a git-configuration failure) in CI run 37103322812. Applied
+    to README.md's resume-workflow-reference block with matching prose explaining both
+    failure modes and why the more conservative-looking read-only / persist-credentials:false
+    combination is the wrong fix. `tests/unit/test_resume_workflow_reference_doc.py`: all 13
+    cases green after each edit.
   debug_session: null
 
