@@ -345,7 +345,7 @@ name: resume
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resume:
@@ -354,8 +354,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
       - name: Install dark-factory
         run: pip install "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"
@@ -379,23 +377,29 @@ jobs:
 <!-- resume-workflow-reference: end -->
 
 The trigger key is quoted (`"on":`) for the same reason this repository's own
-`ci.yml` quotes it: YAML 1.1 parses a bare `on:` as the boolean `True`.
-`permissions: contents: read` is declared explicitly rather than inherited,
-so a repository whose default permissions are broader does not silently hand
-that to an agent runtime. There is no `if:` anywhere in this workflow, no
-matrix, no second job — the workflow is a trigger, and a trigger that grows a
-branch on run state has started deciding what happens next, which is the one
-thing it must not do.
+`ci.yml` quotes it: YAML 1.1 parses a bare `on:` as the boolean `True`. There
+is no `if:` anywhere in this workflow, no matrix, no second job — the
+workflow is a trigger, and a trigger that grows a branch on run state has
+started deciding what happens next, which is the one thing it must not do.
 
-`persist-credentials: false` on the checkout step is load-bearing, not
-cosmetic: `actions/checkout`'s default (`true`) writes the job's own
-restricted, read-only token into git's credential config, and git consults
-that config for any later push before it ever asks the `GIT_ASKPASS`
-credential Dark Factory's own push mechanism supplies from `GITHUB_TOKEN`
-below. Leave the default in place and `dark-factory resume` completes the
-role but its artifact push then fails with "Write access to repository not
-granted" — the role's own work succeeds while the only visible symptom is a
-push error that looks unrelated to checkout entirely.
+`permissions: contents: write` is load-bearing, not generous-by-default:
+this job resumes a role that commits and pushes its own work back to
+`origin`, and `actions/checkout`'s default credential setup (left at its own
+default, `persist-credentials: true`) is scoped by exactly this
+`permissions` block — so it is the one thing standing between "the push
+Dark Factory performs after a role completes" and a 403. It also covers a
+less obvious half: `ensure_worktree`'s git-level reconstruction (fetching and
+checking out a run's branch when resuming on a machine that never created
+it — the local-laptop-pause, CI-resume handoff this whole section is about)
+has no credential channel of its own; it relies entirely on whatever
+checkout already configured. Scope this down to `read` and the *push* fails
+loudly ("Write access to repository not granted"); try to route around that
+by disabling `persist-credentials` instead of widening `permissions`, and
+the *fetch* fails silently instead — git has no other credential to fall
+back on, so `ensure_worktree` reconstructs an empty worktree off the base
+branch, and the role that resumes next can't find the previous role's
+artifacts at all. Both failure modes were hit, in exactly this order, while
+proving this phase's cross-machine resume claim for real.
 
 The install step names a git source rather than a package index, because
 `dark-factory` is not yet published to PyPI — switch to `pip install
