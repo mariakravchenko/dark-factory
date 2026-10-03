@@ -354,6 +354,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install dark-factory
         run: pip install "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"
@@ -400,6 +402,17 @@ back on, so `ensure_worktree` reconstructs an empty worktree off the base
 branch, and the role that resumes next can't find the previous role's
 artifacts at all. Both failure modes were hit, in exactly this order, while
 proving this phase's cross-machine resume claim for real.
+
+`fetch-depth: 0` on the checkout step is the third thing this same proof hit
+before a role genuinely completed end to end. `actions/checkout`'s default
+(`1`) fetches only the tip of the default branch — too shallow for
+`collect_pr_diff`'s `git diff main...dark-factory/run-<id>` (a merge-base,
+triple-dot diff, run from the quality-gate's after-hook) to find any common
+ancestor once `main` has moved on since the run's branch forked from it,
+which it reliably has by the time a role finishes. The failure there is
+`fatal: main...dark-factory/run-<id>: no merge base` — full history is what
+a merge-base computation needs; any fixed shallow depth just relocates the
+same failure further out.
 
 The install step names a git source rather than a package index, because
 `dark-factory` is not yet published to PyPI — switch to `pip install
