@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 12
 current_phase_name: Observability & Audit Surface
 status: executing
-stopped_at: Completed 12-04-PLAN.md
-last_updated: "2026-10-04T07:24:32.916Z"
+stopped_at: Completed 12-05-PLAN.md
+last_updated: "2026-10-04T10:45:13.400Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 12 execution started
-state_head: 5a1cadd6f2430a08bc542edc486e5a287ba3cdb0
+state_head: 49e495f5d220166a198dbb11f52d1c91a1abcad9
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 76
-  completed_plans: 73
+  completed_plans: 74
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 12 (Observability & Audit Surface) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 12 execution started
 
@@ -129,6 +129,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 12 P02 | 35min | 2 tasks | 7 files |
 | Phase 12 P03 | resumed | 2 tasks | 3 files |
 | Phase 12 P04 | ~2h | 2 tasks | 4 files |
+| Phase 12 P05 | 50min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -273,6 +274,8 @@ Recent decisions affecting current work:
 - [Phase 12]: Scrubbed the assembled clarification-comment text once (clarification_body -> redact -> comment_body) before both the idempotency lookup and create_comment, rather than per-question
 - [Phase 12]: Left build_clarification_comment unchanged; redaction lives exclusively at the ROLE_NEEDS_INPUT call site, preserving the function's single responsibility
 - [Phase 12]: 12-04: EventType completed at 22 members -- QA_FAILED/QA_PASSED emitted once each from the existing verdict.computed_status block, spliced into all three signal arms alongside the untouched ROLE_COMPLETED, voided by the existing GitError catch on a late commit failure — D-07: the acceptance-criteria verdict and the independent quality-gate re-run are deliberately distinct, non-inferable signals in one stream
+- [Phase 12]: 12-05: git/committed.py is the one production git-show read (read_committed/run_artifact_text), built on run_git; tests/support/git_repo.py now delegates to it instead of duplicating the implementation
+- [Phase 12]: 12-05: dark-factory artifacts --show resolves content by ArtifactReference primary key only (read_artifact_target); the path is never caller-supplied, since resolve_under_run_root already validated it at write time
 
 ### Pending Todos
 
@@ -299,6 +302,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-04T07:24:32.819Z
-Stopped at: Completed 12-04-PLAN.md
+Last session: 2026-10-04T10:45:13.306Z
+Stopped at: Completed 12-05-PLAN.md
 Resume file: None
