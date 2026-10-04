@@ -1105,6 +1105,13 @@ def _run_current_role(
     # so the event-dispatch ladder further down can splice it in with no
     # NameError regardless of which branch above actually ran.
     gate_events: list[EventWrite] = []
+    # Phase 12 (plan 12-04), D-07: populated only inside the terminal-role
+    # verdict block below, by exactly one QA_FAILED or QA_PASSED EventWrite --
+    # stays empty for every other role and for a run whose terminal role
+    # never reaches the verdict block. Declared here, unconditionally, for
+    # the same NameError-avoidance reason ``gate_events`` is, so all three
+    # signal arms below can splice it unconditionally.
+    qa_verdict_events: list[EventWrite] = []
     # LOOP-02/LOOP-03/LOOP-04 (Phase 9, plan 09-02): ``counter_increments`` is
     # populated only inside the terminal-role gate block below, by
     # ``_bounce_or_fail``, and passed into ``apply_transition`` unconditionally
@@ -1264,7 +1271,37 @@ def _run_current_role(
                             bounce_reason = "qa_verdict_fail"
                         else:
                             outcome = {**outcome, "error": bounce_error}
+                        # Phase 12 (plan 12-04), D-07: the verdict fact rides
+                        # independently of the bounce-vs-fail routing decision
+                        # above -- a FAIL verdict always leaves exactly one
+                        # QA_FAILED event, whichever arm the run then lands in.
+                        qa_verdict_events.append(
+                            EventWrite(
+                                type=EventType.QA_FAILED,
+                                role_execution_id=latest.id,
+                                payload={
+                                    "role": node.name,
+                                    "criteria_failed": [
+                                        c.criterion_id
+                                        for c in verdict.criteria
+                                        if c.result is VerdictStatus.FAIL
+                                    ],
+                                },
+                            )
+                        )
                     else:
+                        # Phase 12 (plan 12-04), D-07: a PASS verdict is
+                        # recorded alongside the quality-gate events this
+                        # branch is about to build -- the two signal
+                        # families answer different questions and must
+                        # coexist, never substitute for one another.
+                        qa_verdict_events.append(
+                            EventWrite(
+                                type=EventType.QA_PASSED,
+                                role_execution_id=latest.id,
+                                payload={"role": node.name},
+                            )
+                        )
                         gate_commands = list(
                             state.workflow.get("quality_gate", {}).get("commands", [])
                         )
@@ -1443,6 +1480,10 @@ def _run_current_role(
                 # audit events must not claim a persisted fact that was
                 # never actually durable.
                 gate_events = []
+                # Phase 12 (plan 12-04), D-07: identical reasoning -- a
+                # verdict decision whose commit never landed must leave no
+                # event claiming the run durably acted on it.
+                qa_verdict_events = []
                 # A bounce decision made above (if any) is void once the
                 # commit/push that would have carried it never landed: the
                 # signal is now ROLE_FAILED, so neither the counter increment
@@ -1547,6 +1588,10 @@ def _run_current_role(
         # then the run completed". Empty for every role but the pipeline's
         # terminal one, so this is a no-op for BA/ARCHITECTURE/DEVELOPMENT.
         events.extend(gate_events)
+        # Phase 12 (plan 12-04), D-07: the QA-verdict fact rides alongside
+        # this generic ROLE_COMPLETED, never instead of it -- empty for
+        # every role but the pipeline's terminal one.
+        events.extend(qa_verdict_events)
         # Phase 12 (plan 12-01), D-06: one ARTIFACT_CREATED per artifact this
         # attempt actually wrote, rides the same apply_transition call as the
         # artifacts rows below it ties to -- empty for an attempt that wrote
@@ -1600,6 +1645,11 @@ def _run_current_role(
         # them. Empty whenever the gate never ran (verdict FAIL
         # short-circuit, an earlier failure, or a non-terminal role).
         events.extend(gate_events)
+        # Phase 12 (plan 12-04), D-07: a FAIL verdict at or over the
+        # iteration cap still carries its QA_FAILED event into this arm --
+        # the QA-outcome signal must survive into whichever arm the run
+        # lands in, including the dead-run case.
+        events.extend(qa_verdict_events)
         # D-07/D-08: a capability denial is prepended ahead of ROLE_FAILED /
         # RUN_FAILED, in the SAME apply_transition call -- additive, never
         # instead of them, so no existing observability consumer needs a new
@@ -1633,6 +1683,10 @@ def _run_current_role(
         # Audit order: "the role finished, then the gate ran (if it ran),
         # then the run bounced" -- mirrors the ROLE_COMPLETED arm's ordering.
         events.extend(gate_events)
+        # Phase 12 (plan 12-04), D-07: a FAIL verdict under the cap still
+        # carries its QA_FAILED event into this arm -- mirrors the
+        # ROLE_COMPLETED arm's splice.
+        events.extend(qa_verdict_events)
         # Phase 12 (plan 12-01), D-06: same splice as the ROLE_COMPLETED arm
         # -- a bounced attempt's own artifacts are still durable (ROLE-05's
         # enforce_write_scope already ran above and left artifact_writes

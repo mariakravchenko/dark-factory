@@ -47,8 +47,18 @@ ARTIFACT_CREATED (D-06) -- the artifact-write audit tie
 ``orchestrator/runner.py`` genuinely writes: one event per
 ``ArtifactReferenceWrite`` an attempt produces, in the same
 ``apply_transition`` call that inserts the matching ``artifacts`` row, so
-the two can never drift apart. The remainder listed in PROJECT.md --
-QA_FAILED/QA_PASSED -- still arrive later in Phase 12.
+the two can never drift apart. Phase 12 (plan 12-04) adds the final two --
+QA_FAILED and QA_PASSED (D-07) -- the acceptance-criteria-verdict audit
+tie ``orchestrator/runner.py`` genuinely writes, once each, from the
+existing structural ``verdict.computed_status`` block: these answer "did
+the work meet the stated acceptance criteria?", a genuinely different
+question from ``QUALITY_GATE_PASSED``/``QUALITY_GATE_FAILED``'s "did the
+independent command re-run pass?" -- a run can fail the first while never
+reaching the second, so the two families are deliberately distinct
+signals in one stream rather than two names for the same fact. With these
+two, the catalog is now complete for the full set PROJECT.md declares --
+every member below is written by some shipped code path, and this
+docstring names no further pending member.
 """
 
 from enum import StrEnum
@@ -93,3 +103,7 @@ class EventType(StrEnum):
 
     # Phase 12 -- the artifact-write audit tie (D-06).
     ARTIFACT_CREATED = "ARTIFACT_CREATED"
+
+    # Phase 12 -- the QA-verdict audit tie (D-07).
+    QA_FAILED = "QA_FAILED"
+    QA_PASSED = "QA_PASSED"

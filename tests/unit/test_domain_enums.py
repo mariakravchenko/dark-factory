@@ -112,17 +112,16 @@ def test_event_type_contains_the_six_phase_one_members() -> None:
     assert required <= {m.name for m in EventType}
 
 
-def test_event_type_has_exactly_twenty_members_with_the_phase_two_five_six_nine_ten_and_twelve_types() -> (
+def test_event_type_has_exactly_twenty_two_members_with_the_phase_two_five_six_nine_ten_and_twelve_types() -> (
     None
 ):
     # Exactly the six Phase 1 members plus the four Phase 2 writes plus the one
     # Phase 5 write plus the one Phase 6 write plus the four Phase 9 writes
-    # plus the three Phase 10 writes plus the one Phase 12 write
-    # (ARTIFACT_CREATED) -- the exact count is what stops a future
-    # contributor from pre-declaring the still-pending Phase 12 members
-    # (QA_FAILED/QA_PASSED), which would advertise transitions that are
-    # never emitted.
-    assert len(list(EventType)) == 20
+    # plus the three Phase 10 writes plus the three Phase 12 writes
+    # (ARTIFACT_CREATED, QA_FAILED, QA_PASSED) -- the exact count is what
+    # stops a future contributor from pre-declaring a member no shipped
+    # code path writes.
+    assert len(list(EventType)) == 22
     phase_two = {
         "QUESTION_CREATED",
         "RUN_PAUSED",
@@ -143,7 +142,7 @@ def test_event_type_has_exactly_twenty_members_with_the_phase_two_five_six_nine_
     assert phase_nine <= {m.name for m in EventType}
     phase_ten = {"PUBLISH_STARTED", "PR_CREATED", "PUBLISH_FAILED"}
     assert phase_ten <= {m.name for m in EventType}
-    phase_twelve = {"ARTIFACT_CREATED"}
+    phase_twelve = {"ARTIFACT_CREATED", "QA_FAILED", "QA_PASSED"}
     assert phase_twelve <= {m.name for m in EventType}
 
 
