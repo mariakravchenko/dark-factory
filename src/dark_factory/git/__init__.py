@@ -45,6 +45,12 @@ Error hierarchy:
 
 Declaring the whole hierarchy in one place keeps the package's error surface
 legible to a caller from the start.
+
+:func:`~dark_factory.git.committed.read_committed` and
+:func:`~dark_factory.git.committed.run_artifact_text` (plan 12-05, OBS-01)
+are the one production ``git show`` read path -- see
+``dark_factory.git.committed``'s module docstring for why a finished run's
+artifact content can only be read this way.
 """
 
 from __future__ import annotations
@@ -83,8 +89,10 @@ __all__ = [
     "is_out_of_scope",
     "pr_changed_paths",
     "push_working_branch",
+    "read_committed",
     "remove_worktree",
     "revert_paths",
+    "run_artifact_text",
     "run_git",
     "validate_write_scope_patterns",
     "wip_commit_if_dirty",
@@ -177,6 +185,7 @@ from dark_factory.git.client import (
     git_env,
     run_git,
 )
+from dark_factory.git.committed import read_committed, run_artifact_text
 from dark_factory.git.diff import (
     ARTIFACT_COMMIT_SUBJECT_PREFIX,
     ARTIFACT_EXCLUDE_PATHSPEC,

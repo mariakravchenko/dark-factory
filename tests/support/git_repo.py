@@ -16,6 +16,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from uuid import UUID
 
+from dark_factory.git import committed as _committed
 from dark_factory.git.client import run_git
 
 __all__ = [
@@ -56,9 +57,10 @@ def git_commit_all(root: Path, message: str) -> str:
 
 
 def read_committed(repo_root: Path, branch: str, relative_path: str) -> str:
-    """``git show <branch>:<relative_path>`` -- how a test reads artifact
-    content that no longer exists on disk (05-03's fresh-clone proof)."""
-    return run_git(["show", f"{branch}:{relative_path}"], cwd=repo_root).stdout
+    """Delegates to :func:`dark_factory.git.committed.read_committed` -- the
+    canonical production implementation; this is a test-helper re-export,
+    not a second copy."""
+    return _committed.read_committed(repo_root, branch, relative_path)
 
 
 def clone_repo(source: Path, dest: Path, *, branch: str | None = None) -> Path:
@@ -76,16 +78,9 @@ def clone_repo(source: Path, dest: Path, *, branch: str | None = None) -> Path:
 def run_artifact_text(
     repo_root: Path, run_id: UUID, working_branch: str, relative_path: str
 ) -> str:
-    """Read a run's artifact content through the working branch, not the
-    filesystem (05-03).
-
-    Composes ``.dark-factory/runs/<run_id>/`` with ``relative_path`` (the
-    same run-root-relative path an ``artifacts`` row's ``path`` column
-    stores) and reads it with :func:`read_committed`. After a run reaches
-    ``COMPLETED`` its worktree is removed (D-04), so the working branch is
-    the only place its artifact content still exists -- a test that reads
-    from disk instead is testing a window that has already closed.
-    """
-    return read_committed(
-        repo_root, working_branch, f".dark-factory/runs/{run_id}/{relative_path}"
+    """Delegates to :func:`dark_factory.git.committed.run_artifact_text` --
+    the canonical production implementation; this is a test-helper
+    re-export, not a second copy."""
+    return _committed.run_artifact_text(
+        repo_root, run_id, working_branch, relative_path
     )
