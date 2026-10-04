@@ -18,15 +18,25 @@ from collections.abc import Sequence
 from typing import IO
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
-from dark_factory.domain.views import ArtifactRow, EventRow, Redactor, RunListRow
+from dark_factory.domain.views import (
+    NULL_MARKER,
+    ArtifactRow,
+    EventRow,
+    Redactor,
+    RunListRow,
+    RunReport,
+    RunView,
+)
 
 __all__ = [
     "DEFAULT_RENDER_WIDTH",
     "render_artifacts_table",
     "render_events_json",
     "render_events_text",
+    "render_run_report",
     "render_runs_table",
 ]
 
@@ -163,7 +173,21 @@ def render_artifacts_table(
     ``type``, ``role`` and ``path`` are passed through ``redactor`` when one
     is supplied.
     """
-    table = Table()
+    table = _build_artifacts_table(rows, redactor=redactor)
+    buffer = io.StringIO()
+    console = _console(buffer, width)
+    console.print(table)
+    return buffer.getvalue().rstrip("\n")
+
+
+def _build_artifacts_table(
+    rows: Sequence[ArtifactRow], *, redactor: Redactor | None, title: str | None = None
+) -> Table:
+    """The column construction :func:`render_artifacts_table` prints on its
+    own, factored out so :func:`render_run_report` (Plan 12-06) can embed the
+    identical table under its own ``title`` rather than holding a second
+    copy of the column layout."""
+    table = Table(title=title)
     table.add_column("artifact_id", min_width=36)
     table.add_column("type", min_width=18)
     table.add_column("role", min_width=12)
@@ -181,8 +205,130 @@ def render_artifacts_table(
             str(path),
             row.created_at.isoformat(timespec="seconds"),
         )
+    return table
 
+
+def render_run_report(
+    report: RunReport, *, redactor: Redactor | None = None, width: int | None = None
+) -> str:
+    """The whole ``dark-factory status`` answer, as ``rich`` panels and
+    tables (Plan 12-06, D-01, D-02): the eleven :class:`RunView` fields plus
+    the PR identifiers in one panel, then one table or panel per
+    :data:`~dark_factory.domain.views.RunReport.SECTION_KEYS` entry.
+
+    Every section's title is the exact :class:`RunView` field name or
+    :data:`RunReport.SECTION_KEYS` entry it renders, because
+    ``tests/integration/test_status_cli.py``'s text/JSON parity guard
+    asserts each one appears verbatim in this output. An empty section
+    still renders its title and an explicit :data:`NULL_MARKER` (or an
+    empty table carrying its header row) rather than being omitted --
+    omission is indistinguishable from "this field does not exist", which
+    is exactly the transparency failure TRIG-03 forbids.
+    """
     buffer = io.StringIO()
     console = _console(buffer, width)
-    console.print(table)
+
+    run_fields = report.run._rendered_fields(redactor)
+    detail_dump = report.detail.model_dump(mode="json")
+    pr_number = detail_dump["pr_number"]
+    pr_url = detail_dump["pr_url"]
+    published_commit_sha = detail_dump["published_commit_sha"]
+    if redactor is not None:
+        if pr_url is not None:
+            pr_url = redactor(pr_url)
+        if published_commit_sha is not None:
+            published_commit_sha = redactor(published_commit_sha)
+
+    def _line(name: str, value: object) -> str:
+        return f"{name}: {NULL_MARKER if value is None else value}"
+
+    run_lines = [_line(name, run_fields[name]) for name in RunView.model_fields]
+    run_lines.append(_line("pr_number", pr_number))
+    run_lines.append(_line("pr_url", pr_url))
+    run_lines.append(_line("published_commit_sha", published_commit_sha))
+    console.print(Panel("\n".join(run_lines), title="run"))
+
+    roles_table = Table(title="roles")
+    roles_table.add_column("role")
+    roles_table.add_column("worker")
+    roles_table.add_column("attempt")
+    roles_table.add_column("status")
+    roles_table.add_column("worker_session_id", min_width=36)
+    roles_table.add_column("created_at", min_width=20)
+    for role_row in report.detail.roles:
+        worker_session_id = role_row.worker_session_id
+        if redactor is not None and worker_session_id is not None:
+            worker_session_id = redactor(worker_session_id)
+        roles_table.add_row(
+            role_row.role,
+            role_row.worker,
+            str(role_row.attempt),
+            role_row.status,
+            NULL_MARKER if worker_session_id is None else str(worker_session_id),
+            role_row.created_at.isoformat(timespec="seconds"),
+        )
+    console.print(roles_table)
+
+    console.print(
+        _build_artifacts_table(
+            report.detail.artifacts, redactor=redactor, title="artifacts"
+        )
+    )
+
+    interactions_table = Table(title="interactions")
+    interactions_table.add_column("question")
+    interactions_table.add_column("answer")
+    interactions_table.add_column("status")
+    interactions_table.add_column("created_at", min_width=20)
+    interactions_table.add_column("answered_at", min_width=20)
+    for interaction in report.detail.interactions:
+        question = interaction.question
+        answer = interaction.answer
+        if redactor is not None:
+            question = redactor(question)
+            if answer is not None:
+                answer = redactor(answer)
+        interactions_table.add_row(
+            str(question),
+            NULL_MARKER if answer is None else str(answer),
+            interaction.status.value,
+            interaction.created_at.isoformat(timespec="seconds"),
+            NULL_MARKER
+            if interaction.answered_at is None
+            else interaction.answered_at.isoformat(timespec="seconds"),
+        )
+    console.print(interactions_table)
+
+    if report.quality_gate is None:
+        console.print(Panel(f"no gate result\n{NULL_MARKER}", title="quality_gate"))
+    else:
+        gate_table = Table(title=f"quality_gate ({report.quality_gate.status})")
+        gate_table.add_column("command")
+        gate_table.add_column("exit_code")
+        for command_row in report.quality_gate.commands:
+            command_text = (
+                redactor(command_row.command)
+                if redactor is not None
+                else command_row.command
+            )
+            gate_table.add_row(
+                str(command_text),
+                NULL_MARKER
+                if command_row.exit_code is None
+                else str(command_row.exit_code),
+            )
+        console.print(gate_table)
+
+    errors = report.detail.errors
+    if redactor is not None:
+        errors = [redactor(error) for error in errors]
+    errors_body = "\n".join(str(error) for error in errors) if errors else NULL_MARKER
+    console.print(Panel(errors_body, title="errors"))
+
+    events_table = Table(title="events")
+    events_table.add_column("event")
+    for event in report.events:
+        events_table.add_row(event.as_line(redactor=redactor))
+    console.print(events_table)
+
     return buffer.getvalue().rstrip("\n")

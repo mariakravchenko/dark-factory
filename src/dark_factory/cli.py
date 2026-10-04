@@ -31,6 +31,7 @@ import typer
 from dark_factory.config.loader import ConfigError, load_effective_config
 from dark_factory.config.settings import get_settings
 from dark_factory.domain.status import RunStatus
+from dark_factory.domain.views import RunReport
 from dark_factory.events.catalog import EventType
 from dark_factory.events.reader import read_events
 from dark_factory.events.redaction import redact
@@ -43,12 +44,15 @@ from dark_factory.observability.render import (
     render_artifacts_table,
     render_events_json,
     render_events_text,
+    render_run_report,
     render_runs_table,
 )
 from dark_factory.observability.run_detail import (
     UnknownArtifactError,
     read_artifact_rows,
     read_artifact_target,
+    read_quality_gate,
+    read_run_detail,
     read_run_list,
 )
 from dark_factory.observability.status import UnknownRunError, read_status
@@ -263,26 +267,41 @@ def status(
         False, "--json", help="Emit one JSON object instead of the text field list."
     ),
 ) -> None:
-    """Report where a run is -- read from state columns, never the event log (D-11 / D-12).
+    """Report everything about a run -- the full OBS-01 report: state, role
+    history, artifacts, interactions, quality-gate results, errors, PR
+    information and the state-transition history (Plan 12-06, D-01 / D-11 /
+    D-12).
 
-    A pure read: it calls ``read_status`` and renders. It never inspects the
-    status to decide on an action -- that is the orchestrator's job, and letting
-    a read command grow a decision is exactly what Phase 11's single-``advance``
-    funnel starts by refusing.
+    A pure read: it composes ``read_status`` (the run's position, from state
+    columns alone) with the sibling readers ``read_run_detail``,
+    ``read_events`` and ``read_quality_gate`` into one ``RunReport``, and
+    renders. It never inspects the status to decide on an action -- that is
+    the orchestrator's job, and letting a read command grow a decision is
+    exactly what Phase 11's single-``advance`` funnel starts by refusing.
+
+    The quality-gate section is read from the committed
+    ``verification/quality_gate.json`` on the run's working branch, resolved
+    against the current working directory -- run this command from inside
+    the run's repository, or that section reads as absent.
     """
+    _route_logs_to_stderr()
     parsed = _parse_run_id(run_id)
     try:
         view = read_status(parsed)
+        detail = read_run_detail(parsed)
+        events = read_events(parsed)
+        gate = read_quality_gate(Path.cwd(), parsed, view.working_branch)
     except UnknownRunError as exc:
         typer.echo(f"unknown run: {run_id}", err=True)
         raise typer.Exit(code=2) from exc
 
+    report = RunReport(run=view, detail=detail, quality_gate=gate, events=events)
+
     redactor = _redactor()
     if output_json:
-        _route_logs_to_stderr()
-        typer.echo(view.as_json(redactor=redactor))
+        typer.echo(report.as_json(redactor=redactor))
     else:
-        typer.echo(view.as_text(redactor=redactor))
+        typer.echo(render_run_report(report, redactor=redactor))
 
 
 @app.command()
