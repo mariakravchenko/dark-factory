@@ -34,15 +34,23 @@ from dark_factory.domain.status import RunStatus
 from dark_factory.events.catalog import EventType
 from dark_factory.events.reader import read_events
 from dark_factory.events.redaction import redact
+from dark_factory.git import GitError
+from dark_factory.git.committed import run_artifact_text
 from dark_factory.input.loaders import SourceNotSupportedError
 from dark_factory.input.resolver import UnresolvableSourceError
 from dark_factory.logging import configure_logging
 from dark_factory.observability.render import (
+    render_artifacts_table,
     render_events_json,
     render_events_text,
     render_runs_table,
 )
-from dark_factory.observability.run_detail import read_run_list
+from dark_factory.observability.run_detail import (
+    UnknownArtifactError,
+    read_artifact_rows,
+    read_artifact_target,
+    read_run_list,
+)
 from dark_factory.observability.status import UnknownRunError, read_status
 from dark_factory.orchestrator.answers import (
     NoPendingInteraction,
@@ -342,3 +350,73 @@ def runs(
 
     rows = read_run_list(status=parsed_status)
     typer.echo(render_runs_table(rows, redactor=_redactor()))
+
+
+@app.command()
+def artifacts(
+    run_id: str,
+    show: str | None = typer.Option(
+        None,
+        "--show",
+        help="Print this artifact's content, read from the run's working branch.",
+    ),
+) -> None:
+    """List a run's artifacts, or print one artifact's content (Plan 12-05,
+    OBS-01 / TRIG-02).
+
+    Without ``--show``: a metadata-only table -- id, type, role, path,
+    created_at -- read straight from ``artifacts`` rows; no artifact content
+    is read for the list form.
+
+    With ``--show <artifact-id>``: the artifact's content, read through
+    ``git show`` on the run's working branch rather than any filesystem
+    path -- a ``COMPLETED`` run's worktree has already been removed (D-04),
+    so a disk read would work only in the narrow window an operator is
+    least likely to be looking, and fail silently for every finished run.
+    The repository root is resolved as ``Path.cwd()`` -- the same
+    resolution ``run`` already uses via ``load_effective_config`` -- since
+    no column on ``runs`` holds an absolute filesystem path; this command
+    must therefore be run from inside the repository the run was driven
+    against.
+    """
+    _route_logs_to_stderr()
+    parsed = _parse_run_id(run_id)
+
+    if show is None:
+        try:
+            rows = read_artifact_rows(parsed)
+        except UnknownRunError as exc:
+            typer.echo(f"unknown run: {run_id}", err=True)
+            raise typer.Exit(code=2) from exc
+        typer.echo(render_artifacts_table(rows, redactor=_redactor()))
+        return
+
+    try:
+        artifact_uuid = UUID(show)
+    except ValueError as exc:
+        typer.echo(f"not an artifact id: {show}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        target = read_artifact_target(artifact_uuid)
+    except UnknownArtifactError as exc:
+        typer.echo(f"unknown artifact: {show}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    if target.working_branch is None:
+        typer.echo(
+            f"run {target.run_id} has no working branch; no artifact content "
+            "is readable for it",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    try:
+        text = run_artifact_text(
+            Path.cwd(), target.run_id, target.working_branch, target.path
+        )
+    except GitError as exc:
+        typer.echo(_redactor()(str(exc)), err=True)
+        raise typer.Exit(code=2) from exc
+
+    typer.echo(_redactor()(text))

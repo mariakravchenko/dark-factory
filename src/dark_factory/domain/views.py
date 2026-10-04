@@ -34,7 +34,7 @@ from pydantic import BaseModel, ConfigDict
 
 from dark_factory.domain.status import RunStatus
 
-__all__ = ["NULL_MARKER", "EventRow", "RunListRow", "RunView"]
+__all__ = ["NULL_MARKER", "ArtifactRow", "EventRow", "RunListRow", "RunView"]
 
 NULL_MARKER = "-"
 
@@ -138,3 +138,21 @@ class EventRow(BaseModel):
         if self.role_execution_id is not None:
             line = f"{line} role_execution_id={self.role_execution_id}"
         return f"{line} payload={payload}"
+
+
+class ArtifactRow(BaseModel):
+    """One ``artifacts`` row, read back for ``dark-factory artifacts`` (Plan
+    12-05, OBS-01 / TRIG-02) -- a frozen sibling of :class:`RunListRow`
+    carrying metadata only (D-04): no ``checksum`` and no content. The first
+    field is named ``artifact_id``, not ``id`` -- the value an operator
+    pastes into ``--show`` must be unambiguous in both the table header and
+    the JSON, and ``id`` next to a run id in the same session is exactly the
+    ambiguity that produces a wrong paste."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    artifact_id: UUID
+    type: str
+    role: str
+    path: str
+    created_at: datetime

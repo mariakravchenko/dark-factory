@@ -20,10 +20,11 @@ from typing import IO
 from rich.console import Console
 from rich.table import Table
 
-from dark_factory.domain.views import EventRow, Redactor, RunListRow
+from dark_factory.domain.views import ArtifactRow, EventRow, Redactor, RunListRow
 
 __all__ = [
     "DEFAULT_RENDER_WIDTH",
+    "render_artifacts_table",
     "render_events_json",
     "render_events_text",
     "render_runs_table",
@@ -130,6 +131,55 @@ def render_runs_table(
             str(source),
             row.created_at.isoformat(timespec="seconds"),
             row.updated_at.isoformat(timespec="seconds"),
+        )
+
+    buffer = io.StringIO()
+    console = _console(buffer, width)
+    console.print(table)
+    return buffer.getvalue().rstrip("\n")
+
+
+def render_artifacts_table(
+    rows: Sequence[ArtifactRow],
+    *,
+    redactor: Redactor | None = None,
+    width: int | None = None,
+) -> str:
+    """A ``rich`` table of every artifact -- ``artifact_id``, ``type``,
+    ``role``, ``path``, ``created_at`` -- in the order ``rows`` is given
+    (per :func:`dark_factory.observability.run_detail.read_artifact_rows`).
+
+    Mirrors :func:`render_runs_table`'s ``min_width`` discipline: ``36`` on
+    ``artifact_id`` -- the value ``--show`` consumes, so an ellipsized id
+    here is a dead end for the operator -- and a ``min_width`` on ``type``
+    and ``role`` sized to the longest value each can hold (the longest
+    configured role name, ``ARCHITECTURE``, and a typical artifact filename
+    such as ``quality_gate.json``). ``path`` declares no ``min_width`` and
+    absorbs the remaining width -- a clipped path is readable context rather
+    than a value to copy.
+
+    Each ``created_at`` is rendered with ``isoformat(timespec="seconds")``,
+    the same second-precision contract :func:`render_runs_table` uses.
+    ``type``, ``role`` and ``path`` are passed through ``redactor`` when one
+    is supplied.
+    """
+    table = Table()
+    table.add_column("artifact_id", min_width=36)
+    table.add_column("type", min_width=18)
+    table.add_column("role", min_width=12)
+    table.add_column("path")
+    table.add_column("created_at", min_width=20)
+
+    for row in rows:
+        artifact_type = redactor(row.type) if redactor is not None else row.type
+        role = redactor(row.role) if redactor is not None else row.role
+        path = redactor(row.path) if redactor is not None else row.path
+        table.add_row(
+            str(row.artifact_id),
+            str(artifact_type),
+            str(role),
+            str(path),
+            row.created_at.isoformat(timespec="seconds"),
         )
 
     buffer = io.StringIO()
