@@ -3,16 +3,16 @@ gsd_state_version: "1.0"
 current_phase: 12
 current_phase_name: Observability & Audit Surface
 status: executing
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-10-03T13:04:19.949Z"
+stopped_at: Completed 12-03-PLAN.md
+last_updated: "2026-10-04T05:10:04.601Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 12 execution started
-state_head: 798c168e66ffb5c4bf62ff35c46c3244d6f8582f
+state_head: f2bc32b49ff680e799441d10cdd26a97fa13566f
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 76
-  completed_plans: 71
+  completed_plans: 72
   percent: 0
 ---
 
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 ## Current Position
 
 Phase: 12 (Observability & Audit Surface) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-10-03 — Phase 12 execution started
 
@@ -127,6 +127,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 11 P10 | 35min | 1 tasks | 2 files |
 | Phase 12 P01 | 40min | 3 tasks | 11 files |
 | Phase 12 P02 | 35min | 2 tasks | 7 files |
+| Phase 12 P03 | resumed | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -268,6 +269,8 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-01: render_events_text prints each EventRow.as_line with markup=False and soft_wrap=True so payload content (e.g. a list-shaped value) is never misread as rich markup and a line is never wrapped -- one line per event holds for any configured width
 - [Phase 12]: Phase 12: 12-02: render_runs_table declares explicit min_width per column (36/13/20/20) so a UUID is never ellipsized by rich at any configured render width; RunListRow omits source_ref to keep that minimum achievable
 - [Phase 12]: Phase 12: 12-02: events --type is validated through EventType per repeatable value before read_events runs, so an unknown filter name exits 2 before any query while a filter matching zero rows stays a valid empty answer
+- [Phase 12]: Scrubbed the assembled clarification-comment text once (clarification_body -> redact -> comment_body) before both the idempotency lookup and create_comment, rather than per-question
+- [Phase 12]: Left build_clarification_comment unchanged; redaction lives exclusively at the ROLE_NEEDS_INPUT call site, preserving the function's single responsibility
 
 ### Pending Todos
 
@@ -294,6 +297,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-03T13:04:05.842Z
-Stopped at: Completed 12-02-PLAN.md
+Last session: 2026-10-04T05:10:04.491Z
+Stopped at: Completed 12-03-PLAN.md
 Resume file: None

@@ -130,7 +130,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 
 ### Observability
 
-- [ ] **OBS-01**: Dark Factory can report, for any run, its current state, active role, worker, worker session id, attempt number, role history, artifacts, questions, human answers, quality-gate results, errors, PR information, and state-transition history
+- [x] **OBS-01**: Dark Factory can report, for any run, its current state, active role, worker, worker session id, attempt number, role history, artifacts, questions, human answers, quality-gate results, errors, PR information, and state-transition history
 - [ ] **OBS-02**: Important state changes and side effects are persisted as typed events (RUN_CREATED, ROLE_STARTED/COMPLETED/FAILED, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED, HUMAN_ANSWER_RECEIVED, RUN_RESUMED, QA_FAILED/PASSED, QUALITY_GATE_FAILED/PASSED, PUBLISH_STARTED, PR_CREATED, RUN_COMPLETED, RUN_FAILED)
 - [ ] **OBS-03**: `dark-factory events <run>` and `dark-factory runs` expose the audit trail and run list
 
@@ -265,7 +265,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | CFG-03 | Phase 3 | Complete |
 | CFG-04 | Phase 3 | Complete |
 | CFG-05 | Phase 3 | Complete |
-| OBS-01 | Phase 12 | Pending |
+| OBS-01 | Phase 12 | Complete |
 | OBS-02 | Phase 12 | Pending |
 | OBS-03 | Phase 12 | Pending |
 | SEC-01 | Phase 6 | Complete |
