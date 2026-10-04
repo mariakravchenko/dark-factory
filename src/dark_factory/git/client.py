@@ -20,7 +20,7 @@ import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from dark_factory.git import GitCommandError
+from dark_factory.git.errors import GitCommandError
 
 __all__ = ["GIT_ENV_ALLOWLIST", "GIT_IDENTITY_ENV", "git_env", "run_git"]
 

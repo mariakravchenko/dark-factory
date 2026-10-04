@@ -12,8 +12,8 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import UUID
 
-from dark_factory.git import WorktreePathError
 from dark_factory.git.client import run_git
+from dark_factory.git.errors import WorktreePathError
 
 __all__ = [
     "WORKTREE_PARENT_DIRNAME",

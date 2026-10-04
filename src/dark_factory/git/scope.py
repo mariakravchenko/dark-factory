@@ -35,9 +35,9 @@ from uuid import UUID
 
 import structlog
 
-from dark_factory.git import ArtifactScopeViolation, WriteScopeViolation
 from dark_factory.git.client import run_git
 from dark_factory.git.diff import ARTIFACT_EXCLUDE_PATHSPEC
+from dark_factory.git.errors import ArtifactScopeViolation, WriteScopeViolation
 
 _log = structlog.get_logger(__name__)
 

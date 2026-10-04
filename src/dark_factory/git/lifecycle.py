@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dark_factory.git import DetachedHeadError
 from dark_factory.git.client import run_git
+from dark_factory.git.errors import DetachedHeadError
 
 __all__ = [
     "WIP_COMMIT_SUBJECT_PREFIX",

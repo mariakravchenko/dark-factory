@@ -19,8 +19,8 @@ import tenacity
 
 from dark_factory.config.settings import get_settings
 from dark_factory.events.redaction import redact
-from dark_factory.git import GitCommandError, GitPushError
 from dark_factory.git.client import run_git
+from dark_factory.git.errors import GitCommandError, GitPushError
 from dark_factory.git.lifecycle import head_sha
 
 __all__ = [

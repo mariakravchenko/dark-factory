@@ -15,26 +15,48 @@ exists to prevent.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from uuid import UUID
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from dark_factory.domain.status import RunStatus
-from dark_factory.domain.views import ArtifactRow, RunListRow
+from dark_factory.domain.views import (
+    ArtifactRow,
+    GateCommandRow,
+    InteractionRow,
+    QualityGateView,
+    RoleAttemptRow,
+    RunDetail,
+    RunListRow,
+)
+from dark_factory.git.committed import run_artifact_text
+from dark_factory.git.errors import GitError
 from dark_factory.observability.status import UnknownRunError
 from dark_factory.persistence.engine import new_session
-from dark_factory.persistence.models import ArtifactReference, RoleExecution, Run
+from dark_factory.persistence.models import (
+    ArtifactReference,
+    HumanInteraction,
+    RoleExecution,
+    Run,
+)
 
 __all__ = [
     "ArtifactTarget",
     "UnknownArtifactError",
     "read_artifact_rows",
     "read_artifact_target",
+    "read_quality_gate",
+    "read_run_detail",
     "read_run_list",
 ]
+
+_QUALITY_GATE_ARTIFACT_PATH = "verification/quality_gate.json"
 
 SessionFactory = Callable[[], Session]
 
@@ -177,3 +199,148 @@ def read_artifact_target(
         )
     finally:
         session.close()
+
+
+def read_run_detail(
+    run_id: UUID,
+    *,
+    session_factory: SessionFactory = new_session,
+) -> RunDetail:
+    """Return everything about ``run_id`` not already in ``RunView`` (Plan
+    12-06, OBS-01): every role attempt, every artifact, every interaction,
+    every error, and the PR identifiers.
+
+    Unlike :func:`~dark_factory.observability.status.read_status`'s single
+    latest ``role_executions`` row, this fetches **every** attempt --
+    dropping the ``LIMIT 1`` is the whole point: OBS-01 asks for role
+    *history*, and a role that ran twice must appear twice, each with its
+    own column-sourced ``attempt`` (D-19 -- never a row count or a list
+    position).
+
+    Raises :class:`~dark_factory.observability.status.UnknownRunError` when
+    the run id has no ``runs`` row. One session, closed in ``finally``, no
+    write of any kind.
+    """
+    session = session_factory()
+    try:
+        run = session.get(Run, run_id)
+        if run is None:
+            raise UnknownRunError(run_id)
+
+        attempts = session.scalars(
+            select(RoleExecution)
+            .where(RoleExecution.run_id == run_id)
+            .order_by(
+                RoleExecution.created_at.asc(),
+                RoleExecution.attempt.asc(),
+                RoleExecution.id.asc(),
+            )
+        ).all()
+
+        roles = [
+            RoleAttemptRow(
+                role=attempt.role,
+                worker=attempt.worker,
+                attempt=attempt.attempt,
+                status=attempt.status,
+                worker_session_id=attempt.worker_session_id,
+                wip_commit_sha=attempt.wip_commit_sha,
+                created_at=attempt.created_at,
+            )
+            for attempt in attempts
+        ]
+        errors = [
+            str(attempt.error) for attempt in attempts if attempt.error is not None
+        ]
+
+        interactions = session.scalars(
+            select(HumanInteraction)
+            .where(HumanInteraction.run_id == run_id)
+            .order_by(HumanInteraction.created_at.asc(), HumanInteraction.id.asc())
+        ).all()
+        interaction_rows = [
+            InteractionRow(
+                question=interaction.question,
+                answer=interaction.answer,
+                status=interaction.status,
+                created_at=interaction.created_at,
+                answered_at=interaction.answered_at,
+            )
+            for interaction in interactions
+        ]
+
+        artifact_stmt = (
+            select(ArtifactReference, RoleExecution.role)
+            .join(
+                RoleExecution,
+                ArtifactReference.role_execution_id == RoleExecution.id,
+            )
+            .where(ArtifactReference.run_id == run_id)
+            .order_by(ArtifactReference.created_at.asc(), ArtifactReference.id.asc())
+        )
+        artifact_rows = [
+            ArtifactRow(
+                artifact_id=artifact.id,
+                type=artifact.type,
+                role=role,
+                path=artifact.path,
+                created_at=artifact.created_at,
+            )
+            for artifact, role in session.execute(artifact_stmt).all()
+        ]
+
+        return RunDetail(
+            roles=roles,
+            artifacts=artifact_rows,
+            interactions=interaction_rows,
+            errors=errors,
+            pr_number=run.pr_number,
+            pr_url=run.pr_url,
+            published_commit_sha=run.published_commit_sha,
+        )
+    finally:
+        session.close()
+
+
+def read_quality_gate(
+    repo_root: Path,
+    run_id: UUID,
+    working_branch: str | None,
+) -> QualityGateView | None:
+    """Return the quality gate's outcome for ``run_id``, read from the
+    committed ``verification/quality_gate.json`` on ``working_branch`` (Plan
+    12-06, D-01).
+
+    This is the only function in this module that performs I/O outside the
+    database: the quality gate has no ``role_executions`` row of its own
+    (D-01 in ``orchestrator/quality_gate.py``), so the committed file is the
+    only place its result exists.
+
+    Returns ``None`` when ``working_branch`` is ``None`` (the run never
+    reached a role that set one), when the committed file does not exist yet
+    (:class:`~dark_factory.git.GitError` -- a run that never reached its
+    terminal role has no gate file, which is a normal state, not a
+    failure), or when the file's content cannot be parsed as a
+    :class:`~dark_factory.domain.views.QualityGateView` (a corrupt gate file
+    must not make the whole ``status`` report unavailable). Never raises for
+    any of those cases.
+    """
+    if working_branch is None:
+        return None
+
+    try:
+        text = run_artifact_text(
+            repo_root, run_id, working_branch, _QUALITY_GATE_ARTIFACT_PATH
+        )
+    except GitError:
+        return None
+
+    try:
+        payload = json.loads(text)
+        commands = [
+            GateCommandRow(command=entry["command"], exit_code=entry["exit_code"])
+            for entry in payload["commands"]
+        ]
+        return QualityGateView(status=payload["status"], commands=commands)
+    except (json.JSONDecodeError, KeyError, TypeError, ValidationError):
+        return None
