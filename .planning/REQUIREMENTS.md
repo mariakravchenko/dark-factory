@@ -116,7 +116,7 @@ Milestone 1 is the entire technical specification. Every requirement below is co
 ### Triggers & CLI
 
 - [x] **TRIG-01**: There is one orchestration implementation; CLI, IDE, CI, and GitHub events are only triggers — there is no separate CI orchestrator
-- [ ] **TRIG-02**: The CLI provides `run`, `resume`, `status`, `runs`, `artifacts`, and `events`
+- [x] **TRIG-02**: The CLI provides `run`, `resume`, `status`, `runs`, `artifacts`, and `events`
 - [ ] **TRIG-03**: `dark-factory status <run>` renders the run id, task, state, per-role pipeline with worker and attempt counts, artifacts, and human interactions
 - [x] **TRIG-04**: A run can continue across the local → CI boundary through Neon with no separate CI code path
 
@@ -257,7 +257,7 @@ Each v1 requirement maps to exactly one phase in `.planning/ROADMAP.md`.
 | GIT-05 | Phase 10 | Complete |
 | GIT-06 | Phase 10 | Complete |
 | TRIG-01 | Phase 11 | Complete |
-| TRIG-02 | Phase 12 | Pending |
+| TRIG-02 | Phase 12 | Complete |
 | TRIG-03 | Phase 12 | Pending |
 | TRIG-04 | Phase 11 | Complete |
 | CFG-01 | Phase 3 | Complete |
