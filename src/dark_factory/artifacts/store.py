@@ -9,6 +9,7 @@ turn the return values into :class:`~dark_factory.persistence.mutations.Artifact
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from dark_factory.artifacts.paths import (
@@ -17,7 +18,11 @@ from dark_factory.artifacts.paths import (
     resolve_under_run_root,
 )
 
-__all__ = ["read_artifact_text", "write_artifact_text"]
+__all__ = [
+    "read_artifact_text",
+    "scrub_artifact_text_in_place",
+    "write_artifact_text",
+]
 
 
 def read_artifact_text(root: Path, relative_path: str) -> str:
@@ -66,3 +71,46 @@ def write_artifact_text(
     data = text.encode("utf-8")
     path.write_bytes(data)
     return str(path.relative_to(root.resolve())), checksum(data)
+
+
+def scrub_artifact_text_in_place(
+    root: Path, relative_path: str, *, known_secrets: Mapping[str, str]
+) -> None:
+    """Rewrite the artifact file at ``relative_path`` under ``root`` through
+    ``redact()``, using ``known_secrets`` (Plan 12-07, T-12-24, SEC-01/SEC-02).
+
+    Mirrors :func:`dark_factory.workers.cli_runtime.scrub_log_in_place`'s
+    rationale, applied to a role's own *reported artifact file* rather than
+    its captured CLI transcript: once
+    :func:`~dark_factory.git.diff.commit_run_artifacts` force-adds and
+    commits this file onto the run's working branch -- which becomes the PR
+    branch -- nothing downstream ever re-scrubs it. Before this function
+    existed, a credential a role's own output happened to echo (e.g. one
+    copied verbatim from a task description into a generated document) would
+    reach a permanent, external PR diff with no scrubbing step anywhere in
+    the pipeline -- every other sink (events, role-execution columns,
+    comments, logs, the quality-gate command string) already had one.
+
+    Called from ``orchestrator/runner.py`` **before**
+    :func:`~dark_factory.artifacts.validation.collect_role_artifacts` reads
+    the same file for schema validation and checksum computation, so the
+    checksum persisted in ``artifacts.checksum`` and the content eventually
+    committed always agree -- never a checksum computed over one version of
+    the text and a commit carrying another.
+
+    A missing file is a no-op, not an error -- mirrors
+    :func:`~dark_factory.workers.cli_runtime.scrub_log_in_place`'s identical
+    posture for the same reason (a role whose artifact write failed upstream
+    has nothing here to scrub). Rewrites the file only when redaction
+    actually changed something, so an already-clean file's mtime is left
+    alone.
+    """
+    from dark_factory.events.redaction import redact
+
+    path = resolve_under_run_root(root, relative_path)
+    if not path.is_file():
+        return
+    raw = path.read_text("utf-8", errors="replace")
+    scrubbed = redact(raw, known_secrets=known_secrets)
+    if scrubbed != raw:
+        path.write_text(scrubbed, encoding="utf-8")

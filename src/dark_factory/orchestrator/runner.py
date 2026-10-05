@@ -62,7 +62,10 @@ from dark_factory.actions.context import ActionContext
 from dark_factory.actions.registry import ActionRegistry
 from dark_factory.artifacts import ArtifactError
 from dark_factory.artifacts.paths import ensure_run_tree, run_root
-from dark_factory.artifacts.store import read_artifact_text
+from dark_factory.artifacts.store import (
+    read_artifact_text,
+    scrub_artifact_text_in_place,
+)
 from dark_factory.artifacts.validation import collect_role_artifacts
 from dark_factory.config.settings import get_settings
 from dark_factory.context.builder import build_role_context
@@ -1181,6 +1184,22 @@ def _run_current_role(
         except ArtifactScopeViolation as exc:
             signal = Signal.ROLE_FAILED
             outcome = {**outcome, "error": str(exc)}
+
+    # Plan 12-07 (T-12-24, SEC-01/SEC-02): scrub each reported artifact
+    # file's own content in place, before collect_role_artifacts below
+    # reads it for schema validation and checksum computation -- so the
+    # persisted checksum and the content commit_run_artifacts eventually
+    # commits onto the PR branch always agree, and a credential a role's
+    # own output happened to echo never reaches that permanent, external
+    # diff unscrubbed. Every other sink this project redacts (events,
+    # role-execution columns, the clarification comment, the quality-gate
+    # command string) already had a scrub call site; this one did not.
+    if signal is Signal.ROLE_COMPLETED:
+        artifact_known_secrets = get_settings().known_secret_values()
+        for reported_ref in result.artifacts:
+            scrub_artifact_text_in_place(
+                run_dir, reported_ref.path, known_secrets=artifact_known_secrets
+            )
 
     if signal is Signal.ROLE_COMPLETED:
         try:
