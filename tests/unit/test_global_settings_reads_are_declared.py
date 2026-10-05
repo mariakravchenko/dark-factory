@@ -35,7 +35,7 @@ only shifts when a ``get_settings()`` call is added or removed inside that
 *same* enclosing scope, which is exactly the deliberate edit this guard
 exists to flag.
 
-Declared inventory, by category (19 entries across 12 modules):
+Declared inventory, by category (20 entries across 12 modules):
 
 * **Process entry points that legitimately own settings construction** --
   the CLI's redactor (``cli.py::_redactor``), the engine factory
@@ -59,11 +59,18 @@ Declared inventory, by category (19 entries across 12 modules):
 * **The git diff layer's redaction read** --
   ``git/diff.py::push_working_branch`` (the push-failure redaction path).
 * **The reads reached on conditionally-taken branches inside
-  ``orchestrator/runner.py``'s ``_run_current_role``** (four entries,
-  ``#1``/``#2``/``#3``/``#4``) -- this is the gap G-11-3 names. ``#3`` was
-  added by plan 12-03 (OBS-01, T-12-08): the clarification-comment body's
-  redaction read, inserted ahead of the pre-existing GitHub-failure
-  redaction read (now ``#4``, in source order) inside the same
+  ``orchestrator/runner.py``'s ``_run_current_role``** (five entries,
+  ``#1``/``#2``/``#3``/``#4``/``#5``) -- this is the gap G-11-3 names. ``#1``
+  was added by plan 12-07 (T-12-24, SEC-01/SEC-02): the artifact-content
+  scrub read, inserted ahead of every pre-existing read in this function
+  (immediately after the ``enforce_artifact_scope`` block, before
+  ``collect_role_artifacts``), which shifted the four pre-existing reads
+  from ``#1``-``#4`` to ``#2``-``#5`` in source order -- a renumbering, not
+  a net-new gap, since the same four branches still read settings for the
+  same reasons they always did. ``#4`` (formerly ``#3``) was added by plan
+  12-03 (OBS-01, T-12-08): the clarification-comment body's redaction read,
+  inserted ahead of the pre-existing GitHub-failure redaction read (now
+  ``#5``, formerly ``#4``, in source order) inside the same
   ``ROLE_NEEDS_INPUT`` branch. A unit test that drives one of these
   branches must supply a settings override via one of the two idioms this
   repository already uses at 14 sites: Idiom A
@@ -106,17 +113,19 @@ _DECLARED_SETTINGS_READS: frozenset[str] = frozenset(
         "workers/cli_runtime.py::scrub_log_in_place#1",
         # The git diff layer's redaction read.
         "git/diff.py::push_working_branch#1",
-        # orchestrator/runner.py::_run_current_role -- four reads on
-        # conditionally-taken branches (quality-gate timeout/known_secrets,
-        # the terminal-role artifact-commit push token, the
-        # clarification-comment body redaction (plan 12-03, OBS-01), and the
-        # clarification-failure redaction). A unit test that drives any of
-        # these branches must supply a settings override via Idiom A or B
-        # (see module docstring).
+        # orchestrator/runner.py::_run_current_role -- five reads on
+        # conditionally-taken branches, in source order: the artifact-content
+        # scrub read (plan 12-07, T-12-24, SEC-01/SEC-02), quality-gate
+        # timeout/known_secrets, the terminal-role artifact-commit push
+        # token, the clarification-comment body redaction (plan 12-03,
+        # OBS-01), and the clarification-failure redaction. A unit test that
+        # drives any of these branches must supply a settings override via
+        # Idiom A or B (see module docstring).
         "orchestrator/runner.py::_run_current_role#1",
         "orchestrator/runner.py::_run_current_role#2",
         "orchestrator/runner.py::_run_current_role#3",
         "orchestrator/runner.py::_run_current_role#4",
+        "orchestrator/runner.py::_run_current_role#5",
     }
 )
 
@@ -214,10 +223,11 @@ def test_declared_settings_reads_match_discovered_calls() -> None:
     )
 
 
-def test_nineteen_entries_across_twelve_modules() -> None:
-    """Pins the shape of the inventory this gap-closure plan established, so
+def test_twenty_entries_across_twelve_modules() -> None:
+    """Pins the shape of the inventory this gap-closure plan established
+    (19 entries), plus plan 12-07's own artifact-content-scrub read (20), so
     a future change to the count is a deliberate, reviewed edit."""
-    assert len(_DECLARED_SETTINGS_READS) == 19
+    assert len(_DECLARED_SETTINGS_READS) == 20
     modules = {key.split("::", 1)[0] for key in _DECLARED_SETTINGS_READS}
     assert len(modules) == 12
 
