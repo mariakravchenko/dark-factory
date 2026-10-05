@@ -520,7 +520,7 @@ Plans:
   3. Every event type in the catalog (RUN_CREATED through RUN_FAILED, including ROLE_*, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED, HUMAN_ANSWER_RECEIVED, RUN_RESUMED, QA_*, QUALITY_GATE_*, PUBLISH_STARTED, PR_CREATED) is emitted at the right moment, and a finished run's story is reconstructable from the event stream alone.
   4. An end-to-end run seeded with realistically-shaped fake secrets leaves zero occurrences of them across artifacts, events, logs, GitHub comments and test reports.
 
-**Plans**: 5/7 plans executed in 5 waves
+**Plans**: 6/7 plans executed in 5 waves
 
 Plans:
 **Wave 1**
@@ -539,7 +539,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 12-06-PLAN.md — the full `rich` `status` report with text/JSON content parity
+- [x] 12-06-PLAN.md — the full `rich` `status` report with text/JSON content parity
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -565,7 +565,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 9. Independent Quality Gate & Bounded Feedback Loops | 6/6 | Complete    | 2026-09-26 |
 | 10. GitHub — Issue Intake, Idempotent Publishing, Comment Resume | 8/8 | Complete    | 2026-09-28 |
 | 11. One Orchestrator, Many Triggers — Cross-Machine Resume | 10/10 | Complete    | 2026-10-03 |
-| 12. Observability & Audit Surface | 5/7 | In Progress|  |
+| 12. Observability & Audit Surface | 6/7 | In Progress|  |
 
 ## Coverage
 
