@@ -23,6 +23,8 @@ from uuid import UUID
 
 import pytest
 
+from dark_factory.domain.views import RunReport, RunView
+
 pytestmark = pytest.mark.integration
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,23 +65,22 @@ def _start_run(pg_url: str, cwd: Path, source: str = "text:where is this run") -
     return proc.stdout.splitlines()[0].strip()
 
 
-def _text_field_keys(stdout: str) -> set[str]:
-    return {line.split(":", 1)[0] for line in stdout.strip().splitlines()}
-
-
 # --------------------------------------------------------------------------- #
 # happy path, both modes
 # --------------------------------------------------------------------------- #
 
 
 def test_status_text_mode_reports_position(pg_url: str, config_root: Path) -> None:
+    """The rendered report (Plan 12-06: rich panels/tables, not a flat
+    ``key: value`` line list) still carries the same facts D-12 always
+    reported -- state, active role and attempt -- just in a richer shape."""
     run_id = _start_run(pg_url, config_root)
 
     proc = _cli(["status", run_id], pg_url)
 
     assert proc.returncode == 0, f"{proc.stdout}\n{proc.stderr}"
-    keys = _text_field_keys(proc.stdout)
-    assert {"status", "current_role", "latest_attempt"} <= keys
+    for token in ("status", "current_role", "BA", "latest_attempt"):
+        assert token in proc.stdout, f"{token!r} missing from the rendered report"
     assert "status: COMPLETED" in proc.stdout
     assert "current_role: BA" in proc.stdout
     assert "latest_attempt: 1" in proc.stdout
@@ -101,18 +102,39 @@ def test_status_json_mode_emits_exactly_one_clean_json_object(
 
 
 def test_json_key_set_equals_the_text_field_set(pg_url: str, config_root: Path) -> None:
+    """The text/JSON parity guard (Plan 12-06, D-01) -- the single most
+    important test in this plan.
+
+    The expected key set is derived from the two DTO class attributes
+    (``RunView.model_fields | RunReport.SECTION_KEYS``), not hardcoded: a
+    section added to the JSON but never rendered in the text -- or
+    vice versa -- fails this test rather than shipping as a quiet
+    asymmetry. Invoked with no explicit width, so the assertion runs
+    against the production default.
+    """
     run_id = _start_run(pg_url, config_root)
 
     text = _cli(["status", run_id], pg_url)
     js = _cli(["status", run_id, "--json"], pg_url)
 
     assert text.returncode == 0 and js.returncode == 0
-    assert set(json.loads(js.stdout).keys()) == _text_field_keys(text.stdout)
+
+    expected_keys = set(RunView.model_fields) | set(RunReport.SECTION_KEYS)
+    payload = json.loads(js.stdout)
+
+    assert set(payload.keys()) == expected_keys
+    for key in expected_keys:
+        assert key in text.stdout, f"{key!r} missing from the rendered text output"
 
 
 def test_status_after_a_run_reports_completed_ba_attempt_1(
     pg_url: str, config_root: Path
 ) -> None:
+    """Backward compatibility (D-13, T-01-34): the eleven original fields,
+    including ``run_id``, ``status``, ``current_role`` and
+    ``latest_attempt``, stay readable at the top level of ``--json`` after
+    Plan 12-06's expansion -- every pre-existing script (including the CI
+    phases) that parses ``status --json`` keeps working with no change."""
     run_id = _start_run(pg_url, config_root)
 
     proc = _cli(["status", run_id, "--json"], pg_url)
