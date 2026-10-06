@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 current_phase: 12
 current_phase_name: Observability & Audit Surface
-status: executing
-stopped_at: Completed 12-06-PLAN.md
-last_updated: "2026-10-05T07:38:48.213Z"
+status: verifying
+stopped_at: Completed 12-07-PLAN.md
+last_updated: "2026-10-05T14:20:40.178Z"
 last_activity: 2026-10-03
 last_activity_desc: Phase 12 execution started
-state_head: d77c11c9366bcecb70b4ed0f50f2855a34cb059b
+state_head: 61652240a299eaefb45d823d6fbe9680e5feba42
 progress:
   total_phases: 12
   completed_phases: 0
   total_plans: 76
-  completed_plans: 75
+  completed_plans: 76
   percent: 0
 ---
 
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-09-28)
 
 Phase: 12 (Observability & Audit Surface) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-03 — Phase 12 execution started
 
 Progress: [░░░░░░░░░░] 0% (10/12 phases)
@@ -131,6 +131,7 @@ Progress: [░░░░░░░░░░] 0% (10/12 phases)
 | Phase 12 P04 | ~2h | 2 tasks | 4 files |
 | Phase 12 P05 | 50min | 3 tasks | 9 files |
 | Phase 12 P06 | ~12h (anomalous Neon connection drop; see SUMMARY) | 3 tasks | 13 files |
+| Phase 12 P07 | 160min task-commits + ~2h40min tier verification | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -279,6 +280,8 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-05: dark-factory artifacts --show resolves content by ArtifactReference primary key only (read_artifact_target); the path is never caller-supplied, since resolve_under_run_root already validated it at write time
 - [Phase 12]: 12-06: split dark_factory.git's error hierarchy into a standalone leaf module (git/errors.py) so observability/run_detail.py can import GitError/run_artifact_text without pulling the events-free package into dark_factory.events via git/__init__.py's eager diff.py import
 - [Phase 12]: 12-06: GateCommandRow.exit_code is int | None (matching GateCommandResult exactly), not the plan's literal int -- a bare int would silently hide a timed-out gate command behind 'no gate result'
+- [Phase 12]: 12-07: scrub_artifact_text_in_place closes a real D-08 gap found by the e2e sweep -- a role's own artifact file content was never redacted before git.diff.commit_run_artifacts committed it onto the PR branch; called in orchestrator/runner.py before collect_role_artifacts so the persisted checksum and the committed content always agree.
+- [Phase 12]: 12-07: drove the whole SC4 sweep in-process (start_run/drive with an injected github_client_factory) rather than through the dark-factory run CLI subprocess, resolving 12-RESEARCH.md Open Question 3 -- the only construction that injects FakeGitHubClient while still exercising a real ClaudeCodeWorker subprocess in the same run.
 
 ### Pending Todos
 
@@ -305,6 +308,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T07:38:48.120Z
-Stopped at: Completed 12-06-PLAN.md
+Last session: 2026-10-05T14:20:39.984Z
+Stopped at: Completed 12-07-PLAN.md
 Resume file: None
