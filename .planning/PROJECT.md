@@ -78,6 +78,10 @@ resume it; durability and observability are the same requirement.
 - ✓ Idempotency: retrying publishing with an existing `pr_number`/`pr_url`/`published_commit_sha` does not open a second PR (three-way persisted-identifier fast path); a crash between GitHub-side create and the identity commit is recovered by a head-branch-scoped existence check before every create — Phase 10 (GIT-04)
 - ✓ GitHub as human-interaction channel: a role reaching `NEEDS_INPUT` posts a clarification comment on the source issue, threaded by a persisted comment id so a resume never re-posts — Phase 10 (GIT-05)
 - ✓ GitHub webhook receiver: verifies the inbound signature before any parse (fail-closed on an unset secret), resolves a reply comment to its pending interaction (never Dark Factory's own posted comment, never redelivery-duplicated), and calls `submit_answer` in-process — the same lease/transaction path `resume --answer` uses — Phase 10 (GIT-06)
+- ✓ CLI commands `run`, `resume`, `status`, `runs`, `artifacts`, and `events` all shipped; `status <run>` renders run id, task, state, per-role pipeline with every attempt (not just the latest), artifacts, and human interactions — Phase 12 (TRIG-03)
+- ✓ Full event catalog (20 members) covers every state change and side effect the spec names: RUN_CREATED/COMPLETED/FAILED, ROLE_STARTED/COMPLETED/FAILED/BOUNCED, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED/RESUMED, HUMAN_ANSWER_RECEIVED, QA_PASSED/FAILED, QUALITY_GATE_STARTED/PASSED/FAILED, PUBLISH_STARTED/FAILED, PR_CREATED, WIP_COMMIT_CREATED, CAPABILITY_DENIED — Phase 12 (OBS-02; ARTIFACT_CREATED and QA_PASSED/QA_FAILED were the final two additions)
+- ✓ Operator-facing read surface exposes run state, active role, worker, worker session id, attempt number, full role history, artifacts (including committed content via `git show`), questions, human answers, quality-gate results, errors, and PR info — Phase 12 (OBS-01)
+- ✓ Credential/secret values never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or reports — re-proven end-to-end by a whole-pipeline sweep across every sink (real intake → human pause/resume → real `ClaudeCodeWorker` → quality gate → published PR), which also found and fixed one real gap: artifact file content was not scrubbed before commit — Phase 12 (TRIG-02; closes SEC-01 for the artifact-content sink)
 
 ### Active
 
@@ -125,20 +129,16 @@ resume it; durability and observability are the same requirement.
 
 **Triggers: CLI / IDE / CI / GitHub**
 - [ ] One orchestration implementation; environments are only triggers — no separate CI orchestrator
-- [ ] CLI commands: `run`, `resume`, `status`, `runs`, `artifacts`, and `events`
-- [ ] `status <run>` renders run id, task, state, per-role pipeline with worker + attempts, artifacts, human interactions
 - [ ] CI can execute the same orchestrator; run continues across the local→CI boundary via Neon
+- CLI commands + `status` rendering — shipped Phase 12, see Validated above
 
 **Configuration**
 - [ ] Config resolved at run creation is snapshotted (`runs.workflow`) so a later resume is deterministic even if `.dark-factory.yaml` changed in between (mechanism shipped Phase 3; deterministic resume for real multi-role runs proven Phase 4+)
 
-**Observability & audit**
-- [ ] Expose current run state, active role, worker, worker session id, attempt number, role history, artifacts, questions, human answers, quality-gate results, errors, PR info, and state-transition history
-- [ ] Important state changes and side effects persisted as events (RUN_CREATED, ROLE_STARTED/COMPLETED/FAILED, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED, HUMAN_ANSWER_RECEIVED, RUN_RESUMED, QA_FAILED/PASSED, QUALITY_GATE_FAILED/PASSED, PUBLISH_STARTED, PR_CREATED, RUN_COMPLETED, RUN_FAILED)
+**Observability & audit** — shipped Phase 12, see Validated above
 
 **Secrets**
-- [ ] `DATABASE_URL`, GitHub credentials, worker credentials never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or test reports (unless specifically necessary and sanitized)
-- [ ] Worker environments do not inherit the full Dark Factory process environment
+- [ ] Worker environments do not inherit the full Dark Factory process environment (allowlist mechanism shipped Phase 6; this line tracks the still-open worker-environment-inheritance audit, distinct from the artifact/event/comment/log sinks closed Phase 12)
 
 **Quality**
 - [ ] Orchestration tested with `FakeWorker` (role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing) — no external AI calls
@@ -210,6 +210,8 @@ resume it; durability and observability are the same requirement.
 | The webhook receiver's own mutation is exactly `submit_answer`, in-process, never `advance`/`drive` — enforced by two AST import-closure guards (no `advance`/`drive` reachable under `src/dark_factory/webhook/`; `dark_factory.webhook` unreachable from the orchestrator core) | GIT-06/D-01/D-02: the receiver is the first unauthenticated network edge in the codebase; a request must never be able to hold a lease for a role's duration or spawn a worker subprocess | Shipped Phase 10 (plans 10-04, 10-05) |
 | Four real-CLI-subprocess integration tests copying the shipped `.dark-factory.yaml` verbatim into a throwaway repo must neutralize `quality_gate.commands` and `publishing.create_pr` through one shared harness, not per-test ad hoc fixes | G-10-1 root cause: the shipped config's `quality_gate.commands` (`uv run pytest -q`) has no meaning in a throwaway repo with no Python project — exit 5 every attempt, QA↔DEVELOPMENT bounces to exhaustion, run terminates FAILED, masking whether the actual publish/intake path works at all. Two independent test-only defects (a LOOP-04 test reading the wrong event field, an over-broad redaction-guard assertion) surfaced in the same diagnosis. Root cause: `.planning/debug/qa-gate-exhausts-bounces-terminates-failed.md` | Fixed Phase 10 (gap-closure plans 10-07/10-08); zero production changes; independently re-verified (808/808 unit+contract, then 1171/1171 full sweep against real Postgres in manual UAT) |
 | Dark Factory is installed as a standalone CLI tool (`uv tool install`) and run from *inside* the target repository's own local checkout — `.dark-factory.yaml`, `.env`, and all git/worktree operations resolve against `Path.cwd()`, never against wherever Dark Factory's own source lives | Discovered during live UAT: `repo_root` defaults to `Path.cwd()` throughout `orchestrator/runner.py`, so running `dark-factory` from inside its own checkout while pointing its own `.dark-factory.yaml` at a different GitHub repo would branch/commit/push against Dark Factory's *own* git history, not the target repo's. Confirmed the correct usage model (own checkout + `.env` per target repo, tool installed once) by setting up and successfully running a real end-to-end delivery against a separate repo (`mariakravchenko/app-new`, PR #10) | Confirmed Phase 10 UAT; not a code change, a usage-model clarification worth documenting before Phase 11 (cross-machine resume) or a README "getting started" section |
+| `scrub_artifact_text_in_place` redacts artifact file content before it is ever committed, as its own call site ahead of `collect_role_artifacts` | Found by Phase 12's whole-pipeline secret sweep (plan 12-07): every other D-08 sink (events, logs, comments, quality-gate output) was already redacted, but artifact *file content* itself was not — a worker could commit a credential literal straight into a tracked file and it would reach the PR diff unredacted. A real production gap, not a test defect | Shipped Phase 12 (plan 12-07) |
+| `dark_factory.git`'s error hierarchy lives in a standalone leaf module (`git/errors.py`), imported by both `git/__init__.py` and `observability/run_detail.py` | Phase 12's package-wide "observability imports no orchestration internals" sweep (`test_observability_import_graph.py`) would otherwise trip the moment `run_detail.py` needed `GitError` from the `git` package's main namespace | Shipped Phase 12 (plan 12-06); zero behavior change |
 
 ## Evolution
 
@@ -229,4 +231,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-09-28 after Phase 10*
+*Last updated: 2026-10-06 after Phase 12*
