@@ -9,29 +9,29 @@ last_activity_desc: Phase 12 complete
 state_head: 272b119fffb130c35adf0901a3f04f22b13d6943
 progress:
   total_phases: 12
-  completed_phases: 1
+  completed_phases: 12
   total_plans: 76
   completed_plans: 76
-  percent: 8
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-09-28)
+See: .planning/PROJECT.md (updated 2026-10-06)
 
 **Core value:** A delivery run is durable — its complete lifecycle state lives in Neon, so any process on any machine can resume exactly where a previous one stopped and still produce a correct, independently verified GitHub PR.
-**Current focus:** Phase 12 — Observability & Audit Surface
+**Current focus:** Milestone 1 complete — all 12 phases shipped
 
 ## Current Position
 
-Phase: 12
+Phase: 12 (last phase)
 Plan: Not started
-Status: All phases complete
+Status: All phases complete — milestone ready to close
 Last activity: 2026-10-06 — Phase 12 complete
 
-Progress: [█░░░░░░░░░] 8% (10/12 phases)
+Progress: [████████████████████] 100% (12/12 phases, 76/76 plans)
 
 ## Performance Metrics
 
@@ -292,6 +292,7 @@ None yet.
 ### Blockers/Concerns
 
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
+- ⚠️ [Phase 12] 4 non-blocking code-review warnings (`12-REVIEW.md`): text-mode `status` output omits `wip_commit_sha` (JSON-only, a parity gap not a data-loss); error-list rendering shows raw JSONB repr instead of extracted message text; `read_quality_gate` collapses distinct `GitError` causes into one indistinguishable message; `scrub_artifact_text_in_place` uses `errors="replace"` on artifact content (latent corruption risk for non-UTF-8 artifacts reaching a PR diff). None are security/correctness blockers; worth a follow-up pass.
 - ⚠️ [Phase 10] Discovered during live UAT (real Claude Code workers against a real external repo, `mariakravchenko/app-new`): two pre-existing worker/prompt-construction gaps, neither Phase 10 scope, both worth a future hardening pass. (1) `context_prompt_sections`'s "Expected outputs" prompt section tells a role to write under `artifacts/<ROLE>` but the actually-permitted path (per `--allowedTools`) requires a `.dark-factory/runs/<run-id>/` prefix that's silently omitted — a role has to discover the real path by trial and error against permission denials, and sometimes gives up instead of self-correcting. (2) The same prompt section gives a role only a bare output *filename*, never the JSON schema it must match — a role operating on a real target repo (with no access to Dark Factory's own `domain/artifacts.py` source) has no way to discover the exact pydantic shape and will invent a plausible-but-wrong one. Both worked around locally (in the target repo's own instructions.md, not Dark Factory's source) for this UAT session; not filed as Phase 10 gaps since neither is in this phase's scope.
 
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). [Phase 10] 10-07/10-08's deferred db-tier verification (no PostgreSQL reachable in the execution sandbox) — resolved: user ran the full unrestricted suite against real Neon PostgreSQL 17 during manual UAT (1171 passed, 1 skipped, 0 failed, no marker filter), confirming all four previously gate-exhausted integration tests reach `COMPLETED` and both gap-closure db-tier tests pass. Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
@@ -308,6 +309,6 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-05T14:20:39.984Z
-Stopped at: Phase 12 complete — all phases complete
+Last session: 2026-10-06T12:30:00.000Z
+Stopped at: Phase 12 complete — Milestone 1 (100%, 12/12 phases, 76/76 plans) is fully shipped and ready to close via /gsd-complete-milestone
 Resume file: None
