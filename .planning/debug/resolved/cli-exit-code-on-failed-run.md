@@ -1,5 +1,5 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "4 passed, 2 failed. Both failures are in test_artifact_scope_enforcement.py: test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_fails and test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and_fails. Both assert proc.returncode == 0 on the `dark-factory run` CLI subprocess, and got 1 instead — the run itself correctly reached terminal state FAILED (QA->FAILED / ARCHITECTURE->FAILED) after the artifact-scope violation was detected and reverted, but the CLI process now exits non-zero when the run's terminal state is FAILED."
 created: 2026-09-22T00:00:00Z
 updated: 2026-09-22T00:00:00Z
@@ -17,7 +17,7 @@ hypothesis: |
 bug_class: Bohrbug (deterministic — reproduces on every run against a real Postgres 17)
 test: (complete) executed the three artifact-scope tests, the four D-05 exit-code guards, and the two sibling integration modules against a real external PostgreSQL 17; then a revert-check on the hermes-tamper caller
 expecting: (met) 6/6 of the original UAT command pass, D-05 guards unregressed, and the bug returns on revert
-next_action: Awaiting human confirmation that G-08-2 is closed; on "confirmed fixed", archive to .planning/debug/resolved/ and append the knowledge-base entry
+next_action: (none — RESOLVED) User confirmed fixed 2026-10-07. Archived; knowledge-base entry appended. The CI-gate residual risk was split into its own session, integration-tier-excluded-from-ci-credential-free-tests-could-run.md, rather than widened into this fix.
 goal: find_and_fix (resumed; prior session was diagnose-only)
 
 fix_already_present: |
