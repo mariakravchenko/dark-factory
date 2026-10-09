@@ -196,6 +196,155 @@ def test_unrelated_dict_key_still_redacts_a_bare_forty_hex_value() -> None:
     assert out["note"] == "[redacted:github_token]"
 
 
+# --- `checksum` key exemption (SHA-256 digest false positive) ----------------
+#
+# These four cases are ONE regression guard and must be read together: the
+# first proves a real artifact checksum survives, the other three prove the
+# exemption that lets it survive did not become a credential-leak path. A fix
+# that satisfies only the first has converted a safe over-redaction into an
+# unsafe under-redaction. Do not delete one without the others.
+
+
+def test_sha256_checksum_under_a_checksum_dict_key_survives() -> None:
+    """Regression guard: `ArtifactRef.checksum` is a SHA-256 hex digest --
+    exactly 64 hex characters -- so `_HEX_TOKEN` used to mangle it into
+    `[redacted:github_token]` in the `WorkerResult.model_dump()` blob stored in
+    `role_executions.result` (every artifact-producing attempt) and
+    `role_executions.error` (a FAILED attempt). Uses a REAL digest, not a
+    hand-built 64-char string, so the test tracks `artifacts.paths.checksum`'s
+    actual output shape rather than an assumption about it."""
+    from dark_factory.artifacts.paths import checksum
+    from dark_factory.events.redaction import redact
+
+    digest = checksum(b"an artifact body")
+    assert len(digest) == 64  # guards the premise: SHA-256 collides with _HEX_TOKEN
+
+    out = redact(
+        {"type": "implementation_summary.json", "path": "x/y.json", "checksum": digest},
+        known_secrets={},
+    )
+    assert out["checksum"] == digest
+
+
+def test_checksum_key_exemption_does_not_weaken_other_patterns() -> None:
+    """NEGATIVE POLARITY. The `checksum` exemption suppresses the bare
+    hex-token rule ONLY -- every real credential SHAPE parked under a
+    `checksum`-named key must still be redacted."""
+    from dark_factory.events.redaction import redact
+
+    for value, expected in (
+        (FAKE_DB_URI, "[redacted:database_url]"),
+        (FAKE_GHP, "[redacted:github_token]"),
+        (FAKE_GH_PAT, "[redacted:github_token]"),
+    ):
+        out = redact({"checksum": value}, known_secrets={})
+        assert out["checksum"] == expected, value
+
+    bearer = redact({"checksum": FAKE_BEARER}, known_secrets={})
+    assert "eyJfake.token.value-0000" not in bearer["checksum"]
+
+
+def test_known_secret_is_still_scrubbed_from_a_checksum_field() -> None:
+    """NEGATIVE POLARITY, the load-bearing one. A configured LIVE secret whose
+    value happens to be 64 lowercase hex characters -- i.e. one that passes the
+    digest shape gate exactly -- must still be removed from a `checksum` field.
+    `_scrub_known` runs before the pattern table and is never exempted, which
+    is what keeps this fix from being a credential leak: `Settings` is the one
+    declared source of live secret values, so known-value substitution is the
+    authoritative defence, not the shape heuristic."""
+    from dark_factory.events.redaction import redact
+
+    hex64_secret = "deadbeef" * 8  # 64 lowercase hex chars -- passes the shape gate
+    assert len(hex64_secret) == 64
+
+    out = redact(
+        {"checksum": hex64_secret},
+        known_secrets={hex64_secret: "github_token"},
+    )
+    assert out["checksum"] == "[redacted:github_token]"
+    assert hex64_secret not in out["checksum"]
+
+
+@pytest.mark.parametrize(
+    ("value", "why"),
+    [
+        (SHA40, "40 hex is not a SHA-256 digest -- gate requires exactly 64"),
+        ("DEADBEEF" * 8, "hexdigest() never emits uppercase"),
+        ("DeadBeef" * 8, "hexdigest() never emits mixed case"),
+        (
+            f"sha256:{'a' * 64}",
+            "gate is anchored; a digest inside prose is not a digest",
+        ),
+        (f"{'a' * 64} {SHA40}", "a digest plus a second hex run is not a bare digest"),
+    ],
+)
+def test_checksum_key_exemption_is_shape_gated(value: str, why: str) -> None:
+    """NEGATIVE POLARITY, boundary neighbours. The exemption is granted on the
+    VALUE's shape, not on the key name alone, so each near-miss of
+    `\\A[0-9a-f]{64}\\Z` under a `checksum` key is still redacted. Without the
+    shape gate a `checksum` key would be an unconditional hex-token bypass."""
+    from dark_factory.events.redaction import redact
+
+    out = redact({"checksum": value}, known_secrets={})
+    assert "[redacted:" in out["checksum"], why
+
+
+def test_checksum_exemption_does_not_propagate_into_a_nested_container() -> None:
+    """The gate inspects the value directly, so a list or dict under a
+    `checksum` key is NOT a digest and earns no exemption -- the conservative
+    direction. Guards against a future refactor that moves the gate to the key
+    check alone and silently exempts whole subtrees."""
+    from dark_factory.events.redaction import redact
+
+    out = redact({"checksum": ["a" * 64]}, known_secrets={})
+    assert out["checksum"] == ["[redacted:github_token]"]
+
+
+def test_sha256_digest_under_an_unrelated_key_is_still_redacted() -> None:
+    """The exemption is scoped to `_CHECKSUM_KEYS`; the same digest under any
+    other key stays redacted, so this fix did not globally retire the 64-hex
+    arm of `_HEX_TOKEN`."""
+    from dark_factory.events.redaction import redact
+
+    digest = "a" * 64
+    out = redact({"note": digest, "summary": f"saw {digest}"}, known_secrets={})
+    assert out["note"] == "[redacted:github_token]"
+    assert digest not in out["summary"]
+
+
+def test_worker_result_dump_round_trip_preserves_checksums_and_redacts_secrets() -> (
+    None
+):
+    """End-to-end at the ACTUAL blast-radius shape: the `outcome` dict
+    `runner.py` builds with `result.model_dump(mode="json")` and hands to
+    `redact()` on both the `role_executions.result` and
+    `role_executions.error` write paths (`mutations.py`). Asserts both
+    polarities in one payload -- every artifact checksum survives while a
+    credential leaked into the same blob's prose does not."""
+    from dark_factory.artifacts.paths import checksum
+    from dark_factory.domain.worker import ArtifactRef, WorkerResult, WorkerResultStatus
+    from dark_factory.events.redaction import redact
+
+    digests = [checksum(b"first body"), checksum(b"second body")]
+    result = WorkerResult(
+        status=WorkerResultStatus.FAILED,
+        summary="run aborted",
+        artifacts=[
+            ArtifactRef(
+                type="implementation_summary.json", path="a.json", checksum=digests[0]
+            ),
+            ArtifactRef(type="verdict.json", path="b.json", checksum=digests[1]),
+        ],
+        error=f"push rejected; credential {FAKE_GHP} was refused",
+    )
+
+    out = redact(result.model_dump(mode="json"), known_secrets={})
+
+    assert [a["checksum"] for a in out["artifacts"]] == digests
+    assert FAKE_GHP not in out["error"]
+    assert "[redacted:github_token]" in out["error"]
+
+
 def test_forty_hex_after_detached_head_at_phrase_survives() -> None:
     """Regression guard (05-02 db-tier round-trip): the D-08 detached-HEAD
     error message reads "...has a detached HEAD at <sha>; refusing..." -- the

@@ -96,6 +96,48 @@ _GIT_OBJECT_KEYS: frozenset[str] = frozenset(
     }
 )
 
+# Dict keys whose value is a CONTENT DIGEST, never a secret. A SHA-256 artifact
+# checksum (``ArtifactRef.checksum``) is exactly 64 hex characters, so it is
+# indistinguishable BY SHAPE from a bare 64-hex credential -- which made
+# `_HEX_TOKEN` destroy every checksum serialized into `role_executions.result`
+# (on every artifact-producing role attempt) and `role_executions.error` (on a
+# FAILED role): both columns store the same `WorkerResult.model_dump()` blob.
+# `artifact_references.checksum` was never affected -- it is assigned without
+# redaction and remains the system of record.
+#
+# This follows the `_GIT_OBJECT_KEYS` seam above but is deliberately NARROWER in
+# three ways, because a checksum in an audit blob is a legibility nicety and is
+# not worth one millimetre of the redactor's default-deny posture:
+#
+#   1. SHAPE-GATED, not key-only. The value must match `_SHA256_DIGEST` exactly
+#      -- 64 *lowercase* hex characters end to end, which is precisely what
+#      `hashlib.sha256(...).hexdigest()` emits (see artifacts/paths.py). So a
+#      40-hex classic PAT, an upper/mixed-case 64-hex run, and any value with
+#      surrounding prose are ALL still redacted under a `checksum` key.
+#   2. `_HEX_TOKEN` ONLY. Every other pattern row (github_pat_, gh[porsu]_,
+#      postgres URIs, bearer headers, the sensitive key=value rule) still runs
+#      unconditionally -- none of those shapes is ever legitimately a digest.
+#   3. KNOWN VALUES ARE STILL SCRUBBED. `_scrub_known` runs before the pattern
+#      table inside `_redact_str` and is never exempted, so a configured live
+#      secret that happens to be 64 lowercase hex characters is still removed
+#      from a `checksum` field. This is what stops the fix from turning an
+#      over-redaction (safe) into a credential leak (not safe).
+#
+# Defensible because `checksum` is not a worker-controlled free-text field:
+# every production `ArtifactRef` carries a digest Dark Factory computed itself
+# from bytes it read (workers/cli_runtime.py, workers/fake.py), so no untrusted
+# value reaches this key. Do NOT add a key here whose value an agent can author,
+# and do NOT mirror this as a TEXTUAL `_GIT_OBJECT_CONTEXT` arm -- a prose rule
+# matching "checksum: <64hex>" would be trivially forgeable by an untrusted
+# worker, which is exactly the surface WR-06 / the D-15 table exists to cover.
+_CHECKSUM_KEYS: frozenset[str] = frozenset({"checksum"})
+_SHA256_DIGEST = re.compile(r"\A[0-9a-f]{64}\Z")
+
+
+def _is_sha256_digest(value: Any) -> bool:
+    """True only for a string that is exactly a lowercase SHA-256 hex digest."""
+    return isinstance(value, str) and _SHA256_DIGEST.match(value) is not None
+
 
 def _hex_token_replacement(match: re.Match[str]) -> str:
     """Redact a standalone 40/64-hex token unless it is introduced as a git
@@ -192,7 +234,14 @@ def redact(
       hex-token pattern exempted for that value only -- every other pattern
       (github_pat_, gh[porsu]_, postgres URLs, bearer tokens) still applies
       unconditionally, because those shapes are never legitimately a commit
-      SHA; every other value is redacted recursively with no exemption.
+      SHA. A key in ``_CHECKSUM_KEYS`` (``checksum``) gets the same hex-token
+      exemption but only when its value is exactly a lowercase SHA-256 digest
+      (``_SHA256_DIGEST``) -- a 40-hex run, an upper-case 64-hex run or any
+      value with surrounding prose is still redacted there. Every other value
+      is redacted recursively with no exemption.
+
+      No exemption ever skips ``_scrub_known``: a configured live secret value
+      is removed under every key, whatever its shape.
     * ``list`` / ``tuple`` — redacted elementwise, always returned as a list.
     * ``set`` / ``frozenset`` — redacted elementwise, returned as a list (JSONB
       is JSON-typed, so this is defence-in-depth for a set of secret strings
@@ -212,7 +261,13 @@ def redact(
             if isinstance(key, str) and key.lower() in _SENSITIVE_KEYS:
                 redacted[key] = f"[redacted:{key.lower()}]"
             else:
-                item_exempt = isinstance(key, str) and key.lower() in _GIT_OBJECT_KEYS
+                item_exempt = isinstance(key, str) and (
+                    key.lower() in _GIT_OBJECT_KEYS
+                    # Shape-gated: a `checksum` key earns the exemption only for
+                    # a value that IS a lowercase SHA-256 digest, so a secret
+                    # shape parked under this key is still redacted.
+                    or (key.lower() in _CHECKSUM_KEYS and _is_sha256_digest(item))
+                )
                 redacted[key] = redact(
                     item,
                     known_secrets=known_secrets,
