@@ -273,6 +273,22 @@ class AttemptAwareFourRoleWorker(CodingWorker):
         role = getattr(context, "role", None)
         attempt = getattr(context, "attempt", None)
         assert role in _FOUR_ROLE_FILES, role
+        # Load-bearing, not a type-checker appeasement. `context` is typed
+        # `object` by the `CodingWorker` port (WORK-01, so no adapter couples
+        # to `RoleContext`), which erases `RoleContext.attempt: int` to
+        # `Any | None` through `getattr`. Left unnarrowed, a missing or
+        # non-int `attempt` would not raise -- it would quietly miss all three
+        # `(role, attempt)` lookups below and fall back to
+        # `_FOUR_ROLE_FILES[role]`'s PASS-shaped default, so an
+        # attempt-specific scenario ("QA FAILs on attempt 1", "the gate flips
+        # on attempt 2") would become a vacuous pass. That is the same failure
+        # mode `__init__` already raises `ValueError` to prevent for
+        # `out_of_scope_writes`/`worktree_root`. Asserting the invariant that
+        # `role` already gets is what keeps these fixtures honest -- and it is
+        # why this is an assert rather than the `getattr(..., None) or 1`
+        # defaulting idiom used in `workers/hermes.py`: silently defaulting is
+        # precisely the outcome being guarded against here.
+        assert isinstance(attempt, int), attempt
         files = self._attempt_files.get((role, attempt), _FOUR_ROLE_FILES[role])
         refs = write_role_artifacts(self._run_root, role, files)
         sentinel_name = self._sentinel_writes.get((role, attempt))
