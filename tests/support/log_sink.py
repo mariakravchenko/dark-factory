@@ -14,13 +14,33 @@ filter at configure time, the redaction processor per event), so this helper
 must make ``Settings`` constructible in a process with no ``DATABASE_URL`` /
 ``DATABASE_URL_DIRECT`` and no readable ``.env`` (G-11-3, plan 11-09). It does
 this by supplying the two fake constants below **only when the corresponding
-environment variable is absent** — never overriding one already present. That
-asymmetry is load-bearing: ``tests/unit/test_log_redaction.py`` deliberately
-sets its own live-shaped database URL via ``monkeypatch.setenv`` before
-entering this context manager and asserts that exact value is redacted from
-the sink. An unconditional override would replace that value before
-``configure_logging`` ever saw it, making the assertion pass (or fail) for the
-wrong reason instead of proving real redaction.
+environment variable is absent** — never overriding one already present, and
+per variable rather than all-or-nothing.
+
+That asymmetry is load-bearing: ``tests/unit/test_log_redaction.py`` deliberately
+sets its own database URL via ``monkeypatch.setenv`` before entering this context
+manager and asserts that exact value is redacted from the sink. An unconditional
+override would replace the value before ``configure_logging`` ever saw it, so
+``Settings.known_secret_values()`` would never learn it and exact-value scrubbing
+could not remove it.
+
+WHICH TESTS PIN THIS (debug session ``log-sink-conditional-override-unpinned``):
+an earlier version of this docstring claimed an unconditional override would make
+those redaction assertions vacuous. **That was measured and found false** — the
+mutant SURVIVED the entire suite, because every assertion looked only at the
+sink's text and the D-15 *pattern* rule for ``postgres://...@...`` URLs redacts
+any credential-bearing DSN on shape alone, so substituting one for another
+changed nothing observable. Two tests now pin it, and both are required:
+
+* ``test_sink_helper_supplies_only_absent_database_vars_and_restores`` — observes
+  ``os.environ`` and ``Settings`` from inside the context across all four
+  presence cells. This is the direct pin and it involves no redaction, keeping
+  this helper's contract decomposed from the redactor's.
+* ``test_known_secret_value_no_pattern_can_rescue_never_reaches_the_sink`` — the
+  end-to-end pin, using a credential-free DSN that no pattern can match, so only
+  exact-value substitution of the value this helper preserved can scrub it.
+
+Do not "simplify" the per-variable absence check away; it is covered now.
 """
 
 from __future__ import annotations
