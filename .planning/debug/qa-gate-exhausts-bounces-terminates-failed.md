@@ -1,13 +1,62 @@
 ---
-status: diagnosed
+status: awaiting_human_verify
 trigger: "G-10-1: The real-CLI-subprocess pipeline (shipped .dark-factory.yaml config, driven via `python -m dark_factory run text:...` against a real Postgres/Neon database) never reaches PUBLISHING. It bounces QA -> DEVELOPMENT three times, exhausts retry.qa_developer_max_iterations: 3, and terminates in FAILED at QA."
 created: 2026-09-28T00:00:00Z
-updated: 2026-09-28T00:00:00Z
+updated: 2026-10-09T00:00:00Z
 ---
 
 ## Current Focus
 
 hypothesis: |
+  RESUMED 2026-10-09 (goal flipped to find_and_fix). The repo has advanced from
+  Phase 10 to Phase 12 since this session was paused, and a code read shows ALL
+  FOUR prescribed fix items appear to have ALREADY LANDED as ordinary phase work,
+  not through this session:
+
+  (1)+(2) `tests/support/shipped_config.py` (new, plan 10-07) is now the single
+      shipped-config copy harness. `copy_shipped_config_into` ->
+      `neutralize_repo_local_config` rewrites exactly two keys on the parsed
+      YAML document: `quality_gate` -> `HARNESS_GATE_COMMANDS = ("git --version",)`
+      and `publishing.create_pr` -> False. Its module docstring cites this debug
+      file by name and both root causes. All four affected integration modules
+      now `from tests.support.shipped_config import copy_shipped_config_into`
+      (grep-verified); their per-module `_copy_shipped_config_into` duplicates
+      are gone.
+
+  (3a) `tests/db/test_manual_check_loop04_adjacency.py` no longer exists (the
+      untracked throwaway was deleted; the tracked `test_loop04_adjacency.py`
+      remains).
+
+  (3b) `tests/integration/test_redaction_interactions.py`'s over-broad
+      `assert "redact(" not in runner_src` is gone, replaced by an AST-based
+      allowlist: `_extract_redact_first_args` + `_RUNNER_PERMITTED_REDACT_ARGUMENTS
+      = {"str(exc)", "clarification_body"}`, scoped to human-interaction fields
+      via `_mentions_human_interaction_field`.
+
+  THEREFORE: the remaining work in this session is NOT to apply the fix (that
+  would be a duplicate/regression). It is to VERIFY the fix empirically against
+  the real PostgreSQL 17 the prior session could not reach, and in particular to
+  close blind spot (4) -- that the three negative controls now fail for THEIR OWN
+  stated reason rather than for gate exhaustion.
+
+test: |
+  DARK_FACTORY_TEST_DATABASE_URL is set and points at a reachable Neon PG17
+  instance (the exact gap the prior session logged as its highest-value blind
+  spot). Run the 4 originally-red integration tests + the 3 negative controls +
+  the 2 test-only-defect tests against it.
+expecting: |
+  All 4 originally-red tests reach COMPLETED / exit 0; the 3 negative controls
+  still fail for their own asserted reason; the redaction and adjacency failures
+  are gone. Falsification: any of the 4 still bounces to FAILED at QA -> the
+  10-07 harness does not actually neutralize both causes and a real fix is owed.
+next_action: |
+  DONE -- verification complete, see Resolution.verification. All 6 originally
+  reported failures are green against a real Neon PostgreSQL 17; the revert test
+  reproduced the original symptom exactly and retired all three recorded blind
+  spots. Awaiting human confirmation before archiving to resolved/ (no code
+  change was owed by this session -- the fix landed under plans 10-07 and 12-03).
+
+prior_hypothesis_at_pause: |
   CONFIRMED (two independent, serial causes):
 
   (1) The shipped `.dark-factory.yaml` declares
@@ -374,6 +423,145 @@ started: |
     THEIR OWN stated reason (assert on the ROLE_FAILED error / event payload, not
     merely on exit code 1).
 
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    RESUME code read -- whether the prescribed fix was still owed. Compared the
+    paused session's 4 prescribed fix items against HEAD (d9135a9, Phase 12).
+  found: |
+    All four had ALREADY LANDED as ordinary phase work, not through this session:
+    - `tests/support/shipped_config.py` (new in plan 10-07) is now the single
+      shipped-config copy harness. `copy_shipped_config_into` calls
+      `neutralize_repo_local_config`, which rewrites exactly two keys on the
+      PARSED YAML document: `quality_gate` -> `HARNESS_GATE_COMMANDS =
+      ("git --version",)` and `publishing` -> `{**publishing, "create_pr": False}`.
+      Its docstring names this debug file and both root causes verbatim.
+    - All 4 affected modules now import that one helper (grep-verified); their
+      per-module `_copy_shipped_config_into` duplicates are deleted.
+    - `tests/db/test_manual_check_loop04_adjacency.py` (the untracked throwaway)
+      no longer exists; tracked `test_loop04_adjacency.py` remains.
+    - `test_redaction_interactions.py`'s blanket `assert "redact(" not in
+      runner_src` is replaced by an AST allowlist (`_extract_redact_first_args` +
+      `_RUNNER_PERMITTED_REDACT_ARGUMENTS = {"str(exc)", "clarification_body"}`).
+  implication: |
+    Re-applying the prescribed fix would have been a duplicate/regression. The
+    session's remaining obligation is VERIFICATION -- specifically the blind spot
+    the prior session could not close for lack of a reachable PostgreSQL.
+
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    All 6 originally-failing tests, run against a real reachable Neon
+    PostgreSQL 17 via DARK_FACTORY_TEST_DATABASE_URL (the exact resource the
+    prior session lacked).
+  found: |
+    tests/integration/test_real_pipeline_zero_config.py ......... 1 passed (55s)
+    tests/integration/test_artifact_scope_enforcement.py (3) ....
+    tests/integration/test_artifact_cross_clone.py (1) ..........
+    tests/integration/test_role_reassignment_sc2.py (2) ......... 6 passed (306s)
+    tests/integration/test_redaction_interactions.py +
+      tests/db/test_loop04_adjacency.py ........................ 4 passed (53s)
+  implication: |
+    Every one of the 6 reported failures is green against the real database.
+    Symptom resolved.
+
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    BLIND SPOT (4) CLOSED -- masked-assertion risk on the 3 negative controls.
+    Read the current assertions rather than trusting their exit codes.
+  found: |
+    Plan 10-07 explicitly closed this, with comments citing "10-07 (G-10-1
+    masked-assertion finding)" at each site:
+    - both tamper tests in test_artifact_scope_enforcement.py now bind
+      `error_by_role` and assert the violating path
+      (`artifacts/ARCHITECTURE/design.md`, `artifacts/BA/acceptance_criteria.json`)
+      appears in the persisted `role_executions.error`, explicitly noting that
+      "the exit code alone is not the proof -- an unrelated terminal failure
+      (e.g. gate exhaustion ...) produces the same exit code 1".
+    - test_shipped_config_with_no_fake_binaries_fails_visibly_not_silently now
+      asserts `"COPILOT_GITHUB_TOKEN"` and `"not configured"` appear in
+      ARCHITECTURE's persisted error.
+    - `_drive_shipped_config` additionally cross-checks the caller's
+      `expected_exit` against the persisted terminal status (D-05), so an exit
+      mapping and an observed status can never silently disagree.
+  implication: |
+    The 3 negative controls now fail for THEIR OWN stated reason, not for gate
+    exhaustion. The prior session's highest-severity follow-up is satisfied.
+
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    REVERT TEST (fix-acceptance signal) -- scratchpad/revert_probe.py reproduces
+    test_real_pipeline_zero_config's setup but copies the shipped config WITHOUT
+    `neutralize_repo_local_config` (the pre-10-07 state), then reads run_events.
+  found: |
+    The original symptom returned EXACTLY, and every derived claim is now
+    DIRECTLY OBSERVED rather than inferred:
+      CLI transitions: BA->ARCH->DEV->QA, QA->DEV, DEV->QA, QA->DEV, DEV->QA,
+                       QA->FAILED      (= 3 "QA ->" transitions, as predicted)
+      terminal status: FAILED, last role QA, attempt 3
+      qa_developer_iterations = 0      <-- the QA-verdict counter NEVER moved
+      quality_gate_iterations = 2      <-- the gate counter drove the whole loop
+      QUALITY_GATE_FAILED payload: {"exit_codes": [5, 0]}   (x3)
+      ROLE_BOUNCED: {"cap":2,"value":0,"reason":"quality_gate_fail","counter":"quality_gate_iterations"}
+      ROLE_BOUNCED: {"cap":2,"value":1,"reason":"quality_gate_fail","counter":"quality_gate_iterations"}
+      ROLE_FAILED:  {"role":"QA","error":"quality_gate_max_iterations_exhausted"}
+      RUN_FAILED:   {"cap":2,"value":2,"reason":"quality_gate_max_iterations_exhausted",
+                     "counter":"quality_gate_iterations"}
+      QA_PASSED present on every attempt -> the QA verdict was PASS throughout.
+  implication: |
+    Signal "bug returns on revert" PASSES. Confirms, by direct observation:
+    (a) the reason string is `quality_gate_max_iterations_exhausted`, NOT
+        `qa_developer_max_iterations_exhausted` -- the reporter's attribution to
+        `qa_developer_max_iterations: 3` was indeed a mis-attribution;
+    (b) pytest exit 5 (EXIT_NOTESTSCOLLECTED) + ruff exit 0 = the `[5, 0]` pair;
+    (c) the eliminated "QA emits a FAIL verdict" hypothesis is confirmed wrong --
+        QA_PASSED fires on every attempt;
+    (d) `neutralize_repo_local_config` is the sole reason the 4 tests are green.
+
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    Regression sweep, tiers outside this session's scope. tests/unit +
+    tests/contract: 846 passed, 1 skipped, 1 FAILED.
+  found: |
+    The single failure is NOT in this session's scope and NOT caused by this
+    session (which changed no `src/` or `tests/` file):
+    tests/unit/test_worker_registry_names.py::test_claude_code_resolves_to_a_real_adapter_not_a_placeholder
+    asserts `worker.execute({})` returns FAILED "with no ANTHROPIC_API_KEY
+    configured in this test's environment", but observed
+    `WorkerResultStatus.COMPLETED` with summary "I'm ready to help. What would
+    you like to wo...". Verified the mechanism without reading any secret:
+    `get_settings().anthropic_api_key is not None` -> True while
+    `"ANTHROPIC_API_KEY" in os.environ` -> False, i.e. the credential is supplied
+    by the CWD-relative `.env` (`Settings.model_config.env_file=".env"`), so the
+    credential gate opens and a REAL `claude` CLI is spawned from a unit test.
+    An active debug session already owns this:
+    `.planning/debug/claude-cli-test-spawns-real-binary-with-key-present.md`.
+  implication: |
+    Out of scope here -- already owned, do not fix in this session. Worth noting
+    it is the SAME CLASS as G-10-1 (a test asserting an environment property its
+    environment does not guarantee), which strengthens this session's prevention
+    entry rather than contradicting it.
+
+- timestamp: 2026-10-09T00:00:00Z
+  checked: |
+    NEW INCIDENTAL FINDING spotted in the revert probe's `role_executions.error`
+    blob: artifact checksums rendered as `'checksum': '[redacted:github_token]'`.
+    Traced to src/dark_factory/events/redaction.py's `_HEX_TOKEN` pattern +
+    `_hex_token_replacement`, which redacts any bare 40/64-hex run unless
+    preceded by a git-object context (`_GIT_OBJECT_CONTEXT`, D-18).
+  found: |
+    A SHA-256 artifact checksum is exactly 64 hex characters, so it matches the
+    bare-hex credential pattern and is replaced. Severity bounded by direct
+    query: `artifact_references.checksum` holds intact real values
+    (`9f1ede6e...c16c9` etc.) and `ARTIFACT_CREATED` payloads carry no checksum
+    at all. The mangling therefore affects ONLY the serialized WorkerResult
+    copy persisted into `role_executions.error`, which is written only on a
+    FAILED role.
+  implication: |
+    The integrity mechanism is NOT compromised -- this is cosmetic audit-trail
+    degradation on the failure path only. LOW severity, distinct root cause and
+    distinct subsystem from G-10-1. Reported, deliberately NOT fixed here
+    (would be scope creep); a candidate for its own session if the lost
+    checksum in a failed role's error blob is judged to matter for forensics.
+
 ## Resolution
 
 root_cause: |
@@ -410,6 +598,117 @@ root_cause: |
   runner_src` structural guard that Phase 10's two legitimate GitHub-error redaction
   call sites now trip.
 
-fix: "NOT APPLIED -- goal: find_root_cause_only"
-verification: "N/A"
+fix: |
+  NO CODE CHANGE WAS OWED BY THIS SESSION. On resume (2026-10-09) the prescribed
+  fix was found already landed as ordinary phase work between the pause and now:
+
+  - plan 10-07 added `tests/support/shipped_config.py` -- the single
+    shipped-config copy harness for the whole test tree. `copy_shipped_config_into`
+    calls `neutralize_repo_local_config`, which rewrites exactly two keys on the
+    PARSED YAML document (deliberately not by appending a duplicate `quality_gate:`
+    block, since last-wins duplicate-key resolution is the same implicitness that
+    hid G-10-1):
+      * `quality_gate` -> `{"commands": ["git --version"]}` (HARNESS_GATE_COMMANDS
+        -- chosen because `git >= 2.40` is a hard project dependency, always exits
+        0, writes nothing into the worktree, and `PATH` is in
+        `WORKER_ENV_ALLOWLIST`, so the gate execution path genuinely runs and
+        folds PASS rather than being skipped) -> closes root cause (1);
+      * `publishing` -> `{**publishing, "create_pr": False}` -> closes root
+        cause (2), the latent one.
+    All 4 affected modules now import that one helper; their 4 duplicated
+    per-module `_copy_shipped_config_into` copies are deleted.
+  - plan 10-07 also hardened the 3 negative controls to assert on the persisted
+    `role_executions.error` content, closing the masked-assertion risk this
+    session raised.
+  - the untracked throwaway `tests/db/test_manual_check_loop04_adjacency.py` was
+    deleted (defect 5).
+  - plan 12-03 replaced the over-broad `assert "redact(" not in runner_src` with
+    an AST-based first-argument allowlist (defect 6).
+
+  This session's contribution is therefore VERIFICATION, not a fix -- including
+  the one thing the paused session explicitly could not do.
+
+verification: |
+  guardrail_verdict: accepted (verification-only session; no diff to guard)
+
+  signal_1_reproduction_test: PASS
+    All 6 originally-reported failures green against a real reachable Neon
+    PostgreSQL 17 (DARK_FACTORY_TEST_DATABASE_URL) -- the resource the paused
+    session lacked, which was its stated highest-value gap:
+      test_real_pipeline_zero_config.py            1 passed (55s)
+      test_artifact_scope_enforcement.py (3)
+      test_artifact_cross_clone.py       (1)
+      test_role_reassignment_sc2.py      (2)       6 passed (306s)
+      test_redaction_interactions.py + tests/db/test_loop04_adjacency.py
+                                                   4 passed (53s)
+
+  signal_2_revert_test: PASS (the decisive signal)
+    scratchpad/revert_probe.py re-ran the real CLI subprocess against the real
+    database with `neutralize_repo_local_config` omitted (pre-10-07 state). The
+    symptom returned exactly, and every previously-inferred claim became a direct
+    observation:
+      QA->DEV, DEV->QA, QA->DEV, DEV->QA, QA->FAILED  (3 "QA ->" transitions)
+      terminal FAILED at QA, attempt 3
+      qa_developer_iterations = 0   quality_gate_iterations = 2
+      QUALITY_GATE_FAILED {"exit_codes": [5, 0]}  x3
+      RUN_FAILED {"cap":2,"value":2,
+                  "reason":"quality_gate_max_iterations_exhausted",
+                  "counter":"quality_gate_iterations"}
+      QA_PASSED on every attempt
+    This retires all three blind spots the paused session recorded: the bounce
+    count, the reason string (`quality_gate_*`, NOT `qa_developer_*` -- the
+    reporter's "exhausts qa_developer_max_iterations: 3" was a mis-attribution),
+    and the unexecuted status of cause (2).
+
+  signal_3_oracle_quality: PASS
+    oracle_type: specified (asserts on persisted terminal status, per-role
+    status, `role_executions.error` content and event payloads -- not merely on
+    the process exit code, which is the implicit/weakest oracle and was exactly
+    what let 3 negative controls pass for the wrong reason pre-10-07).
+
+  signal_4_adjacent_regression: PASS
+    tests/unit + tests/contract: 846 passed, 1 skipped, 1 failed -- the one
+    failure is out of scope, environment-dependent, not caused here (this
+    session changed no `src/` or `tests/` file), and already owned by
+    `.planning/debug/claude-cli-test-spawns-real-binary-with-key-present.md`.
+    Adjacent db surface for root cause (1) -- the gate and the bounce counters:
+    test_quality_gate_gates_the_run, test_qa_bounce,
+    test_iteration_cap_exhaustion, test_write_scope_enforced_on_bounce
+    -> 10 passed.
+    Adjacent db surface for root cause (2) -- the publish path that cause (1)
+    was masking and that was never executed before this session:
+    test_publish_step, test_publish_idempotency -> 8 passed.
+
+  signal_5_minimality: N/A -- no diff produced by this session.
+
 files_changed: []
+  # Intentionally empty. The fix landed under plans 10-07 and 12-03
+  # (tests/support/shipped_config.py + 4 call-site imports + 3 hardened negative
+  # controls + 1 deleted throwaway + 1 AST-ified structural guard). This session
+  # produced only this debug record.
+
+out_of_scope_findings_reported_not_fixed:
+  - id: "unit test spawns a real, billable `claude` CLI"
+    detail: |
+      tests/unit/test_worker_registry_names.py::test_claude_code_resolves_to_a_real_adapter_not_a_placeholder
+      asserts FAILED on the premise of "no ANTHROPIC_API_KEY configured in this
+      test's environment", but `Settings.model_config.env_file=".env"` is
+      CWD-relative and pytest's rootdir IS the repo root, so a developer `.env`
+      opens the credential gate and a real `claude` subprocess runs from the
+      unit tier. Verified without reading the secret:
+      `get_settings().anthropic_api_key is not None` -> True,
+      `"ANTHROPIC_API_KEY" in os.environ` -> False.
+    severity: "medium (unhermetic unit tier + real API spend)"
+    owner: ".planning/debug/claude-cli-test-spawns-real-binary-with-key-present.md"
+    note: "SAME CLASS as G-10-1 -- a test asserting an environment property its environment does not guarantee."
+  - id: "redactor eats SHA-256 artifact checksums"
+    detail: |
+      src/dark_factory/events/redaction.py's `_HEX_TOKEN` / `_hex_token_replacement`
+      redacts any bare 40/64-hex run outside a git-object context. A SHA-256
+      artifact checksum is exactly 64 hex chars, so the serialized WorkerResult
+      persisted into `role_executions.error` on a FAILED role stores
+      `'checksum': '[redacted:github_token]'`. Blast radius bounded by query:
+      `artifact_references.checksum` is intact and `ARTIFACT_CREATED` payloads
+      carry no checksum, so the integrity mechanism is unaffected.
+    severity: "low (cosmetic audit-trail loss, failure path only)"
+    owner: "unassigned -- candidate for its own session"
