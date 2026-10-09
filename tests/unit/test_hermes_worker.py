@@ -467,10 +467,20 @@ def test_missing_hermes_binary_returns_failed_without_raising(
     empty_dir = tmp_path / "empty-bin"
     empty_dir.mkdir()
     with fake_hermes_env(monkeypatch, empty_dir):
+        # REPLACE PATH -- `fake_hermes_env` only prepends. `hermes` happens to
+        # be uninstalled on the machine where this was measured, so this test
+        # was green by accident of the environment rather than by construction;
+        # it would have spawned the real binary on a machine that has one. See
+        # test_claude_code_worker.py's equivalent comment and debug session
+        # `claude-cli-test-spawns-real-binary-with-key-present`.
+        monkeypatch.setenv("PATH", str(empty_dir))
         result = HermesWorker().execute(_context())
 
     assert result.status is WorkerResultStatus.FAILED
-    assert result.error
+    # Derived oracle -- `FAILED` alone cannot distinguish "binary absent" from
+    # "real binary ran and was rejected". See test_claude_code_worker.py.
+    assert "hermes" in (result.error or "")
+    assert "No such file or directory" in (result.error or "")
 
 
 def test_needs_input_marker_produces_needs_input_with_question(

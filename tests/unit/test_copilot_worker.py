@@ -457,10 +457,19 @@ def test_missing_copilot_binary_returns_failed_without_raising(
     empty_dir = tmp_path / "empty-bin"
     empty_dir.mkdir()
     with fake_copilot_env(monkeypatch, empty_dir):
+        # REPLACE PATH -- `fake_copilot_env` only prepends, so the real
+        # `copilot` stayed resolvable and this test passed for the wrong reason
+        # (real binary + bogus token -> FAILED). See the equivalent comment in
+        # test_claude_code_worker.py and debug session
+        # `claude-cli-test-spawns-real-binary-with-key-present`.
+        monkeypatch.setenv("PATH", str(empty_dir))
         result = CopilotWorker().execute(_context())
 
     assert result.status is WorkerResultStatus.FAILED
-    assert result.error
+    # Derived oracle -- `FAILED` alone cannot distinguish "binary absent" from
+    # "real binary ran and was rejected". See test_claude_code_worker.py.
+    assert "copilot" in (result.error or "")
+    assert "No such file or directory" in (result.error or "")
 
 
 def test_needs_input_marker_produces_needs_input_with_question(

@@ -274,9 +274,29 @@ def test_missing_claude_binary_returns_failed_without_raising(
     empty_dir = tmp_path / "empty-bin"
     empty_dir.mkdir()
     with fake_claude_env(monkeypatch, empty_dir):
+        # REPLACE PATH, don't rely on `fake_claude_env`'s prepend: that helper
+        # only PREPENDS `empty_dir` (fake_claude_cli.py:81-82), leaving the real
+        # `claude` resolvable further down an 18-entry PATH on any machine that
+        # has the CLI installed. This test then passed for the wrong reason --
+        # the real binary ran with the helper's bogus `sk-ant-fake...` key,
+        # failed auth, and returned the very FAILED this asserts. Measured in
+        # debug session `claude-cli-test-spawns-real-binary-with-key-present`.
+        # `build_worker_env` keeps PATH in its allowlist (tools/env.py:55) and
+        # `Popen` resolves argv[0] through `os.get_exec_path(env)`, so replacing
+        # PATH makes `claude` unresolvable in the spawned child too -- which is
+        # what makes the binary genuinely absent, as this test's name claims.
+        monkeypatch.setenv("PATH", str(empty_dir))
         result = ClaudeCodeWorker().execute(_context())
 
     assert result.status is WorkerResultStatus.FAILED
+    # A DERIVED oracle, not merely `FAILED`. `FAILED` alone cannot tell
+    # "binary absent" -- the property under test -- from "real binary ran and
+    # was rejected", because `execute()`'s never-raise wrapper collapses both.
+    # That collapse is exactly what hid this defect. Pinning the errno text
+    # means a future revert to a PATH *prepend* fails here loudly instead of
+    # passing for the wrong reason.
+    assert "claude" in (result.error or "")
+    assert "No such file or directory" in (result.error or "")
 
 
 def test_missing_credential_returns_failed_and_spawns_nothing(

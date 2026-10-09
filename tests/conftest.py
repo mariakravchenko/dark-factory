@@ -248,6 +248,117 @@ def _database_url_env(request: pytest.FixtureRequest) -> Iterator[None]:
             get_settings.cache_clear()
 
 
+# --------------------------------------------------------------------------- #
+# Real-agent-binary tripwire — recurrence guard for debug session
+# `claude-cli-test-spawns-real-binary-with-key-present`
+# --------------------------------------------------------------------------- #
+#
+# That session's defect: `tests/unit/test_worker_registry_names.py` invoked
+# `ClaudeCodeWorker.execute({})` / `CopilotWorker.execute({})` relying on a
+# *comment-stated* premise that no credential was configured. `Settings` loads
+# `env_file=".env"` relative to the CWD and pytest's rootdir is the repo root,
+# so a developer with a populated `.env` opened the credential gate and spawned
+# the REAL `claude` / `copilot` CLI — with `cwd` = the live working tree (the
+# bare `{}` context has no `run_id`, so `resolve_dirs` falls back to
+# `Path.cwd()`) under `--permission-mode dontAsk` / `--no-ask-user`. CI never
+# saw it: a hosted runner has neither the credential nor the binary.
+#
+# Why the breach is recorded to a FILE and asserted at teardown, rather than the
+# shim just exiting non-zero: every adapter wraps `execute()` in a never-raise
+# handler that collapses any failure to `status=FAILED`. A non-zero shim would be
+# silently absorbed into exactly the `assert status is FAILED` that hid the
+# `copilot` half of the original bug for its entire lifetime. A file written by
+# the shim plus a teardown assertion cannot be swallowed by any adapter.
+#
+# A test that legitimately drives a real adapter prepends its own fake-CLI
+# directory (`fake_claude_env` / `fake_copilot_env` / `fake_hermes_env`), which
+# lands AHEAD of the tripwire in PATH and shadows it — so the established idiom
+# keeps working untouched and only an unguarded spawn reaches the tripwire.
+
+_AGENT_BINARIES = ("claude", "copilot", "hermes")
+_BREACH_LOG_NAME = "BREACH.log"
+
+
+@pytest.fixture(scope="session")
+def _agent_tripwire_dir(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A directory of shims named after every real agent CLI. Each records the
+    breach to a file and exits non-zero; the file is what the per-test fixture
+    asserts on."""
+    directory = tmp_path_factory.mktemp("agent-binary-tripwire")
+    breach_log = directory / _BREACH_LOG_NAME
+    for name in _AGENT_BINARIES:
+        shim = directory / name
+        shim.write_text(
+            "#!/usr/bin/env python3\n"
+            "import os, sys\n"
+            f"with open({str(breach_log)!r}, 'a') as fh:\n"
+            f"    fh.write({name!r} + '\\t' + os.getcwd() + '\\n')\n"
+            f"sys.stderr.write('dark-factory test tripwire: refusing to run the "
+            f"real {name} CLI from a non-integration test\\n')\n"
+            "sys.exit(97)\n",
+            encoding="utf-8",
+        )
+        shim.chmod(0o755)
+    return directory
+
+
+@pytest.fixture(autouse=True)
+def _no_real_agent_binary_spawn(
+    request: pytest.FixtureRequest,
+    _agent_tripwire_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    """Make it impossible for a non-``integration`` test to reach a real agent
+    CLI, and fail loudly at teardown if one was attempted.
+
+    ``integration``-marked tests are the only exemption —
+    ``tests/integration/test_*_live.py`` are the live spikes whose entire
+    purpose is to drive the real binary when it is installed and credentialed
+    (``tests/support/live_runtime.py``).
+
+    There is deliberately **no opt-out marker** for tests that "own PATH". A
+    test asserting "binary absent -> FAILED" must own PATH by *replacing* it
+    (``monkeypatch.setenv("PATH", str(empty_dir))``), and such a test can never
+    reach a real binary — so it never trips this wire and needs no exemption.
+    An exemption marker was tried and removed: the three
+    ``test_missing_*_binary_returns_failed_without_raising`` tests claimed to
+    own PATH but only *prepended* an empty directory
+    (``fake_claude_env`` et al. prepend, never replace), leaving the real binary
+    resolvable further down PATH. The marker therefore silenced a true positive
+    — exactly the failure mode this tripwire exists to prevent. Keeping an
+    unused silencing hatch would invite that mistake again.
+    """
+    if request.node.get_closest_marker("integration"):
+        yield
+        return
+
+    breach_log = _agent_tripwire_dir / _BREACH_LOG_NAME
+    before = breach_log.read_text("utf-8") if breach_log.exists() else ""
+    monkeypatch.setenv(
+        "PATH", f"{_agent_tripwire_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+    yield
+    after = breach_log.read_text("utf-8") if breach_log.exists() else ""
+    if after != before:
+        attempted = after[len(before) :].strip().splitlines()
+        raise AssertionError(
+            f"{request.node.nodeid} tried to spawn a REAL agent CLI "
+            f"({', '.join(line.split(chr(9))[0] for line in attempted)}). A "
+            "non-integration test must never reach a live agent binary: it is a "
+            "billable external call, and because a run_id-less context makes "
+            "`resolve_dirs` fall back to `Path.cwd()`, the agent runs against "
+            "the live working tree. Do not rely on a credential being absent — "
+            "`Settings` reads a CWD-relative `.env`, so the gate opens on any "
+            "developer machine that has one. Install a fake CLI instead "
+            "(`fake_claude_env` / `fake_copilot_env` / `fake_hermes_env`, as "
+            "tests/contract/test_coding_worker_contract.py does). To assert a "
+            'binary is ABSENT, REPLACE PATH (`monkeypatch.setenv("PATH", '
+            "str(empty_dir))`) -- those helpers only PREPEND, so the real "
+            "binary stays resolvable and the test would pass for the wrong "
+            "reason."
+        )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _schema_at_head(request: pytest.FixtureRequest) -> Iterator[None]:
     """Bring the provisioned database to ``head`` once before any ``db`` or
