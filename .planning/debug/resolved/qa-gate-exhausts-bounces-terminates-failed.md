@@ -1,8 +1,9 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "G-10-1: The real-CLI-subprocess pipeline (shipped .dark-factory.yaml config, driven via `python -m dark_factory run text:...` against a real Postgres/Neon database) never reaches PUBLISHING. It bounces QA -> DEVELOPMENT three times, exhausts retry.qa_developer_max_iterations: 3, and terminates in FAILED at QA."
 created: 2026-09-28T00:00:00Z
 updated: 2026-10-09T00:00:00Z
+resolved: 2026-10-09T00:00:00Z
 ---
 
 ## Current Focus
@@ -50,11 +51,39 @@ expecting: |
   are gone. Falsification: any of the 4 still bounces to FAILED at QA -> the
   10-07 harness does not actually neutralize both causes and a real fix is owed.
 next_action: |
-  DONE -- verification complete, see Resolution.verification. All 6 originally
-  reported failures are green against a real Neon PostgreSQL 17; the revert test
-  reproduced the original symptom exactly and retired all three recorded blind
-  spots. Awaiting human confirmation before archiving to resolved/ (no code
-  change was owed by this session -- the fix landed under plans 10-07 and 12-03).
+  CLOSED. Human verification answered 2026-10-09: "Confirmed + track checksum
+  bug". Verification itself was committed as a1a78d2. Session archived to
+  .planning/debug/resolved/ and its prevention entry appended to
+  .planning/debug/knowledge-base.md. No code change was owed by this session --
+  the fix landed under plans 10-07 and 12-03.
+
+  The one incidental finding the user elected to track got its own session:
+  .planning/debug/checksum-redaction-false-positive-in-error-payload.md
+  (seeded only, not investigated here).
+
+blind_spots_retired: |
+  All three blind spots the paused session recorded are now DIRECTLY OBSERVED,
+  not inferred, via the revert probe against the real Neon PostgreSQL 17:
+
+  (1) The exact bounce COUNT -- observed: QA->DEV, DEV->QA, QA->DEV, DEV->QA,
+      QA->FAILED = 2 bounces + 1 terminal failure = 3 "QA ->" CLI transitions,
+      with `quality_gate_iterations = 2` and `qa_developer_iterations = 0`.
+  (2) The exact RUN_FAILED reason STRING -- observed:
+      `quality_gate_max_iterations_exhausted` with
+      `{"counter":"quality_gate_iterations","cap":2,"value":2}`, confirming the
+      reporter's attribution to `qa_developer_max_iterations: 3` was a
+      mis-attribution.
+  (3) The negative-control MASKED-ASSERTION risk -- closed by reading the
+      current assertions rather than their exit codes: all 3 controls now assert
+      on persisted `role_executions.error` content, and `_drive_shipped_config`
+      cross-checks `expected_exit` against the persisted terminal status (D-05).
+
+  Remaining (accepted, unretired): cause (2)'s publish-path failure mode was
+  confirmed executable only indirectly -- `neutralize_repo_local_config` sets
+  `publishing.create_pr: False`, so the 4 green tests never enter the publish
+  branch at all. The branch itself is covered by test_publish_step /
+  test_publish_idempotency (8 passed), but the specific
+  `MissingGitHubCredentialError`-from-a-throwaway-cwd path was never executed.
 
 prior_hypothesis_at_pause: |
   CONFIRMED (two independent, serial causes):
@@ -681,6 +710,14 @@ verification: |
 
   signal_5_minimality: N/A -- no diff produced by this session.
 
+  human_verification: CONFIRMED 2026-10-09
+    Response: "Confirmed + track checksum bug". The user confirmed the original
+    issue is resolved in their real workflow and elected to track the incidental
+    checksum-redaction finding as its own session rather than accept it as
+    permanent cosmetic debt.
+
+  commit: a1a78d2 (the verification record itself; no src/ or tests/ diff)
+
 files_changed: []
   # Intentionally empty. The fix landed under plans 10-07 and 12-03
   # (tests/support/shipped_config.py + 4 call-site imports + 3 hardened negative
@@ -711,4 +748,9 @@ out_of_scope_findings_reported_not_fixed:
       `artifact_references.checksum` is intact and `ARTIFACT_CREATED` payloads
       carry no checksum, so the integrity mechanism is unaffected.
     severity: "low (cosmetic audit-trail loss, failure path only)"
-    owner: "unassigned -- candidate for its own session"
+    owner: ".planning/debug/checksum-redaction-false-positive-in-error-payload.md"
+    note: |
+      ASSIGNED at the human-verify checkpoint 2026-10-09 ("Confirmed + track
+      checksum bug"). Seeded as its own session with this finding verbatim so
+      the next session does not need to re-derive it. Deliberately NOT
+      investigated or fixed here -- distinct root cause, distinct subsystem.
