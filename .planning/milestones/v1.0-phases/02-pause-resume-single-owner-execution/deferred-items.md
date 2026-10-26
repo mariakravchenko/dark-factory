@@ -10,6 +10,7 @@ Out-of-scope discoveries logged during execution, not fixed (SCOPE BOUNDARY).
   with Python code fences that `ruff format` now wants to rewrap). Zero files
   under `src/` or `tests/` are unformatted. Not caused by 02-03; left untouched.
   `ruff check .` and `ruff format --check src tests` both pass clean.
+  status: acknowledged
 
 ## 02-06
 
@@ -35,3 +36,4 @@ Out-of-scope discoveries logged during execution, not fixed (SCOPE BOUNDARY).
   `RUNNING` row for role K+1 (before any worker call), so a multi-role
   pipeline gets one `role_executions` row per role, matching STATE-03. Also
   closed as WINDOWS.md ledger item #6.
+  status: acknowledged

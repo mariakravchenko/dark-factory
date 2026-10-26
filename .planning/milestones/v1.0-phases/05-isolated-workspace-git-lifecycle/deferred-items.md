@@ -31,3 +31,4 @@ Out-of-scope discoveries logged during execution, not fixed (SCOPE BOUNDARY).
   human's next full-suite verification round: run `git worktree prune` and
   review the 24 `dark-factory/run-*` branches for deletion once confirmed
   safe to discard.
+  status: acknowledged
