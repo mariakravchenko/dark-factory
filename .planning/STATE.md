@@ -305,7 +305,14 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 | Category | Item | Status | Deferred At | Milestone |
 |----------|------|--------|-------------|-----------|
-| *(none)* | | | | |
+| debug_sessions | knowledge-base | unknown | 2026-10-26 | v1.0 |
+| deferred_items | 12/deferred-items.md: 12-02 ruff format drift (19 files, carried from 11-10) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 12/deferred-items.md: 12-02 mcp_transport.py mypy import-not-found (optional extra not installed) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 11/deferred-items.md: 11-10 ruff format drift (19 files) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 11/deferred-items.md: 11-07 environment-dependent test failure (ANTHROPIC_API_KEY present) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 05/deferred-items.md: 05-04 leftover git worktrees/branches (~24, pre-existing) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 02/deferred-items.md: 02-06 multi-node role_executions row reuse (resolved in Phase 4) | acknowledged | 2026-10-26 | v1.0 |
+| deferred_items | 02/deferred-items.md: 02-03 ruff format drift (9 files, outside plan scope) | acknowledged | 2026-10-26 | v1.0 |
 
 ## Session Continuity
 
