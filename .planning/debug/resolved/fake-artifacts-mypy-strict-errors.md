@@ -1,8 +1,8 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "mypy --strict reports 3 pre-existing errors in tests/support/fake_artifacts.py, unrelated to and not caused by the in-scope-edit-missing-after-completed fix (test-only change to tests/integration/test_write_scope_enforcement.py); discovered as an adjacent-tier lint/type check during that session's fix-acceptance guardrail."
 created: 2026-10-07T00:00:00Z
-updated: 2026-10-09T00:00:00Z
+updated: 2026-10-26T00:00:00Z
 origin: ".planning/debug/resolved/in-scope-edit-missing-after-completed.md (verification.adjacent_tests.lint_type)"
 ---
 
@@ -14,7 +14,7 @@ bug_class: "Bohrbug — fully deterministic static-analysis defect; reproduces o
 hypothesis: "CONFIRMED — `AttemptAwareFourRoleWorker._record` narrows its `role` key component but never its `attempt` component, so the composed lookup key is `tuple[Any, Any | None]` and `None` is not assignable to the `int` slot of the three dicts' declared `tuple[str, int]` key type."
 test: "Minimal reproduction with `reveal_type` on the exact idiom (scratchpad/probe.py)."
 expecting: "If true: `role` reveals as `Any` after the `in`-dict assert while `attempt` reveals as `Any | None`, and the composed tuple reveals as `tuple[Any, Any | None]` with the identical arg-type error."
-next_action: "AWAITING HUMAN VERIFICATION. Fix applied, guardrail accepted on all 5 signals, and committed as b473a29 (exactly 2 files -- committed via explicit pathspec because a concurrent session had staged an unrelated file into the shared index). On 'confirmed fixed': move this file to .planning/debug/resolved/, append the knowledge-base entry (error patterns: mypy strict, arg-type, tuple[Any, Any | None], dict.get key type, getattr erases typed field, vacuous pass via silent fixture fallback), and commit the doc. If the user instead reports mypy still erroring, re-run `uv run mypy --strict tests/support/fake_artifacts.py` and check their invocation covers `tests` -- CI's typecheck step is `mypy src/dark_factory` only, so a CI-green signal would NOT exercise this fix's static half."
+next_action: "NONE -- SESSION RESOLVED AND ARCHIVED. Human verification received ('confirmed fixed'). Fix committed as b473a29 (exactly 2 files: tests/support/fake_artifacts.py +16, tests/unit/test_attempt_aware_worker_attempt_invariant.py +144, via explicit pathspec because a concurrent session had staged unrelated files into the shared index); session doc recorded in 3547fe7. This file moved to .planning/debug/resolved/ and a knowledge-base.md entry appended. Residual, deliberately OUT OF SCOPE for this session and worth its own work item: CI's typecheck step is `mypy src/dark_factory` only, so `tests/` is still never type-checked in CI -- this exact error class can recur in any other test-support fixture without any gate noticing."
 
 reasoning_checkpoint:
   hypothesis: "The three errors are caused by a missing narrowing assert for `attempt`: `getattr(context, 'attempt', None)` is typed `Any | None` by typeshed, and unlike `role` (narrowed to `Any` by `assert role in _FOUR_ROLE_FILES`) nothing ever removes the `None`, so every `(role, attempt)` key is `tuple[Any, Any | None]` and fails against the dicts' `tuple[str, int]` key type."
