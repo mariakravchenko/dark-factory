@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 05-isolated-workspace-git-lifecycle
 source: [05-VERIFICATION.md]
 started: 2026-09-15T16:30:06Z
-updated: 2026-09-15T18:45:00Z
+updated: 2026-10-26T00:00:00Z
 ---
 
 ## Current Test
@@ -63,24 +63,34 @@ expected: |
   exclusion and SC4's write-scope change-scan. The fix's correctness for SC2 was cross-checked
   by hand against test_pr_diff_excludes_artifacts.py's existing assertion text rather than by
   re-running that test against a live database.
-result: blocked
-blocked_by: prior-phase
-reason: "Depends on tests 1-2 passing first; both have open gaps (G-05-1 blocker fix, CR-02 regression test) that must land before a clean full-suite run is meaningful."
+result: pass
+reported: |
+  Unblocked now that tests 1-2 are resolved (see Gaps). Both debug sessions independently
+  verified against a real reachable PostgreSQL 17 (DARK_FACTORY_TEST_DATABASE_URL):
+  in-scope-edit-missing-after-completed's fix-acceptance guardrail ran
+  tests/integration/test_write_scope_enforcement.py (6/6 passed, all SC4 scenarios),
+  tests/db/test_artifacts_show_reads_committed_content.py + test_artifact_scope_enforcement.py +
+  test_worktree_lifecycle.py (10 passed), and test_secret_redaction_e2e_full_pipeline.py
+  (4 passed). cr02-revert-ordering-test-gap's new unit-tier test
+  (tests/unit/test_write_scope_revert.py) ran clean with the full unit tier (819 passed).
+  The leftover worktree/branch accumulation remains an acknowledged pre-existing item
+  (see Deferred Items at milestone close), not a regression.
 
 ## Summary
 
 total: 3
-passed: 0
-issues: 2
+passed: 3
+issues: 0
 pending: 0
 skipped: 0
-blocked: 1
+blocked: 0
 
 ## Gaps
 
 - gap_id: G-05-1
   truth: "All 6 SC4 scenarios pass: in-scope edit survives untouched; a tracked-edit violation is restored from HEAD; a new-file violation is removed from disk and the git index; an empty write_scope fails on any change at all; a later role is not penalized for an earlier role's legitimate in-scope edit; a role that both writes a valid artifact and commits a violation in the same attempt still fails while the artifact content survives on the branch."
-  status: failed
+  status: resolved
+  resolution: "Fixed test-only (tests/integration/test_write_scope_enforcement.py::test_an_in_scope_edit_completes_with_no_revert now reads the file's content off the working branch via read_committed, plus a companion assert not work_dir.exists(), instead of asserting on the deleted worktree filesystem). Verified via debug session in-scope-edit-missing-after-completed: revert-and-reconfirm reproduced the exact original error, a hand-seeded mutant was caught, and all 6 SC4 scenarios pass against real PostgreSQL 17. Confirmed by user 2026-10-26."
   reason: "User reported: test_an_in_scope_edit_completes_with_no_revert FAILED with FileNotFoundError: the run reached RunStatus.COMPLETED but work_dir/src/app.py does not exist afterward — the in-scope edit did not survive. Other 5 scenarios passed. 1 failed, 5 passed in 130.88s."
   severity: minor
   test: 1
@@ -95,7 +105,8 @@ blocked: 1
 
 - gap_id: G-05-2
   truth: "A CR-02 regression test exists and passes: a violation set containing an escaping symlink path sorted alphabetically before in-worktree violations, run through enforce_write_scope/revert_paths, still reverts every non-escaping violation and raises exactly one WriteScopeViolation naming the escaping path(s)."
-  status: failed
+  status: resolved
+  resolution: "tests/unit/test_write_scope_revert.py now exists (landed by plan 05-06, confirmed via debug session cr02-revert-ordering-test-gap): pytest.mark.unit, no DB, real tmp_path git repo via make_git_repo, exact scenario (tracked file + new file + escaping symlink sorted first) plus boundary-neighbor cases. Revert-check against pre-CR-02 code produced 3/7 failures, proving the suite genuinely discriminates. Confirmed by user 2026-10-26."
   reason: "Confirmed via grep: no test exercises this scenario at any test tier. CR-02's fix rests entirely on code review and manual reasoning, with zero executed regression coverage. User directed: fix."
   severity: major
   test: 2

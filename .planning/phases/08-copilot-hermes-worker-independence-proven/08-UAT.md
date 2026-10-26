@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 08-copilot-hermes-worker-independence-proven
 source: [08-VERIFICATION.md]
 started: 2026-09-22T05:10:00Z
-updated: 2026-09-22T06:30:00Z
+updated: 2026-10-26T00:00:00Z
 ---
 
 ## Current Test
@@ -32,15 +32,15 @@ expected: |
   shipped-config zero-config pipeline reaching COMPLETED across three real runtimes, and the
   three artifact-scope-enforcement end-to-end scenarios (Hermes negative, Copilot negative,
   positive control).
-result: issue
-reported: "4 passed, 2 failed. Both failures are in test_artifact_scope_enforcement.py: test_a_hermes_run_qa_that_overwrites_architectures_artifact_is_reverted_and_fails and test_a_copilot_run_architecture_that_overwrites_bas_artifact_is_reverted_and_fails. Both assert proc.returncode == 0 on the `dark-factory run` CLI subprocess, and got 1 instead -- the run itself correctly reached terminal state FAILED (QA->FAILED / ARCHITECTURE->FAILED) after the artifact-scope violation was detected and reverted, but the CLI process now exits non-zero when the run's terminal state is FAILED."
+result: pass
+reported: "Resolved via debug session cli-exit-code-on-failed-run (G-08-2): tests/integration/test_artifact_scope_enforcement.py's shared harness _drive_shipped_config now takes an expected_exit parameter (1 for the two tamper/negative callers, 0 for the positive control) instead of a hardcoded == 0 assertion, plus a cross-check tying the expectation to the persisted role_executions.error content. Verified: all 8 tests in test_role_reassignment_sc2.py / test_real_pipeline_zero_config.py / test_artifact_scope_enforcement.py pass against real PostgreSQL 17 (DARK_FACTORY_TEST_DATABASE_URL). Confirmed by user 2026-10-26."
 severity: major
 
 ## Summary
 
 total: 2
-passed: 1
-issues: 1
+passed: 2
+issues: 0
 pending: 0
 skipped: 0
 blocked: 0
@@ -49,7 +49,8 @@ blocked: 0
 
 - gap_id: G-08-2
   truth: "CR-01 artifact-scope-enforcement negative-path tests (Hermes-tamper, Copilot-tamper) pass end to end against a real PostgreSQL 17"
-  status: failed
+  status: resolved
+  resolution: "Test-only fix (production CLI exit-code mapping, D-05, was always correct and unchanged since phase 02). _drive_shipped_config now parameterizes expected_exit per caller instead of hardcoding 0. Verified against real PostgreSQL 17: 6/6 passed (was 4 passed, 2 failed), plus a revert-check reproducing the original AssertionError when expected_exit is reverted to 0. Confirmed by user 2026-10-26."
   reason: "User reported: 4 passed, 2 failed. Both failures in test_artifact_scope_enforcement.py assert proc.returncode == 0 on the `dark-factory run` CLI subprocess, and got 1 -- the run correctly reached terminal state FAILED after the artifact-scope violation was detected and reverted, but the CLI now exits non-zero on a FAILED terminal run state."
   severity: major
   test: 2
