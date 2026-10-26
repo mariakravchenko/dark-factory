@@ -52,11 +52,17 @@ jobs:
       # (the FakeWorker orchestration suite, QUAL-01) therefore runs in CI
       # starting this phase.
       #
-      # The `integration` tier is still excluded -- for a reason unrelated to
-      # database availability: some of its tests drive real agent CLIs whose
-      # credentials (e.g. ANTHROPIC_API_KEY) this hosted runner does not have.
-      # Do not "fix" this omission by adding `integration` to a selector below
-      # without first provisioning those credentials.
+      # The `integration` tier runs too, in its own `integration` job below --
+      # separated so the expensive tier carries its own timeout and its own
+      # duration line in the Actions log, and so it can never push this job
+      # past the budget above.
+      #
+      # This spot used to carry a standing instruction NOT to add `integration`
+      # to a selector "without first provisioning those credentials (e.g.
+      # ANTHROPIC_API_KEY)". That premise was measured and found not to bind;
+      # the `integration` job below records the measurement that retired it.
+      # Retired explicitly rather than quietly deleted, so the next reader
+      # inherits the new reasoning instead of re-deriving the old prohibition.
       - name: Unit and contract tiers
         run: uv run pytest -q -m "unit or contract"
 
@@ -73,3 +79,78 @@ jobs:
       - name: Database tier (FakeWorker orchestration suite, QUAL-01)
         timeout-minutes: 20
         run: uv run pytest -q -m db
+
+  # The gate that makes an integration test's FIRST execution happen here,
+  # automatically, rather than by hand several phases later.
+  #
+  # WHY THIS JOB EXISTS: without it an integration test can be authored,
+  # committed and merged having never once been executed. That is not
+  # hypothetical -- G-08-2 shipped
+  # tests/integration/test_artifact_scope_enforcement.py "collection-verified
+  # clean; not execution-verified" (08-05-SUMMARY.md coverage D4/D5/D6), and
+  # its wrong assertion was first observed by hand during UAT four phases after
+  # it landed. tests/unit/test_qual01_ci_coverage.py asserts this job keeps
+  # selecting the tier, so the gap cannot be reintroduced silently.
+  integration:
+    runs-on: ubuntu-latest
+    # Gated on `quality` so the expensive tier never burns runner minutes on a
+    # push that already fails lint, mypy or the fast tiers -- the same fail-fast
+    # preference the step order inside `quality` already expresses.
+    needs: quality
+    # MEASURED (local, two full runs): 193 tests in 32m18s and 33m22s, the
+    # second at `90.14s user 37.25s system 6% cpu` -- only ~127s of CPU inside a
+    # 33-minute wall-clock. This tier is network-round-trip-bound, not
+    # compute-bound: both runs used tests/conftest.py's `external` rung against
+    # a Neon endpoint ~110 ms away, and every `dark-factory` child process the
+    # tests spawn pays the same RTT (a teardown that is nothing but ~5 DELETEs
+    # costs 1.9s there). On this runner the ladder resolves to its
+    # testcontainers rung instead, where those queries cross loopback, so the
+    # real CI number should be several times lower.
+    #
+    # 60 is set against the ~33m MEASURED local wall-clock rather than against
+    # that much-lower expectation, because a timeout's only job is to catch a
+    # hang without ever producing a false red, and the expectation is the one
+    # number here that is NOT measured. Same runner-variance reasoning as the
+    # `quality` timeouts, which also keep multiples of headroom rather than
+    # percentages. REPLACE this with the real CI wall-clock and its run id once
+    # the first green run exists, exactly as the `db` step above records its own.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+
+      # A plain `-m integration`, NOT a curated credential-free subset.
+      #
+      # The three credential-requiring modules (test_claude_code_live.py,
+      # test_copilot_live.py, test_hermes_live.py -- 3 of 193 tests) already
+      # guard themselves with a module-level `skipif` over
+      # tests/support/live_runtime.py, which checks binary-on-PATH first and
+      # catches a pydantic ValidationError from an unconstructible `Settings`.
+      # VERIFIED twice, with `claude`, `copilot` and `hermes` removed from PATH
+      # so the local environment matches this runner's own posture:
+      #   - those three modules alone: `3 skipped in 0.05s`, each with a named
+      #     reason, none errored;
+      #   - the WHOLE selector below: `189 passed, 4 skipped, 1107 deselected`,
+      #     process exit 0.
+      # So no secret needs provisioning for this job to be green.
+      #
+      # A `-m "integration and not live"` selector was considered and REJECTED:
+      # deselecting those modules would make them "excluded/absent" tests, which
+      # T-08-19 forbids (test_copilot_live.py:36-38), and it would break their
+      # documented property of running automatically the day a CLI is installed,
+      # with zero code change. A plain selector also keeps this gate DEFAULT
+      # CLOSED -- a newly authored integration test runs here unless its author
+      # deliberately writes a skip guard, with no opt-in marker to forget.
+      - name: Integration tier (end-to-end CLI suites)
+        run: uv run pytest -q -m integration

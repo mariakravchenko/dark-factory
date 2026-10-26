@@ -153,25 +153,103 @@ def test_the_scenario_keys_are_qual01s_own_words() -> None:
     )
 
 
-def test_ci_runs_the_database_tier() -> None:
+def _marker_selectors() -> list[tuple[str, str]]:
+    """``(job name, marker expression)`` for every workflow step that invokes
+    pytest with a ``-m`` selector.
+
+    Deliberately scanned across *all* jobs rather than only ``quality``: the
+    claim both guards below encode is "CI actually runs this tier", and a tier
+    moved into its own job for timeout or log-duration reasons is still run by
+    CI. Scoping the scan to one job would make these guards silently vacuous
+    the moment a tier was relocated -- which is exactly the failure mode they
+    exist to prevent.
+    """
     workflow = yaml.safe_load(_CI_WORKFLOW_PATH.read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["quality"]["steps"]
-    run_strings = [step.get("run", "") for step in steps if "run" in step]
+    selectors: list[tuple[str, str]] = []
+    for job_name, job in workflow["jobs"].items():
+        for step in job.get("steps", []):
+            run = step.get("run", "")
+            if "pytest" in run and "-m" in run:
+                selectors.append((job_name, run.split("-m", 1)[1].strip()))
+    return selectors
 
-    selects_db = any(
-        "-m" in run and "db" in run.split("-m", 1)[1] for run in run_strings
-    )
-    selects_integration = any("integration" in run for run in run_strings)
 
-    assert selects_db, (
-        "No step in .github/workflows/ci.yml's `quality` job invokes pytest "
-        "with a marker selector naming `db` -- the FakeWorker orchestration "
-        "suite QUAL-01 claims coverage for would silently never run in CI. "
-        f"Steps' run strings: {run_strings!r}"
+def test_ci_runs_the_database_tier() -> None:
+    selectors = _marker_selectors()
+
+    assert any("db" in expression for _, expression in selectors), (
+        "No step in .github/workflows/ci.yml invokes pytest with a marker "
+        "selector naming `db` -- the FakeWorker orchestration suite QUAL-01 "
+        "claims coverage for would silently never run in CI. "
+        f"Marker selectors found: {selectors!r}"
     )
-    assert not selects_integration, (
-        "A step in .github/workflows/ci.yml's `quality` job selects the "
-        "`integration` marker -- that tier drives real agent CLIs whose "
-        "credentials the hosted runner does not have (11-CONTEXT.md D-05). "
-        f"Steps' run strings: {run_strings!r}"
+
+
+def test_ci_runs_the_integration_tier() -> None:
+    """The recurrence guard for the escape gate that let G-08-2 ship.
+
+    This assertion used to be its own inverse -- ``assert not
+    selects_integration``, justified by "that tier drives real agent CLIs whose
+    credentials the hosted runner does not have (11-CONTEXT.md D-05)". That
+    premise was false by the time plan 11-09 / G-11-3 gave the three live
+    modules their skip guards, and nobody re-validated it. Encoded as both
+    prose (in ci.yml) and an executable assertion (here), it became
+    self-sealing: adding the obvious selector turned the unit tier red, which
+    read as confirmation that the prohibition was right. The tier stayed
+    unexecuted in CI for four phases, and
+    tests/integration/test_artifact_scope_enforcement.py shipped
+    "collection-verified clean; not execution-verified" (08-05-SUMMARY.md
+    coverage D4/D5/D6) with a wrong assertion found by hand during UAT.
+
+    MEASURED (2026-10-09), which is what retired the premise: running
+    tests/integration/test_{claude_code,copilot,hermes}_live.py with `claude`,
+    `copilot` and `hermes` absent from PATH -- a hosted runner's exact posture
+    -- gives `3 skipped in 0.05s`, each with a named reason, none errored. The
+    credential-requiring surface is 3 of 193 tests and it costs nothing to
+    include.
+
+    So the guard is inverted: the tier must be selected by some job. Inverting
+    it rather than deleting it is the point -- the gap can now only be
+    reintroduced by editing an assertion that says, in place, why it exists.
+    This module is in the fast `unit` tier, which CI has always selected, so it
+    cannot be disabled by the same edit that would disable the thing it guards
+    (T-11-15).
+    """
+    selectors = _marker_selectors()
+    selecting = [
+        (job, expression)
+        for job, expression in selectors
+        if "integration" in expression
+    ]
+
+    assert selecting, (
+        "No step in .github/workflows/ci.yml invokes pytest with a marker "
+        "selector naming `integration` -- so an integration test can be "
+        "authored, committed and merged having never once been executed, which "
+        "is how G-08-2 shipped a test whose wrong assertion was first observed "
+        "by hand during UAT four phases later. If this tier genuinely must be "
+        "removed from CI, say why HERE, in this assertion, rather than only in "
+        "a workflow comment -- a prose-only prohibition is what rotted last "
+        f"time. Marker selectors found: {selectors!r}"
+    )
+
+    # T-08-19: the three live modules must appear as reported SKIPS, never as
+    # excluded/absent tests (tests/integration/test_copilot_live.py:36-38), and
+    # must start running the day a CLI is installed with zero code change. A
+    # `not live`-style narrowing of the selector would deselect them instead,
+    # breaking both properties -- and would reopen this gate for whatever else
+    # the new marker came to cover.
+    deselecting_live = [
+        (job, expression) for job, expression in selecting if "live" in expression
+    ]
+    assert not deselecting_live, (
+        "An `integration` marker selector in .github/workflows/ci.yml narrows "
+        "the tier with a `live` marker expression. T-08-19 requires the three "
+        "live agent-CLI suites to collect and report a NAMED SKIP in every "
+        "environment -- never to be excluded or absent -- and to begin running "
+        "automatically the day their CLI is installed, with no code change. "
+        "Their existing module-level `skipif` over tests/support/live_runtime.py "
+        "already achieves exactly that on a credential-free runner (verified: 3 "
+        "skipped in 0.05s), so no selector-level exclusion is needed. "
+        f"Offending selector(s): {deselecting_live!r}"
     )
