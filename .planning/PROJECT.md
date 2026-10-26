@@ -82,66 +82,22 @@ resume it; durability and observability are the same requirement.
 - ✓ Full event catalog (20 members) covers every state change and side effect the spec names: RUN_CREATED/COMPLETED/FAILED, ROLE_STARTED/COMPLETED/FAILED/BOUNCED, ARTIFACT_CREATED, QUESTION_CREATED, RUN_PAUSED/RESUMED, HUMAN_ANSWER_RECEIVED, QA_PASSED/FAILED, QUALITY_GATE_STARTED/PASSED/FAILED, PUBLISH_STARTED/FAILED, PR_CREATED, WIP_COMMIT_CREATED, CAPABILITY_DENIED — Phase 12 (OBS-02; ARTIFACT_CREATED and QA_PASSED/QA_FAILED were the final two additions)
 - ✓ Operator-facing read surface exposes run state, active role, worker, worker session id, attempt number, full role history, artifacts (including committed content via `git show`), questions, human answers, quality-gate results, errors, and PR info — Phase 12 (OBS-01)
 - ✓ Credential/secret values never appear in role artifacts, worker prompts, Neon event payloads, GitHub comments, logs, or reports — re-proven end-to-end by a whole-pipeline sweep across every sink (real intake → human pause/resume → real `ClaudeCodeWorker` → quality gate → published PR), which also found and fixed one real gap: artifact file content was not scrubbed before commit — Phase 12 (TRIG-02; closes SEC-01 for the artifact-content sink)
+- ✓ Run a task from plain text — `dark-factory run text:"..."`; deterministic source classification with no LLM call; every source normalized to one `NormalizedTask` model — Phase 1 (INTAKE-01, INTAKE-04, INTAKE-05)
+- ✓ `WorkerCapabilities` represents runtime differences explicitly; every adapter normalizes output to one `WorkerResult`; a scripted `FakeWorker` needs no external AI call — Phase 1 (WORK-07/08/10)
+- ✓ Persistence stack is SQLAlchemy + Alembic + PostgreSQL (Neon), `DATABASE_URL` only, no provider-specific logic; `runs` / `role_executions` / `run_events` tables; the ten-value run-status enum with active role stored separately; only the orchestrator mutates lifecycle state; the complete execution of a run is reconstructable from persisted data alone — Phase 1 (STATE-01/02/03/06/07/08, ORCH-05/06)
+- ✓ `human_interactions` table (question, answer, status WAITING|ANSWERED|CANCELLED) — Phase 2 (STATE-04)
+- ✓ Any role can ask for clarification through one identical mechanism; pause persists the worker result, session, and interaction, then releases the process safely; `dark-factory resume <run-id> --answer "..."` reconstructs everything from Neon in a brand-new process; native-session resume and context-reconstruction resume both call the same `worker.resume(...)`; cross-process/cross-machine resume works; two processes cannot execute the same run simultaneously, enforced by Postgres claim-don't-check leasing with no distributed-lock service — Phase 2 (HITL-01 through HITL-08)
+- ✓ One orchestration implementation; CLI, webhook and CI are only triggers with no separate CI orchestrator; a run continues across the local→CI boundary through Neon alone — Phase 11 (TRIG-01, TRIG-04, HITL-06)
+- ✓ Orchestration is tested end-to-end with `FakeWorker` — role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing — with no external AI calls, and the suite runs green in CI — Phase 1 + Phase 11 (QUAL-01)
+- ✓ `git.status/diff/history`, `github.issue.read`, `github.comments.read` capabilities, deferred from Phase 6's initial `ToolRegistry` scope — shipped where Git lifecycle and GitHub integration actually need them — Phase 9/10 (TOOL-01 extended scope)
+- ✓ Worker subprocess environments never inherit the full Dark Factory process environment — the Phase 6 allowlist mechanism (TOOL-04/SEC-03), re-confirmed clean by Phase 12's whole-pipeline secret sweep — Phase 6 + Phase 12
 
 ### Active
 
-<!-- Milestone 1 = the full technical specification. All hypotheses until shipped. -->
+v2 scope — deferred, tracked, not in the v1.0 roadmap. Promote to Validated (with a phase reference) the milestone each ships.
 
-**Task intake**
-- [ ] Run a task from plain text: `dark-factory run text:"..."`
-- [ ] Deterministic source identification (no LLM needed to classify text vs path vs issue)
-- [ ] Normalize every source to one internal `NormalizedTask` model
-
-**Role orchestration**
-- [ ] Role definitions are configuration-driven: instructions, tools, permissions, before/after hooks, outputs, worker (instructions/before-after-hooks/outputs/worker shipped Phase 3; write-scope permission enforcement shipped Phase 5 (ROLE-05); tool-capability enforcement shipped Phase 6 (TOOL-01/02/03))
-
-**Worker (agent runtime) abstraction**
-- [ ] `WorkerCapabilities` represents runtime differences explicitly (native resume, session id, non-interactive, structured output)
-- [ ] `WorkerResult` normalizes every adapter's output (status COMPLETED|NEEDS_INPUT|FAILED, summary, questions, artifacts, changed_files, worker_session_id, metadata)
-- [ ] `FakeWorker` for orchestration tests (scripted `WorkerResult` sequence)
-
-**Tools, permissions, security boundary**
-- [ ] `git.status/diff/history`, `github.issue.read`, `github.comments.read` capabilities — deferred from Phase 6's `ToolRegistry` scope to Phase 9/10, where Git lifecycle and GitHub integration actually need them
-
-**Durable execution state (Neon PostgreSQL)**
-- [ ] Persistence stack: SQLAlchemy + Alembic + PostgreSQL (Neon); `DATABASE_URL` only; no provider-specific logic in orchestration code
-- [ ] `runs` table (id, task/source, workflow, status, current_role, current_step, repository, base/working branch, pr_number, pr_url, timestamps)
-- [ ] `role_executions` table — one run holds multiple attempts (attempt N, worker, status, worker_session_id, result/error JSONB, timestamps)
-- [ ] `human_interactions` table (question, answer, status WAITING|ANSWERED|CANCELLED, timestamps)
-- [ ] `run_events` audit trail — every important lifecycle event persisted; the complete execution is reconstructable from persisted data
-- [ ] Run states: CREATED, BA, ARCHITECTURE, DEVELOPMENT, QA, VERIFYING, PUBLISHING, COMPLETED, WAITING_HUMAN, FAILED; active role stored separately
-- [ ] Only Dark Factory mutates orchestration state; a worker returning `NEEDS_INPUT` never directly controls transitions
-
-**Human-in-the-loop, pause & resume**
-- [ ] Any role can ask for clarification via the same mechanism
-- [ ] Pause: store `WorkerResult` + worker session + human interaction, persist `WAITING_HUMAN`, release execution; the process may terminate safely
-- [ ] Resume (local): `dark-factory resume <run-id> --answer "..."` — a brand-new process reconstructs everything from Neon; no in-memory state from the original run required
-- [ ] Native worker resume when the adapter supports sessions (opaque `worker_session_id`)
-- [ ] Resume by context reconstruction when native resume is unavailable — same external `worker.resume(...)` behavior
-- [ ] Cross-process / cross-machine resume works (local → CI, webhook, delayed human answer)
-- [ ] Concurrency: two processes must not execute the same run simultaneously — Postgres transactions / row locking / conditional updates; no separate distributed-lock service
-
-**Feedback loops & retry policy** — shipped Phase 9, see Validated above
-
-**Independent verification (Quality Gate)** — shipped Phase 9, see Validated above
-
-**Git lifecycle & GitHub integration** — shipped Phase 10, see Validated above
-
-**Triggers: CLI / IDE / CI / GitHub**
-- [ ] One orchestration implementation; environments are only triggers — no separate CI orchestrator
-- [ ] CI can execute the same orchestrator; run continues across the local→CI boundary via Neon
-- CLI commands + `status` rendering — shipped Phase 12, see Validated above
-
-**Configuration**
-- [ ] Config resolved at run creation is snapshotted (`runs.workflow`) so a later resume is deterministic even if `.dark-factory.yaml` changed in between (mechanism shipped Phase 3; deterministic resume for real multi-role runs proven Phase 4+)
-
-**Observability & audit** — shipped Phase 12, see Validated above
-
-**Secrets**
-- [ ] Worker environments do not inherit the full Dark Factory process environment (allowlist mechanism shipped Phase 6; this line tracks the still-open worker-environment-inheritance audit, distinct from the artifact/event/comment/log sinks closed Phase 12)
-
-**Quality**
-- [ ] Orchestration tested with `FakeWorker` (role transitions, artifact handoffs, pause/resume, QA rejection, Developer retries, quality-gate retries, failure limits, publishing) — no external AI calls
+- [ ] **INTG-01**: Confluence / Jira / TestRail / Figma / Teams / Slack / Azure DevOps / GitLab as task sources, context providers, tools, artifact stores, human-interaction channels, or publishing targets — the integration layer must make these addable without changing core orchestration
+- [ ] **OBS-V2-01**: Real-time web dashboard for run monitoring (CLI `status`/`events` is the v1 surface)
 
 ### Out of Scope
 
@@ -151,16 +107,34 @@ resume it; durability and observability are the same requirement.
 - **A separate CI orchestration implementation** — CI is just another trigger for the one orchestrator
 - **A distributed-lock service** — run concurrency is enforced with PostgreSQL transactions / row locking / conditional updates
 - **Turning Neon into a document store** — Neon holds state, metadata, and audit references; the filesystem holds artifact content
-- **Non-core integrations (Confluence, Jira, TestRail, Figma, Teams, Slack, Azure DevOps, GitLab)** — the integration layer must make these addable later without changing core orchestration, but none ship in Milestone 1
+- **Durable-workflow engine (Temporal / Prefect / Celery)** — overkill for a short human-speed pipeline; hand-rolled enum FSM with Neon checkpoints instead
+- **Async SQLAlchemy / async orchestrator core** — one run at a time, blocking on multi-minute agent subprocesses; async adds function-coloring and pooling hazards for zero throughput gain
+- **Trusting agent transcripts / self-reports as verification truth** — the independent quality gate re-runs the repo's real commands and decides on exit codes
+- **Agents owning git / PR operations** — publishing policy stays out of autonomous agents
+- **Copying the whole repository into prompts** — the agent inspects the repo itself; context is role-scoped
+- **Multi-agent chat negotiation between roles** — roles hand off through durable artifacts, not a shared conversation
+- **Auto-merging a PR on a green quality gate** — Dark Factory opens the PR; a human merges
+- **Worker eval / benchmark harness** — not part of the delivery-orchestration core
+- **Non-core integrations (Confluence, Jira, TestRail, Figma, Teams, Slack, Azure DevOps, GitLab)** — the integration layer must make these addable later without changing core orchestration; tracked as v2 requirement INTG-01, none ship in Milestone 1
+
+## Current State (after v1.0)
+
+Shipped 2026-10-26. 12/12 phases complete, all 89 v1 requirements validated. ~62,000 lines of Python across `src/` and `tests/` (224 test files, unit/contract/db/integration tiers), 681 commits over 50 days. Proven end-to-end against a real external repository (`mariakravchenko/app-new#10`) during Phase 10 UAT, not just against fixtures.
+
+**Known tech debt (acknowledged, not blocking):**
+- ~24 leftover git worktrees/branches from earlier phase testing sit in `dark-factory-runs/`; safe to `git worktree prune` once confirmed.
+- `ruff format` drift across ~19 pre-existing files outside recent plans' scope.
+- The optional `mcp` extra is not installed by default, producing 2 benign mypy `import-not-found` errors on `tools/mcp_transport.py` unless `uv sync --all-extras --dev` is run.
+- `tests/db/test_status_from_columns.py::test_read_status_performs_no_write` counts DB rows globally rather than scoped to its own `run_id`, so it can flake under concurrent test runs against the shared external Postgres rung.
 
 ## Context
 
 - **Language / stack:** Python. Neon PostgreSQL via SQLAlchemy + Alembic. YAML config. CLI is the primary interface; IDE / CI / GitHub are additional triggers.
-- **Agent runtimes targeted:** Claude Code, GitHub Copilot, Hermes — all three get real adapters in Milestone 1. Access to the Copilot and Hermes CLIs is required to run their integration tests; the `WorkerCapabilities` model and per-adapter integration test suites exist precisely because the three runtimes are not identical.
+- **Agent runtimes targeted:** Claude Code, GitHub Copilot, Hermes — all three shipped real adapters in v1.0. Access to the Copilot and Hermes CLIs is required to run their integration tests; the `WorkerCapabilities` model and per-adapter integration test suites exist precisely because the three runtimes are not identical.
 - **Reference project structure** is given in the spec (§72): `dark_factory/` with `orchestrator/`, `workflows/`, `roles/`, `workers/`, `tools/`, `actions/`, `input/`, `context/`, `artifacts/`, `quality/`, `persistence/`, `integrations/`, `workspace/`, `events/`.
 - **Prior art:** intentionally adopts DMTools patterns (configurable roles, instructions, tool abstraction, role-specific capabilities, pre/post processing, artifacts, external AI workers, CI execution, integration abstraction) but organizes everything around the central abstraction of a **durable delivery run**.
 - **Guiding principle for "where does this belong?"** (spec §83): decides what happens next → Orchestrator/Workflow; defines an engineering responsibility → Role; decides how work is done → Worker; provides an operation → Tool; carries durable info between roles → Artifact; records where execution is → Neon state; decides if the result is acceptable → QA/Quality Gate; talks to an external service → Integration.
-- **Repo state:** greenfield. Fresh git repository, no application code yet. A leftover `seed-app-new.sh` (an unrelated VibeGuard test-repo seeder) is present and not part of this project.
+- **Usage model** (confirmed during Phase 10 UAT): Dark Factory is installed as a standalone CLI tool and run from *inside* the target repository's own local checkout — `.dark-factory.yaml`, `.env`, and all git/worktree operations resolve against `Path.cwd()`, never against wherever Dark Factory's own source lives.
 - **Full technical specification** provided by the user is the authoritative scope reference (84 sections). This PROJECT.md summarizes it; the spec governs on any detail conflict.
 
 ## Constraints
@@ -179,17 +153,17 @@ resume it; durability and observability are the same requirement.
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Milestone 1 = the entire technical specification (all 4 roles, all 3 real workers, all 3 task sources, full GitHub + CI, durable resume, human-in-loop, quality gate, PR publishing) | User wants the complete system as the first milestone, not a thin slice | — Pending |
-| All three worker adapters (Claude Code, Copilot, Hermes) are functional in v1, not stubs | User selected "All three"; proves worker-independence with three real examples | — Pending |
-| `FakeWorker` is a first-class deliverable for orchestration testing | Spec §74; lets lifecycle behavior be tested without external AI systems | — Pending |
-| All three task sources (text, spec file, GitHub issue) in v1 | User selected all; `github:` also unlocks the GitHub human-interaction + resume path | — Pending |
-| Portfolio-quality **and** runnable on a real repo | User selected "Both" | — Pending |
+| Milestone 1 = the entire technical specification (all 4 roles, all 3 real workers, all 3 task sources, full GitHub + CI, durable resume, human-in-loop, quality gate, PR publishing) | User wants the complete system as the first milestone, not a thin slice | ✓ Shipped v1.0 |
+| All three worker adapters (Claude Code, Copilot, Hermes) are functional in v1, not stubs | User selected "All three"; proves worker-independence with three real examples | ✓ Shipped v1.0 (Phase 7/8) |
+| `FakeWorker` is a first-class deliverable for orchestration testing | Spec §74; lets lifecycle behavior be tested without external AI systems | ✓ Shipped v1.0 (Phase 1) |
+| All three task sources (text, spec file, GitHub issue) in v1 | User selected all; `github:` also unlocks the GitHub human-interaction + resume path | ✓ Shipped v1.0 (Phases 1/4/10) |
+| Portfolio-quality **and** runnable on a real repo | User selected "Both" | ✓ Shipped v1.0 — proven against a real external repo (`mariakravchenko/app-new#10`) during Phase 10 UAT |
 | Config snapshot reuses the existing `runs.workflow` JSONB column instead of a new `config_snapshot` column | Zero migration; column already redacted-on-write and loaded on every resume; avoids an Alembic `0004` for a value the reused column already handles | Shipped Phase 3 |
 | `.dark-factory.yaml` `workflow.roles` entries are `RunStatus` values (`BA`, `ARCHITECTURE`, …), not human names | Keeps `transition()`/`answers.py` untouched — no name→status mapping to maintain | Shipped Phase 3 |
 | PyYAML approved as the YAML parser (`yaml.safe_load` only) | ~19-year-old package, MIT, source `github.com/yaml/pyyaml`, CLAUDE.md-pinned; automated legitimacy verdict was `SUS` only on a missing-downloads-metric technicality | Shipped Phase 3 |
 | Neon holds state + metadata + audit references only; filesystem holds artifact content | Spec §28–29; keeps Neon from becoming a document store | Shipped Phase 4 |
-| Config-driven role pipeline over hardcoded role calls | Spec §5; enables shorter/reordered pipelines without orchestrator rewrites | — Pending |
-| MCP is an optional tool transport, never an internal dependency | Spec §70 | — Pending |
+| Config-driven role pipeline over hardcoded role calls | Spec §5; enables shorter/reordered pipelines without orchestrator rewrites | ✓ Shipped v1.0 (Phase 3) |
+| MCP is an optional tool transport, never an internal dependency | Spec §70 | ✓ Shipped v1.0 (Phase 6) |
 | Zero-config artifact synthesis derives every downstream criterion id from the role's resolved `context.inputs` (structural validation, then a Markdown carrier-line regex) rather than any hardcoded literal — dispatch stays on content shape only, never `context.role` | UAT gap G-04-1: `FakeWorker`'s placeholder synthesis had two independent hardcoded ids that only coincidentally matched, so renaming one didn't move the other; regression tests now compare against the origin artifact's own emitted ids, never a fixed expectation, so a reintroduced hardcode fails the test the way the original defect would have | Shipped Phase 4 (plan 04-05) |
 | On COMPLETED, the run driver commits any trailing worktree content onto the run's working branch (via `wip_commit_if_dirty`, which stages untracked files) *before* deleting the worktree — the working branch, not the worktree filesystem, is the durable record D-04 guarantees | UAT gap G-05-1: the SC4 in-scope-edit test asserted against the worktree filesystem, a location D-04 deliberately deletes after COMPLETED — a test defect, not a product bug. Root cause: `.planning/debug/in-scope-edit-missing-after-completed.md` | Shipped Phase 5 (plan 05-05); zero production changes |
 | CR-02's `revert_paths` escape-ordering fix needed unit-tier coverage with no database — the scope module never touched Postgres, but its tests were partitioned "pure functions only" vs. "full pipeline behind a DB fixture," leaving no DB-free home and letting a Critical review fix ship with zero executed coverage | UAT gap G-05-2: `tests/unit/test_write_scope_revert.py` added as a new DB-free unit-tier home (mirroring `test_git_lifecycle.py`'s real-git-on-`tmp_path` pattern), proving escape-first/last/only/multiple cases directly against `revert_paths` and `enforce_write_scope`. Root cause: `.planning/debug/cr02-revert-ordering-test-gap.md` | Shipped Phase 5 (plan 05-06); zero production changes |
@@ -212,6 +186,12 @@ resume it; durability and observability are the same requirement.
 | Dark Factory is installed as a standalone CLI tool (`uv tool install`) and run from *inside* the target repository's own local checkout — `.dark-factory.yaml`, `.env`, and all git/worktree operations resolve against `Path.cwd()`, never against wherever Dark Factory's own source lives | Discovered during live UAT: `repo_root` defaults to `Path.cwd()` throughout `orchestrator/runner.py`, so running `dark-factory` from inside its own checkout while pointing its own `.dark-factory.yaml` at a different GitHub repo would branch/commit/push against Dark Factory's *own* git history, not the target repo's. Confirmed the correct usage model (own checkout + `.env` per target repo, tool installed once) by setting up and successfully running a real end-to-end delivery against a separate repo (`mariakravchenko/app-new`, PR #10) | Confirmed Phase 10 UAT; not a code change, a usage-model clarification worth documenting before Phase 11 (cross-machine resume) or a README "getting started" section |
 | `scrub_artifact_text_in_place` redacts artifact file content before it is ever committed, as its own call site ahead of `collect_role_artifacts` | Found by Phase 12's whole-pipeline secret sweep (plan 12-07): every other D-08 sink (events, logs, comments, quality-gate output) was already redacted, but artifact *file content* itself was not — a worker could commit a credential literal straight into a tracked file and it would reach the PR diff unredacted. A real production gap, not a test defect | Shipped Phase 12 (plan 12-07) |
 | `dark_factory.git`'s error hierarchy lives in a standalone leaf module (`git/errors.py`), imported by both `git/__init__.py` and `observability/run_detail.py` | Phase 12's package-wide "observability imports no orchestration internals" sweep (`test_observability_import_graph.py`) would otherwise trip the moment `run_detail.py` needed `GitError` from the `git` package's main namespace | Shipped Phase 12 (plan 12-06); zero behavior change |
+| A unit test's global `get_settings()` read must never be allowed to succeed on ambient developer credentials — three production call sites (`logging.py`, `publish.py`, `runner.py`) needed either a settings-injection seam or test-side patching, closing a class where CI (no `.env`) and local dev (`.env` present) silently diverge | G-11-3: 12 unit/contract tests crashed only in real CI because a CWD-relative `.env` silently supplied `DATABASE_URL` locally; a second, worse instance (`tests/support/live_runtime.py`'s `credential_missing`) aborted collection entirely the moment agent CLIs were on PATH. Root cause: `.planning/debug/resolved/ci-unit-tier-settings-validation-g-11-3.md` | Shipped Phase 11 (gap-closure plan 11-09); a recurrence guard (`tests/unit/test_unit_tier_needs_no_database.py`) reproduces CI's exact selector in a sanitized child process |
+| A CI exclusion rationale encoded as BOTH a prose comment AND an executable test assertion becomes self-sealing — fixing it looks like breaking CI, which is why it survives for phases | `.github/workflows/ci.yml` excluded the whole `integration` tier citing "no agent-CLI credentials," while `test_qual01_ci_coverage.py` asserted `not selects_integration`. The premise went false once the three credential-requiring modules got their own `skipif` guards, but nobody could fix it without the assertion flagging red. Measured: only 3 of 193 integration tests need real credentials, and they already skip cleanly. Root cause: `.planning/debug/resolved/integration-tier-excluded-from-ci-credential-free-tests-could-run.md` | Milestone-close fix: `ci.yml` gained a plain `-m integration` job; the forbidding assertion inverted into an enforcing one scanning all jobs, not just `quality`; first real hosted-runner confirmation accepted as residual risk, backfill `timeout-minutes` after the first green run |
+| A test asserting a positive-path exit code inside a SHARED harness that also serves negative-path callers is a latent defect waiting for its first execution — give the parameter no default | Two independent instances of this exact class: (1) `test_artifact_scope_enforcement.py`'s `_drive_shipped_config` hardcoded `== 0`, breaking its two tamper/negative callers the first time they ran against a real database (G-08-2); (2) a second occurrence surfaced again at milestone close with the identical shape. Both fixed by making `expected_exit` a required keyword-only parameter, no default, so a future caller cannot silently inherit the wrong expectation | Shipped Phase 8 (plan 08-06) and re-verified at milestone close; `tests/integration/test_exit_codes.py` remains the authoritative D-05 contract guard |
+| `FakeWorker`'s zero-config artifact synthesis must thread `context.inputs` through to every downstream artifact, never dispatch on filename alone | Milestone-close debug session found the one BA→QA `AC-1` id "handoff" that looked correct was two independent hardcoded literals coincidentally matching — `verdict.json`'s criterion id never actually derived from `acceptance_criteria.json`. Fixed by extracting criterion ids from upstream content (structural-then-textual) rather than hardcoding. Root cause: `.planning/debug/resolved/fakeworker-placeholder-artifacts.md` | Milestone-close fix; `tests/integration/test_real_pipeline_zero_config.py` now asserts BA's ids reach every downstream artifact |
+| A git/filesystem-free module's test coverage must live at the unit tier even when its only tests today are reachable through a DB-bound integration path — partition by what the code *needs*, not by what currently calls it | CR-02's `revert_paths` escape-ordering fix shipped with zero executed regression coverage because its only test path ran through a DB-gated integration harness, and the module itself documents "no database access anywhere." A DB-free unit-tier home (`tests/unit/test_write_scope_revert.py`) already had an established sibling pattern (`test_git_lifecycle.py` et al.) that nobody used for this module. Root cause: `.planning/debug/resolved/cr02-revert-ordering-test-gap.md` | Shipped Phase 5 (plan 05-06) and re-verified at milestone close; revert-check against pre-fix code produces 3/7 failures, proving the suite discriminates |
+| A real, previously-unexecuted test asserting on-disk content after a run reaches `COMPLETED` must read from the working branch, never the worktree filesystem D-04 deletes | Same defect class recurred twice (G-05-1, shipped Phase 5; reconfirmed at milestone close with an identical "mutant restores the exact original error" proof) — the design decision was always correct, only the test's medium was wrong | Shipped Phase 5 (plan 05-05) and re-verified at milestone close against real PostgreSQL 17 |
 
 ## Evolution
 
@@ -231,4 +211,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-10-06 after Phase 12*
+*Last updated: 2026-10-26 after v1.0 milestone*
