@@ -308,11 +308,13 @@ a deliberate, recorded deferral for this phase, not an oversight.
 #### Scaffolding steps 2 and 3
 
 A standalone script in this repository, `scripts/scaffold_target_repo.py`,
-generates exactly the files steps 2 and 3 above describe hand-authoring: the
-repo config (`.dark-factory.yaml`), the four role YAMLs, the four instruction
-files, `.env.example`, the `resume.yml` workflow, and `.gitignore`. It is a
-stopgap for this hand-authoring step, not a replacement for the deferred
-`dark-factory init` command recorded above — that decision stands.
+generates the files steps 2 and 3 above describe hand-authoring — the repo
+config (`.dark-factory.yaml`), the four role YAMLs, the four instruction
+files, `.env.example`, the `resume.yml` workflow, and `.gitignore` — plus a
+second generated workflow, `run.yml`, that starts a run in CI the same way
+the resume one finishes one. It is a stopgap for this hand-authoring step,
+not a replacement for the deferred `dark-factory init` command recorded
+above — that decision stands.
 
 ```bash
 uv run python scripts/scaffold_target_repo.py \
@@ -328,6 +330,16 @@ uv run python scripts/scaffold_target_repo.py \
   --worker-architecture copilot \
   --quality-gate-command "make test"
 ```
+
+The generated `run.yml` is a manual `workflow_dispatch` workflow with one
+required `source` input, passed verbatim to `dark-factory run` — accepting
+the same three source forms the local CLI accepts: a `text:`-prefixed
+string, a `spec:`-prefixed file path, or a `github:`-prefixed issue number.
+It is wired to the same Actions secrets the generated `resume.yml` uses,
+and it carries the same `permissions: contents: write` block for the same
+reason the resume one does: a run commits and pushes each role's work, so
+the checkout credential that block scopes is what stands between that push
+and a 403.
 
 Two things worth knowing before pointing it at a real repository: an
 existing file in the target is left untouched unless you pass `--force`;
