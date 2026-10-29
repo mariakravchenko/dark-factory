@@ -305,6 +305,43 @@ check out Dark Factory's own repository. Instead:
 There is currently no `dark-factory init` command to scaffold steps 2 and 3 —
 a deliberate, recorded deferral for this phase, not an oversight.
 
+#### Scaffolding steps 2 and 3
+
+A standalone script in this repository, `scripts/scaffold_target_repo.py`,
+generates exactly the files steps 2 and 3 above describe hand-authoring: the
+repo config (`.dark-factory.yaml`), the four role YAMLs, the four instruction
+files, `.env.example`, the `resume.yml` workflow, and `.gitignore`. It is a
+stopgap for this hand-authoring step, not a replacement for the deferred
+`dark-factory init` command recorded above — that decision stands.
+
+```bash
+uv run python scripts/scaffold_target_repo.py \
+  --target /path/to/your-repo \
+  --github-owner your-org \
+  --github-repo your-repo
+
+# Per-role worker overrides and a custom quality-gate command:
+uv run python scripts/scaffold_target_repo.py \
+  --target /path/to/your-repo \
+  --github-owner your-org \
+  --github-repo your-repo \
+  --worker-architecture copilot \
+  --quality-gate-command "make test"
+```
+
+Two things worth knowing before pointing it at a real repository: an
+existing file in the target is left untouched unless you pass `--force`;
+and the instruction files it writes are copied from this repository's own
+`.dark-factory/instructions/`, with a generated write-scope section
+appended so the prose matches what write-scope enforcement will actually
+allow.
+
+This script is a developer tool deliberately kept outside the shipped
+package — it is **not** a `dark-factory` subcommand, is **not** installed
+by `pip install dark-factory`, and therefore requires a checkout of this
+repository to run. That is the one place the deployment model's "you do
+not clone Dark Factory's own repository" premise above does not hold.
+
 ### The full flow
 
 1. Locally, `dark-factory run github:<owner>/<repo>#<n>` creates and drives
