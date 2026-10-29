@@ -6,13 +6,15 @@ This is a standalone developer tool deliberately kept outside the shipped
 installed by ``pip install dark-factory``, and is run from a checkout of
 *this* repository (``uv run python scripts/scaffold_target_repo.py ...``).
 
-It writes the twelve files steps 2 and 3 of README's "deployment model"
-describe a deployer hand-authoring: ``.dark-factory.yaml``, the four role
-YAMLs under ``.dark-factory/roles/``, the four instruction Markdown files
-under ``.dark-factory/instructions/``, ``.env.example``,
-``.github/workflows/resume.yml``, and ``.gitignore`` -- parameterized by
-GitHub owner/repo, base branch, per-role worker assignment, and quality-gate
-commands.
+It writes thirteen files: the twelve steps 2 and 3 of README's "deployment
+model" describe a deployer hand-authoring -- ``.dark-factory.yaml``, the
+four role YAMLs under ``.dark-factory/roles/``, the four instruction
+Markdown files under ``.dark-factory/instructions/``, ``.env.example``,
+``.github/workflows/resume.yml``, and ``.gitignore`` -- plus a thirteenth,
+``.github/workflows/run.yml``, a second generated workflow that starts a
+run in CI the same way the resume one finishes one. All thirteen are
+parameterized by GitHub owner/repo, base branch, per-role worker
+assignment, and quality-gate commands.
 
 Nothing under ``src/dark_factory/`` is imported or touched; this module uses
 only the standard library plus PyYAML, which it uses solely to *parse-check*
@@ -59,6 +61,7 @@ DEFAULT_BASE_BRANCH = "main"
 REPO_CONFIG_RELATIVE_PATH = ".dark-factory.yaml"
 ENV_EXAMPLE_RELATIVE_PATH = ".env.example"
 RESUME_WORKFLOW_RELATIVE_PATH = ".github/workflows/resume.yml"
+RUN_WORKFLOW_RELATIVE_PATH = ".github/workflows/run.yml"
 GITIGNORE_RELATIVE_PATH = ".gitignore"
 
 
@@ -294,6 +297,50 @@ jobs:
 {{WORKER_CREDENTIAL_ENV}}
 """
 
+RUN_WORKFLOW_TEMPLATE = """\
+name: run
+
+"on":
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "The source to run: a text: string, a spec: file path, or a github: issue number"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dark-factory
+        run: pip install "{{INSTALL_SOURCE}}"
+
+      # - name: Install the worker runtime
+      #   # Required whenever a role is assigned to a worker that shells out
+      #   # to a CLI binary -- see the "worker runtime" table your README
+      #   # documents for the binary name your roles need on PATH. The
+      #   # install command itself comes from that runtime's own
+      #   # documentation: Dark Factory neither ships nor verifies it.
+      #   run: <install your worker runtime's CLI here, per its own docs>
+
+      - name: Start the run
+        run: dark-factory run "${{ inputs.source }}"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+{{WORKER_CREDENTIAL_ENV}}
+"""
+
 GITIGNORE_CONTENT = """\
 .env
 .venv/
@@ -423,6 +470,15 @@ def render_resume_workflow(*, install_source: str, role_workers: dict[str, str])
     return text
 
 
+def render_run_workflow(*, install_source: str, role_workers: dict[str, str]) -> str:
+    text = RUN_WORKFLOW_TEMPLATE
+    text = text.replace("{{INSTALL_SOURCE}}", install_source)
+    text = text.replace(
+        "{{WORKER_CREDENTIAL_ENV}}", render_worker_credential_env_block(role_workers)
+    )
+    return text
+
+
 # WORKER_CREDENTIAL_ENV_VAR is defined after the render functions above read
 # it so every call site below sees the same module-level mapping (DD-5):
 # claude-code and hermes both read ANTHROPIC_API_KEY (hermes has no
@@ -471,6 +527,9 @@ def build_contents(
     contents[RESUME_WORKFLOW_RELATIVE_PATH] = render_resume_workflow(
         install_source=install_source, role_workers=role_workers
     )
+    contents[RUN_WORKFLOW_RELATIVE_PATH] = render_run_workflow(
+        install_source=install_source, role_workers=role_workers
+    )
     contents[GITIGNORE_RELATIVE_PATH] = GITIGNORE_CONTENT
     return contents
 
@@ -479,6 +538,7 @@ _YAML_CHECK_RELATIVE_PATHS = (
     REPO_CONFIG_RELATIVE_PATH,
     *[_role_yaml_relative_path(role) for role in ROLE_ORDER],
     RESUME_WORKFLOW_RELATIVE_PATH,
+    RUN_WORKFLOW_RELATIVE_PATH,
 )
 
 
@@ -532,8 +592,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description=(
             "Generate a Dark Factory configuration tree (.dark-factory.yaml, "
             "role YAMLs, instruction files, .env.example, resume.yml, "
-            ".gitignore) in a target repository. A standalone developer tool: "
-            "not a dark-factory CLI subcommand."
+            "run.yml, .gitignore) in a target repository. A standalone "
+            "developer tool: not a dark-factory CLI subcommand."
         ),
     )
     parser.add_argument(
@@ -569,7 +629,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--install-source",
         default=DEFAULT_INSTALL_SOURCE,
-        help="pip install target the generated resume.yml installs",
+        help="pip install target the generated resume.yml and run.yml workflows install",
     )
     parser.add_argument(
         "--force",
