@@ -3,8 +3,8 @@ gsd_state_version: "1.0"
 status: Awaiting next milestone
 stopped_at: Phase 12 complete — all phases complete
 last_updated: "2026-10-26T09:38:18.480Z"
-last_activity: 2026-10-26
-last_activity_desc: Milestone v1.0 completed and archived
+last_activity: 2026-10-29
+last_activity_desc: Completed quick task 261029-od8 (scaffold script for target repos)
 state_head: ba4da71e28723bef5ccdbffd1b5b8d4c999bb107
 progress:
   total_phases: 12
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-26 — Milestone v1.0 completed and archived
+Last activity: 2026-10-29 — Completed quick task 261029-od8: Add a standalone scaffold script for target repos
 
 ## Performance Metrics
 
@@ -296,6 +296,12 @@ None yet.
 Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-closure plan 09-06 — `_CapturingWorker` now derives the worktree via `ensure_worktree` instead of the config repo root; confirmed against real PostgreSQL 17). Plan 10-02 Task 2's db-tier precondition (no PostgreSQL reachable) — resolved via a human-supplied throwaway Neon connection string (the same one used for plan 10-06); the crash-window proof is now committed (`659b353`). LOOP-04 adjacency evidence (Phase 9 Blocker, closed by gap-closure plan 10-08 — the untracked throwaway is promoted to committed `tests/db/test_loop04_adjacency.py`, reading the adjacency reason from the `ROLE_FAILED` event and role-execution `error` column instead of the wrong `RUN_FAILED` payload). [Phase 10] 10-07/10-08's deferred db-tier verification (no PostgreSQL reachable in the execution sandbox) — resolved: user ran the full unrestricted suite against real Neon PostgreSQL 17 during manual UAT (1171 passed, 1 skipped, 0 failed, no marker filter), confirming all four previously gate-exhausted integration tests reach `COMPLETED` and both gap-closure db-tier tests pass. Resolved earlier: exact non-interactive flag/env matrix for Copilot and Hermes CLIs (Phase 8 — both adapters shipped functional); artifact-content durability for cross-machine resume (Phase 5, ART-04); lease TTL vs. unpredictable agent step duration (Phase 2).
 
 - 11-10: Human check pending -- push branch / open PR and let ci.yml's quality job run on a real GitHub-hosted runner to confirm Unit and contract tiers passes, Database tier reaches testcontainers, db tier passes, and record 3 measured durations + run URL (11-VERIFICATION.md status: human_needed).
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261029-od8 | Add a standalone scaffold script that generates .dark-factory.yaml, role YAMLs, instructions, .env.example, resume.yml, and .gitignore for a new target repo | 2026-10-29 | 93e5c16 | [261029-od8-add-a-standalone-scaffold-script-outside](./quick/261029-od8-add-a-standalone-scaffold-script-outside/) |
 
 ## Deferred Items
 
