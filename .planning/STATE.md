@@ -4,7 +4,7 @@ status: Awaiting next milestone
 stopped_at: Phase 12 complete — all phases complete
 last_updated: "2026-10-26T09:38:18.480Z"
 last_activity: 2026-10-29
-last_activity_desc: Completed quick task 261029-od8 (scaffold script for target repos)
+last_activity_desc: Completed quick task 261029-p12 (run.yml generation in scaffold script)
 state_head: ba4da71e28723bef5ccdbffd1b5b8d4c999bb107
 progress:
   total_phases: 12
@@ -29,7 +29,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-29 — Completed quick task 261029-od8: Add a standalone scaffold script for target repos
+Last activity: 2026-10-29 — Completed quick task 261029-p12: Extend the scaffold script to also generate run.yml
 
 ## Performance Metrics
 
@@ -302,6 +302,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 261029-od8 | Add a standalone scaffold script that generates .dark-factory.yaml, role YAMLs, instructions, .env.example, resume.yml, and .gitignore for a new target repo | 2026-10-29 | 93e5c16 | [261029-od8-add-a-standalone-scaffold-script-outside](./quick/261029-od8-add-a-standalone-scaffold-script-outside/) |
+| 261029-p12 | Extend the scaffold script to also generate run.yml (manual workflow_dispatch to start a run) alongside resume.yml | 2026-10-29 | 2eb6ddd | [261029-p12-extend-scripts-scaffold-target-repo-py-t](./quick/261029-p12-extend-scripts-scaffold-target-repo-py-t/) |
 
 ## Deferred Items
 
