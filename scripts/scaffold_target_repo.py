@@ -496,6 +496,32 @@ def parse_check(target_root: Path) -> None:
             raise SystemExit(1)
 
 
+def _gitignore_missing_entries(existing_text: str, template_text: str) -> list[str]:
+    """Template entries absent from an already-existing ``.gitignore`` (DD-7
+    extension): a deployer with a real ``.gitignore`` learns what to add by
+    hand rather than being told only that the file was skipped."""
+    existing_lines = {
+        line.strip() for line in existing_text.splitlines() if line.strip()
+    }
+    return [
+        line.strip()
+        for line in template_text.splitlines()
+        if line.strip() and line.strip() not in existing_lines
+    ]
+
+
+def write_output_file(path: Path, text: str, *, force: bool) -> str:
+    """Write ``text`` to ``path``, returning ``"created"``, ``"overwritten"``
+    or ``"skipped (exists)"`` (DD-7). Never clobbers an existing file unless
+    ``force`` is set."""
+    existed = path.is_file()
+    if existed and not force:
+        return "skipped (exists)"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return "overwritten" if existed else "created"
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -513,9 +539,106 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--target", required=True, type=Path, help="Target repository root directory"
     )
-    parser.add_argument("--github-owner", required=True, help="GitHub repository owner")
-    parser.add_argument("--github-repo", required=True, help="GitHub repository name")
+    parser.add_argument("--github-owner", default=None, help="GitHub repository owner")
+    parser.add_argument("--github-repo", default=None, help="GitHub repository name")
+    parser.add_argument(
+        "--base-branch",
+        default=DEFAULT_BASE_BRANCH,
+        help="Base branch recorded in repository:",
+    )
+    parser.add_argument(
+        "--worker",
+        default=DEFAULT_WORKER,
+        help=f"Default worker for all four roles (legal values: {', '.join(LEGAL_WORKERS)})",
+    )
+    parser.add_argument("--worker-ba", default=None, help="Per-role override for BA")
+    parser.add_argument(
+        "--worker-architecture", default=None, help="Per-role override for ARCHITECTURE"
+    )
+    parser.add_argument(
+        "--worker-development", default=None, help="Per-role override for DEVELOPMENT"
+    )
+    parser.add_argument("--worker-qa", default=None, help="Per-role override for QA")
+    parser.add_argument(
+        "--quality-gate-command",
+        dest="quality_gate_command",
+        action="append",
+        default=None,
+        help="Repeatable; defaults to this repository's own uv/ruff pair when omitted",
+    )
+    parser.add_argument(
+        "--install-source",
+        default=DEFAULT_INSTALL_SOURCE,
+        help="pip install target the generated resume.yml installs",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing files instead of skipping them",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Suppress interactive prompting; requires --github-*",
+    )
     return parser
+
+
+def _resolve_github_locator(args: argparse.Namespace) -> tuple[str, str]:
+    """Resolve ``--github-owner``/``--github-repo``, prompting interactively
+    when one is absent and stdin is a TTY, or exiting non-zero naming the
+    missing flag otherwise -- every automated invocation stays
+    non-interactive."""
+    owner = args.github_owner
+    repo = args.github_repo
+    if owner and repo:
+        return owner, repo
+
+    missing_flag = "--github-owner" if not owner else "--github-repo"
+    if args.yes:
+        print(f"ERROR: {missing_flag} is required when --yes is set", file=sys.stderr)
+        raise SystemExit(1)
+    if not sys.stdin.isatty():
+        print(
+            f"ERROR: {missing_flag} is required when stdin is not a TTY",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    if not owner:
+        owner = input("GitHub owner: ").strip()
+    if not repo:
+        repo = input("GitHub repo: ").strip()
+    if not owner or not repo:
+        print(
+            "ERROR: both --github-owner and --github-repo are required", file=sys.stderr
+        )
+        raise SystemExit(1)
+    return owner, repo
+
+
+def _resolve_role_workers(args: argparse.Namespace) -> dict[str, str]:
+    """Resolve each role's worker from its per-role override or the shared
+    ``--worker`` default, then validate every resolved value against the
+    three legal names (DD-6). Never offers the registry's ``fake`` worker."""
+    overrides = {
+        "BA": args.worker_ba,
+        "ARCHITECTURE": args.worker_architecture,
+        "DEVELOPMENT": args.worker_development,
+        "QA": args.worker_qa,
+    }
+    resolved = {role: overrides[role] or args.worker for role in ROLE_ORDER}
+    bad = sorted(
+        {worker for worker in resolved.values() if worker not in LEGAL_WORKERS}
+    )
+    if bad:
+        print(
+            f"ERROR: unrecognised worker name(s) {bad!r}; legal worker values "
+            f"are {list(LEGAL_WORKERS)!r}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return resolved
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -527,25 +650,45 @@ def main(argv: list[str] | None = None) -> int:
     # closed set -- never a caller-supplied sub-path.
     target_root = args.target.expanduser().resolve()
 
-    role_workers = {role: DEFAULT_WORKER for role in ROLE_ORDER}
-
-    contents = build_contents(
-        base_branch=DEFAULT_BASE_BRANCH,
-        github_owner=args.github_owner,
-        github_repo=args.github_repo,
-        quality_gate_commands=DEFAULT_QUALITY_GATE_COMMANDS,
-        role_workers=role_workers,
-        install_source=DEFAULT_INSTALL_SOURCE,
+    github_owner, github_repo = _resolve_github_locator(args)
+    role_workers = _resolve_role_workers(args)
+    quality_gate_commands = tuple(
+        args.quality_gate_command or DEFAULT_QUALITY_GATE_COMMANDS
     )
 
+    contents = build_contents(
+        base_branch=args.base_branch,
+        github_owner=github_owner,
+        github_repo=github_repo,
+        quality_gate_commands=quality_gate_commands,
+        role_workers=role_workers,
+        install_source=args.install_source,
+    )
+
+    any_skipped = False
     for relative_path, text in contents.items():
         output_path = target_root / relative_path
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(text, encoding="utf-8")
-        print(f"created: {relative_path}")
+        if (
+            relative_path == GITIGNORE_RELATIVE_PATH
+            and output_path.is_file()
+            and not args.force
+        ):
+            missing = _gitignore_missing_entries(output_path.read_text("utf-8"), text)
+            if missing:
+                print("NOTE: existing .gitignore is missing these template entries:")
+                for line in missing:
+                    print(f"  {line}")
+        status = write_output_file(output_path, text, force=args.force)
+        print(f"{status}: {relative_path}")
+        if status == "skipped (exists)":
+            any_skipped = True
 
     parse_check(target_root)
 
+    if any_skipped:
+        print(
+            "Some files already existed and were left untouched. Pass --force to overwrite them."
+        )
     print(f"Scaffold written to {target_root}")
     return 0
 
