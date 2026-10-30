@@ -43,7 +43,7 @@ _SENTINEL_END = "<!-- resume-workflow-reference: end -->"
 # renames either heading must fail this guard loudly, here, rather than
 # silently narrowing _ci_handoff_section()'s search region to the wrong text.
 _CI_HANDOFF_SECTION_HEADING = "## Finish a run in CI — the local → CI handoff"
-_CI_HANDOFF_SECTION_NEXT_HEADING = "## Running the tests"
+_CI_HANDOFF_SECTION_NEXT_HEADING = "## Configuration reference"
 
 # The exact phrase Task 1's commented install-guidance step names itself with
 # (its "- name:" line in the reference workflow). Chosen as the load-bearing
