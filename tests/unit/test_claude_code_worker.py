@@ -1044,13 +1044,65 @@ def test_allowed_tools_for_artifacts_read_is_path_scoped_not_bare() -> None:
 
 
 def test_allowed_tools_for_artifacts_write_is_path_scoped_not_bare() -> None:
+    """The name's claim is unchanged -- both specifiers are path-scoped,
+    neither is a bare tool name. The real ``claude`` CLI permission-gates
+    its new-file tool (``Write``) and its existing-file tool (``Edit``)
+    separately, and a role's first write to any declared output creates a
+    new file, so both specifiers must be granted over the identical glob.
+    The assertion also pins the pair's sorted order (``Edit`` before
+    ``Write``), which is what makes the joined ``--allowedTools`` argv
+    value in the sibling spawn test deterministic."""
     from dark_factory.workers.claude_code import allowed_tools_for
 
-    result = allowed_tools_for(
-        {"artifacts.write"}, ".dark-factory/runs/R/artifacts/DEVELOPMENT"
-    )
+    glob = ".dark-factory/runs/R/artifacts/DEVELOPMENT"
+    result = allowed_tools_for({"artifacts.write"}, glob)
 
-    assert result == ["Edit(.dark-factory/runs/R/artifacts/DEVELOPMENT/**)"]
+    assert result == [f"Edit({glob}/**)", f"Write({glob}/**)"], result
+
+
+def test_artifacts_write_grants_the_new_file_tool_not_only_the_edit_tool() -> None:
+    """The real ``claude`` CLI permission-gates its new-file tool (``Write``)
+    and its existing-file tool (``Edit``) as two separate tools under
+    ``--permission-mode dontAsk``. Every role's first write to any declared
+    output creates a new file, so an ``Edit``-only grant denies that first
+    write outright -- the CLI refuses an absent tool rather than escalating
+    to a prompt in this mode.
+
+    This was observed live against a real target repository's CI run: the
+    BA role's two declared outputs (``requirements.md`` and
+    ``acceptance_criteria.json``) were both denied and the run reached
+    FAILED. Dark Factory's own suite never caught it because the fake
+    ``claude`` script on ``PATH`` in every other test simulates no
+    permission gating at all -- it writes declared outputs unconditionally,
+    so the Write/Edit split the real CLI enforces is invisible to the whole
+    test tree. This test names ``Write`` specifically so that gap cannot
+    reopen silently."""
+    from dark_factory.workers.claude_code import allowed_tools_for
+
+    glob = ".dark-factory/runs/R/artifacts/BA"
+    result = allowed_tools_for({"artifacts.write"}, glob)
+
+    # The assertion that fails before the fix: the new-file tool must be
+    # granted, not only the existing-file tool.
+    assert f"Write({glob}/**)" in result, (
+        f"expected Write({glob}/**) in {result} -- the new-file tool is "
+        "missing from the artifacts.write grant"
+    )
+    assert f"Edit({glob}/**)" in result, (
+        f"expected Edit({glob}/**) in {result} -- additive, not a swap"
+    )
+    assert set(result) == {f"Edit({glob}/**)", f"Write({glob}/**)"}, (
+        f"expected exactly the Edit/Write pair over {glob}, got {result}"
+    )
+    assert "Write" not in result, f"bare Write must never appear, got {result}"
+    assert "Edit" not in result, f"bare Edit must never appear, got {result}"
+    for specifier in result:
+        # Every member's parenthesised argument is that one glob -- no
+        # member may carry a broader pattern such as the run root or the
+        # artifacts tree without the role subtree.
+        assert specifier.endswith(f"({glob}/**)"), (
+            f"expected every specifier scoped to exactly {glob}, got {specifier}"
+        )
 
 
 def test_allowed_tools_for_artifacts_write_with_no_glob_yields_nothing() -> None:
@@ -1155,6 +1207,9 @@ def test_no_tools_granted_produces_no_allowed_tools_flag(
 def test_artifacts_write_grant_produces_path_scoped_edit_in_execute_argv(
     repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """This test's subject is the end-to-end argv -- it proves the Edit/
+    Write pair survives ``_base_argv``'s join and reaches the spawned
+    process, which is the only place the real CLI ever reads it."""
     from dark_factory.workers.claude_code import ClaudeCodeWorker
 
     fake_dir = tmp_path / "fakebin"
@@ -1168,7 +1223,8 @@ def test_artifacts_write_grant_produces_path_scoped_edit_in_execute_argv(
 
     argv = json.loads(argv_log.read_text("utf-8"))
     value = argv[argv.index("--allowedTools") + 1]
-    assert value == f"Edit(.dark-factory/runs/{_RUN_ID}/artifacts/DEVELOPMENT/**)"
+    glob = f".dark-factory/runs/{_RUN_ID}/artifacts/DEVELOPMENT"
+    assert value == f"Edit({glob}/**),Write({glob}/**)"
 
 
 def test_artifacts_read_grant_produces_path_scoped_read_in_execute_argv(
