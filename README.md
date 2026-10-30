@@ -407,8 +407,13 @@ name: resume
         required: true
         type: string
 
+# contents: push each role's work back to origin. issues: post the
+# clarification comment when a run pauses WAITING_HUMAN. pull-requests:
+# open the PR after QA PASS and Quality Gate PASS.
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   resume:
@@ -465,6 +470,22 @@ back on, so `ensure_worktree` reconstructs an empty worktree off the base
 branch, and the role that resumes next can't find the previous role's
 artifacts at all. Both failure modes were hit, in exactly this order, while
 proving this phase's cross-machine resume claim for real.
+
+The other two scopes are bounded just as tightly to the job's own REST
+calls. `issues: write` gives the job authority to post the clarification
+comment when a role reaches `ROLE_NEEDS_INPUT` and the run pauses
+`WAITING_HUMAN` — step 1 of the full flow above, and the thing that makes
+the whole pause/resume loop legible to the human waiting on it. Omit it and
+that comment call 403s the moment the first role needs input.
+`pull-requests: write` gives the job authority to open the PR after QA PASS
+and Quality Gate PASS — the one publication the whole policy gates on;
+omit it and that create-PR call 403s instead. The job's token stops there:
+it carries no `actions` scope, because the only `actions`-scoped call is
+dispatching this very workflow, made by the webhook receiver on the
+separate `DISPATCH_GITHUB_TOKEN` — see "The dispatch credential" below,
+which documents that permission under its own fine-grained-token label. As
+with `contents`, an absent scope here surfaces as a 403 from the GitHub
+API, not as a git-level error.
 
 `fetch-depth: 0` on the checkout step is the third thing this same proof hit
 before a role genuinely completed end to end. `actions/checkout`'s default
