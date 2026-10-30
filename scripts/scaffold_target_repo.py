@@ -264,8 +264,13 @@ name: resume
         required: true
         type: string
 
+# contents: push each role's work back to origin. issues: post the
+# clarification comment when a run pauses WAITING_HUMAN. pull-requests:
+# open the PR after QA PASS and Quality Gate PASS.
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   resume:
@@ -308,8 +313,13 @@ name: run
         required: true
         type: string
 
+# contents: push each role's work back to origin. issues: post the
+# clarification comment when a run pauses WAITING_HUMAN. pull-requests:
+# open the PR after QA PASS and Quality Gate PASS.
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   run:
