@@ -336,10 +336,24 @@ required `source` input, passed verbatim to `dark-factory run` — accepting
 the same three source forms the local CLI accepts: a `text:`-prefixed
 string, a `spec:`-prefixed file path, or a `github:`-prefixed issue number.
 It is wired to the same Actions secrets the generated `resume.yml` uses,
-and it carries the same `permissions: contents: write` block for the same
-reason the resume one does: a run commits and pushes each role's work, so
-the checkout credential that block scopes is what stands between that push
-and a 403.
+and both generated workflows carry the identical three-key `permissions`
+block:
+
+- `contents: write` — a run commits and pushes each role's work, and
+  `actions/checkout`'s persisted credential is scoped by this block, so it
+  is what stands between that push and a 403.
+- `issues: write` — the job hands the reserved Actions auto-token to
+  `dark-factory` as `GITHUB_TOKEN`, and that token's REST authority is
+  scoped by this same block; Dark Factory posts its own clarification
+  comment on the issue when a run pauses `WAITING_HUMAN` (and reads the
+  issue when the source is `github:`-prefixed).
+- `pull-requests: write` — publication after QA PASS and an independent
+  Quality Gate PASS creates the pull request through the API, which this
+  scope authorizes.
+
+The scope stops there deliberately: `actions: write` is absent because the
+only workflow-dispatch call Dark Factory makes happens in the webhook
+receiver, on the separate `DISPATCH_GITHUB_TOKEN`, never inside these jobs.
 
 Two things worth knowing before pointing it at a real repository: an
 existing file in the target is left untouched unless you pass `--force`;
