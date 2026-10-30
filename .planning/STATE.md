@@ -5,7 +5,7 @@ status: Awaiting next milestone
 stopped_at: Completed quick task 261030-mcz-fix-scripts-scaffold-target-repo-py-gene
 last_updated: "2026-10-30T14:16:08.129Z"
 last_activity: 2026-10-30
-last_activity_desc: Completed quick task 261030-mcz (permissions fix in scaffold script)
+last_activity_desc: Completed quick task 261030-mng (permissions fix in README reference workflow)
 state_head: 31c86fa9c114f6e6ba8db2ce64bf28b059b65f1c
 current_phase: 12
 progress:
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-30 — Completed quick task 261030-mcz: Grant issues:write and pull-requests:write in generated workflows
+Last activity: 2026-10-30 — Completed quick task 261030-mng: Fix the same permissions gap in README's reference workflow block
 
 ## Performance Metrics
 
@@ -306,6 +306,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | 261029-od8 | Add a standalone scaffold script that generates .dark-factory.yaml, role YAMLs, instructions, .env.example, resume.yml, and .gitignore for a new target repo | 2026-10-29 | 93e5c16 | [261029-od8-add-a-standalone-scaffold-script-outside](./quick/261029-od8-add-a-standalone-scaffold-script-outside/) |
 | 261029-p12 | Extend the scaffold script to also generate run.yml (manual workflow_dispatch to start a run) alongside resume.yml | 2026-10-29 | 2eb6ddd | [261029-p12-extend-scripts-scaffold-target-repo-py-t](./quick/261029-p12-extend-scripts-scaffold-target-repo-py-t/) |
 | 261030-mcz | Grant issues:write and pull-requests:write in generated run.yml/resume.yml (dark-factory's own GitHub API calls need them, not just contents:write) | 2026-10-30 | 31c86fa | [261030-mcz-fix-scripts-scaffold-target-repo-py-gene](./quick/261030-mcz-fix-scripts-scaffold-target-repo-py-gene/) |
+| 261030-mng | Fix the identical permissions gap in README's hand-copyable resume-workflow-reference sentinel block, with a RED→GREEN test guard against regression | 2026-10-30 | dadcfe1 | [261030-mng-fix-the-identical-permissions-gap-in-rea](./quick/261030-mng-fix-the-identical-permissions-gap-in-rea/) |
 
 ## Deferred Items
 
