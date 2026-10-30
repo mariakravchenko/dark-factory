@@ -53,6 +53,16 @@ _INSTALL_GUIDANCE_SUBSTRING = "Install the worker runtime"
 
 _DISPATCH_TOKEN_NAME = "DISPATCH_GITHUB_TOKEN"
 
+# The exact permissions mapping the reference workflow's job token must
+# declare, in this order. YAML parses the hyphenated key `pull-requests` as
+# a plain string key, so no normalisation is needed before comparing it
+# against a parsed mapping.
+_EXPECTED_PERMISSIONS: dict[str, str] = {
+    "contents": "write",
+    "issues": "write",
+    "pull-requests": "write",
+}
+
 
 def _ci_handoff_section() -> str:
     """Return the text of the "Finish a run in CI" section, bounded by its
@@ -218,6 +228,32 @@ def test_the_dispatch_credential_is_named_consistently() -> None:
     )
     assert _DISPATCH_TOKEN_NAME in env_example_text, (
         f"expected {_DISPATCH_TOKEN_NAME!r} to appear in .env.example"
+    )
+
+
+def test_the_reference_workflow_grants_exactly_the_needed_permissions() -> None:
+    """The job's token authority is bounded by exactly this `permissions:`
+    mapping -- asserted as a whole-mapping equality, not a per-key
+    containment loop, so this guard is bidirectional. A containment check
+    would catch under-scoping (today's gap: `contents: write` alone) but
+    would silently tolerate a later widening, which is the more dangerous
+    direction for a credential-scoping block that a deployer copies verbatim
+    into their own repository.
+
+    The mapping is deliberately minimal: each scope corresponds to one of
+    the job's own REST calls -- `contents` for the post-role push, `issues`
+    for the clarification comment posted when a role reaches
+    ROLE_NEEDS_INPUT, `pull-requests` for the PR opened after QA PASS plus
+    Quality Gate PASS. The `actions` scope is absent by design: the only
+    actions-scoped call is dispatching this very workflow, which runs from
+    the webhook receiver on the separate `DISPATCH_GITHUB_TOKEN` documented
+    under "The dispatch credential", never from inside this job.
+    """
+    workflow = yaml.safe_load(_extract_reference_workflow_yaml())
+    observed = workflow.get("permissions")
+    assert observed == _EXPECTED_PERMISSIONS, (
+        f"expected the reference workflow's permissions mapping to equal "
+        f"{_EXPECTED_PERMISSIONS!r} exactly, got {observed!r}"
     )
 
 
