@@ -245,10 +245,15 @@ NATIVE_TOOL_CONTRACT: Mapping[str, NativeToolGrant] = {
     "artifacts.write": NativeToolGrant(
         capability="artifacts.write",
         claude_code=(
-            "--allowedTools 'Edit(.dark-factory/runs/<run_id>/"
-            "artifacts/<role>/**)' -- a path-scoped rule specifier over "
-            "the run's own artifacts/<role>/ subtree, not a bare Write/Edit "
-            "grant; a real worker writes its own declared output files "
+            "--allowedTools "
+            "'Edit(.dark-factory/runs/<run_id>/artifacts/<role>/**),"
+            "Write(.dark-factory/runs/<run_id>/artifacts/<role>/**)' -- "
+            "two path-scoped rule specifiers over the run's own "
+            "artifacts/<role>/ subtree, not a bare Write/Edit grant; both "
+            "are required because the CLI treats creating a file and "
+            "modifying one as separate permission-gated tools, and a "
+            "role's first write to any declared output always creates a "
+            "new file; a real worker writes its own declared output files "
             "with its own native write tool, not through Dark Factory; the "
             "orchestrator-mediated ToolRegistry.invoke('artifacts.write', "
             "...) path exists for a future transport a worker calls back "

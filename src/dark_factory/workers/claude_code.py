@@ -157,14 +157,30 @@ def allowed_tools_for(
     Deny by omission (the documented ``NativeToolGrant.absent_behaviour``):
     a capability with no ``_TOOL_NAMES`` entry contributes nothing, so the
     CLI itself refuses a tool that is not in the list. ``artifacts.write``
-    is translated to a single path-scoped ``Edit(<artifacts_glob>/**)``
-    specifier -- never a bare ``Write`` -- when it is held and
-    ``artifacts_glob`` is not ``None`` (a context-free call passes
-    ``None``, and the specifier is skipped). ``artifacts.read`` gets the
-    same treatment via ``Read(<artifacts_read_glob>/**)``, scoped to the
-    run's whole ``artifacts/`` tree rather than one role's subtree -- a
-    worker legitimately reads a *prior* role's artifact output, so its
-    read scope is deliberately broader than its own write scope (CR-01).
+    is translated to *two* path-scoped specifiers over one identical
+    glob -- ``Edit(<artifacts_glob>/**)`` and ``Write(<artifacts_glob>/**)``
+    -- when the capability is held and ``artifacts_glob`` is not ``None``
+    (a context-free call passes ``None``, and both specifiers are
+    skipped). Both are required because the real ``claude`` CLI
+    permission-gates its new-file tool (``Write``) and its existing-file
+    tool (``Edit``) as two separate tools, and a role's first write to any
+    declared output always creates a new file -- an edit-only grant would
+    deny every role's first artifact write. This was observed live
+    against a real target repository's CI run, where a role's declared
+    outputs were denied and the run failed; Dark Factory's own suite
+    could not have caught it, because its fake CLI simulates no
+    permission gating. Neither name is ever emitted unscoped, and the
+    new-file specifier's scope is always exactly the edit specifier's
+    scope, never broader. ``--permission-mode dontAsk`` (the mode this
+    adapter spawns with, see ``PERMISSION_MODE``) refuses an absent tool
+    outright rather than escalating to a prompt, which is what makes this
+    omission a hard denial rather than a recoverable prompt.
+
+    ``artifacts.read`` gets a parallel single-specifier treatment via
+    ``Read(<artifacts_read_glob>/**)``, scoped to the run's whole
+    ``artifacts/`` tree rather than one role's subtree -- a worker
+    legitimately reads a *prior* role's artifact output, so its read
+    scope is deliberately broader than its own write scope (CR-01).
 
     Sorting is not cosmetic: it makes the returned list a deterministic
     function of ``granted``, so two spawns with the same grant set produce
@@ -175,6 +191,7 @@ def allowed_tools_for(
         names.update(_TOOL_NAMES.get(capability, ()))
     if "artifacts.write" in granted and artifacts_glob is not None:
         names.add(f"Edit({artifacts_glob}/**)")
+        names.add(f"Write({artifacts_glob}/**)")
     if "artifacts.read" in granted and artifacts_read_glob is not None:
         names.add(f"Read({artifacts_read_glob}/**)")
     return sorted(names)
