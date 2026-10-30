@@ -1,18 +1,19 @@
 ---
 gsd_state_version: "1.0"
+milestone: v1.0
 status: Awaiting next milestone
-stopped_at: Phase 12 complete — all phases complete
-last_updated: "2026-10-26T09:38:18.480Z"
+stopped_at: Completed quick task 261030-mcz-fix-scripts-scaffold-target-repo-py-gene
+last_updated: "2026-10-30T14:16:08.129Z"
 last_activity: 2026-10-29
 last_activity_desc: Completed quick task 261029-p12 (run.yml generation in scaffold script)
-state_head: ba4da71e28723bef5ccdbffd1b5b8d4c999bb107
+state_head: 31c86fa9c114f6e6ba8db2ce64bf28b059b65f1c
+current_phase: 12
 progress:
   total_phases: 12
   completed_phases: 1
   total_plans: 76
   completed_plans: 76
   percent: 8
-current_phase: 12
 ---
 
 # Project State
@@ -280,6 +281,7 @@ Recent decisions affecting current work:
 - [Phase 12]: 12-06: GateCommandRow.exit_code is int | None (matching GateCommandResult exactly), not the plan's literal int -- a bare int would silently hide a timed-out gate command behind 'no gate result'
 - [Phase 12]: 12-07: scrub_artifact_text_in_place closes a real D-08 gap found by the e2e sweep -- a role's own artifact file content was never redacted before git.diff.commit_run_artifacts committed it onto the PR branch; called in orchestrator/runner.py before collect_role_artifacts so the persisted checksum and the committed content always agree.
 - [Phase 12]: 12-07: drove the whole SC4 sweep in-process (start_run/drive with an injected github_client_factory) rather than through the dark-factory run CLI subprocess, resolving 12-RESEARCH.md Open Question 3 -- the only construction that injects FakeGitHubClient while still exercising a real ClaudeCodeWorker subprocess in the same run.
+- [Phase 12]: Quick 261030-mcz: granted issues:write and pull-requests:write in both generated workflow templates (scripts/scaffold_target_repo.py) and updated README's Scaffolding steps 2 and 3 to explain all three permission keys; the identical gap in README's resume-workflow-reference sentinel block was left unresolved per plan scope
 
 ### Pending Todos
 
@@ -321,8 +323,8 @@ Items acknowledged and deferred at milestone close, most recent first:
 
 ## Session Continuity
 
-Last session: 2026-10-06T12:30:00.000Z
-Stopped at: Phase 12 complete — Milestone 1 (100%, 12/12 phases, 76/76 plans) is fully shipped and ready to close via /gsd-complete-milestone
+Last session: 2026-10-30T14:16:02.494Z
+Stopped at: Completed quick task 261030-mcz-fix-scripts-scaffold-target-repo-py-gene
 Resume file: None
 
 ## Operator Next Steps
