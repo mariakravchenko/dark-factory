@@ -1,5 +1,5 @@
 """G-11-3 regression guard: the runtime analogue of
-``test_webhook_import_needs_no_database.py``'s import-time sweep.
+``test_package_import_needs_no_database.py``'s import-time sweep.
 
 That module proves every ``dark_factory`` module *imports* with no database
 URL configured and no readable ``.env``. It cannot see G-11-3's class of
@@ -24,7 +24,7 @@ exactly that reason.
 
 The child environment is built from an explicit named allowlist, never
 ``os.environ.copy()`` or a filtered copy of it (CLAUDE.md's credential
-boundary; mirrors ``test_webhook_import_needs_no_database.py``'s own
+boundary; mirrors ``test_package_import_needs_no_database.py``'s own
 ``_ENV_ALLOWLIST``/``_sanitized_env`` idiom -- reused here as an idiom, not
 imported, so the two guards can fail independently). ``DATABASE_URL`` and
 ``DATABASE_URL_DIRECT`` are *absent* from that environment, never set to an
@@ -98,7 +98,7 @@ _LIVE_SUITE_MODULES: tuple[str, ...] = (
 # Only what a child interpreter needs to start up, import the installed
 # package and resolve TLS roots -- deliberately no wildcard copy of the
 # parent environment. `DATABASE_URL` / `DATABASE_URL_DIRECT` are never
-# added. Reuses `test_webhook_import_needs_no_database.py`'s allowlist
+# added. Reuses `test_package_import_needs_no_database.py`'s allowlist
 # *idiom*, not its tuple by import -- the two guards must be able to fail
 # independently.
 _ENV_ALLOWLIST: tuple[str, ...] = (

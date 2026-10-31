@@ -55,10 +55,10 @@ _QUAL01_SCENARIO_NOUNS = frozenset(
 # "Validation Architecture") -- the researcher's already-completed
 # scenario-to-module audit. Every module below carries the `db` marker and
 # already exists on disk (Phases 4-10); this map covers only that stable
-# surface. Do NOT add tests/db/test_cross_machine_resume.py or
-# tests/db/test_webhook_dispatches_resume.py here -- both are created by
-# sibling plans in this same phase, and a guard whose green depends on
-# another plan's completion order is a false failure waiting to happen.
+# surface. Do NOT add tests/db/test_cross_machine_resume.py here -- it is
+# created by a sibling plan in this same phase, and a guard whose green
+# depends on another plan's completion order is a false failure waiting
+# to happen.
 _QUAL01_SCENARIOS: dict[str, tuple[str, ...]] = {
     "role transitions": (
         "test_four_role_pipeline.py",

@@ -1,6 +1,9 @@
 """G-11-1 regression guard: importing `dark_factory` -- and every module
 beneath it, not just the one file that broke -- must never require a
-reachable database (gap-closure plan 11-06).
+reachable database (gap-closure plan 11-06), plus a pytest-collection-level
+analogue of the same property against a small, named set of real test
+modules (collection resolves fixtures and `conftest.py`, which a bare
+import sweep never exercises).
 
 `Settings.model_config` sets ``env_file=".env"``, resolved relative to the
 process working directory (``src/dark_factory/config/settings.py``). This
@@ -63,12 +66,18 @@ _ENV_ALLOWLIST: tuple[str, ...] = (
     "SSL_CERT_DIR",
 )
 
-# The exact three modules G-11-1 names: pytest collection of these dies at
-# import time when `dark_factory.webhook.app` builds its ASGI app eagerly.
+# A small, named sample of real test modules exercising pytest collection
+# itself (fixtures, conftest.py) rather than a bare import -- the mechanism
+# the original G-11-1 regression modules tripped on. Deviation, documented:
+# the three modules G-11-1 originally named here no longer exist (this
+# removal deleted all three); this constant now points at modules that
+# still exist and still import `dark_factory.config.settings` heavily at
+# collection time, so the pytest-collection-specific property Test 2 proves
+# keeps a non-trivial, real target.
 _G11_1_MODULES = (
-    "tests/unit/test_webhook_signature.py",
-    "tests/db/test_webhook_resolves_answer.py",
-    "tests/db/test_webhook_dispatches_resume.py",
+    "tests/unit/test_settings.py",
+    "tests/unit/test_github_ownership_boundary.py",
+    "tests/db/test_clarification_comment_is_redacted.py",
 )
 
 # A child-process script, filled in via a literal `__ROOT_NAME__` replacement
@@ -189,8 +198,8 @@ def test_every_dark_factory_module_imports_with_no_database_configured(
 
 
 # --------------------------------------------------------------------------- #
-# Test 2: the gap's own literal truth -- the three named G-11-1 modules
-# collect under the same sanitized environment.
+# Test 2: the pytest-collection analogue -- a small, named sample of real
+# test modules collect under the same sanitized environment.
 # --------------------------------------------------------------------------- #
 
 
@@ -224,26 +233,7 @@ def test_g11_1_modules_collect_with_no_database_configured(tmp_path: Path) -> No
 
 
 # --------------------------------------------------------------------------- #
-# Test 3: the structural fact, in-process -- the module exposes only the
-# factory, never a pre-built application attribute an attribute probe could
-# trip into constructing `Settings()`.
-# --------------------------------------------------------------------------- #
-
-
-def test_webhook_app_module_exposes_only_the_build_app_factory() -> None:
-    import dark_factory.webhook.app as webhook_app_module
-
-    assert webhook_app_module.__all__ == ["build_app"], webhook_app_module.__all__
-    assert callable(webhook_app_module.build_app)
-    assert not hasattr(webhook_app_module, "app"), (
-        "dark_factory.webhook.app still exposes a pre-built `app` attribute -- "
-        "an attribute probe on this module could still construct Settings() "
-        "as a side effect"
-    )
-
-
-# --------------------------------------------------------------------------- #
-# Test 4: positive control -- the Test 1 harness has teeth.
+# Test 3: positive control -- the Test 1 harness has teeth.
 # --------------------------------------------------------------------------- #
 
 

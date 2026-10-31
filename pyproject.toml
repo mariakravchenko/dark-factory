@@ -27,23 +27,9 @@ dark-factory = "dark_factory.cli:app"
 # uninstalling this extra must leave the core fully functional, not merely
 # import-graph-clean. `tests/unit/test_no_mcp_import_in_core.py` is the
 # structural proof that no module reachable from the core roots imports it.
-#
-# Same rule applies to `webhook` (GIT-06/D-01): the orchestrator core must
-# never import the webhook receiver on a core path, so uninstalling this
-# extra leaves the core fully functional. Starlette is the smallest surface
-# that still gives exact raw-request-body access (`await request.body()`),
-# which the webhook signature check requires because the HMAC covers the
-# exact bytes GitHub sent and a framework that hands back a re-serialised
-# parse silently breaks verification; it ships an in-process `TestClient`
-# built on `httpx`, which `githubkit` already pulls in, so the signature
-# tests need no additional test dependency.
 [project.optional-dependencies]
 mcp = [
     "mcp>=2.2,<3",
-]
-webhook = [
-    "starlette>=0.42,<1",
-    "uvicorn>=0.34,<1",
 ]
 
 [dependency-groups]
