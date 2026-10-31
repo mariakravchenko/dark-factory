@@ -52,14 +52,16 @@ def test_a_real_spawned_process_reports_no_infrastructure_credential_or_unrelate
     monkeypatch.setenv(
         "DATABASE_URL_DIRECT", "postgresql://fake@fake-direct.invalid/df"
     )
-    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake0000000000000000000000000000")
+    monkeypatch.setenv(
+        "DARK_FACTORY_GITHUB_TOKEN", "ghp_fake0000000000000000000000000000"
+    )
     monkeypatch.setenv("MY_UNRELATED_KEY", "unrelated-value")
 
     child_env = _spawn_dump(build_worker_env("DEVELOPMENT"))
 
     assert "DATABASE_URL" not in child_env
     assert "DATABASE_URL_DIRECT" not in child_env
-    assert "GITHUB_TOKEN" not in child_env
+    assert "DARK_FACTORY_GITHUB_TOKEN" not in child_env
     assert "MY_UNRELATED_KEY" not in child_env
     assert not any(name.endswith("_API_KEY") for name in child_env)
 

@@ -77,7 +77,9 @@ def test_the_credential_boundary_holds_through_the_real_spawn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://fake@fake-db.invalid/df")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake0000000000000000000000000000")
+    monkeypatch.setenv(
+        "DARK_FACTORY_GITHUB_TOKEN", "ghp_fake0000000000000000000000000000"
+    )
     result = shell_execute(
         command=[
             sys.executable,
@@ -88,7 +90,7 @@ def test_the_credential_boundary_holds_through_the_real_spawn(
         role="DEVELOPMENT",
     )
     assert "DATABASE_URL" not in result.stdout
-    assert "GITHUB_TOKEN" not in result.stdout
+    assert "DARK_FACTORY_GITHUB_TOKEN" not in result.stdout
 
 
 def test_a_supplied_credential_reaches_the_child_under_its_name(

@@ -143,13 +143,15 @@ def test_subprocess_env_has_credential_and_lacks_infra_secrets(
     with fake_claude_env(monkeypatch, fake_dir):
         # Both present in the parent process for the duration of the call —
         # build_worker_env() must still exclude them from the child.
-        monkeypatch.setenv("GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefake0000")
+        monkeypatch.setenv(
+            "DARK_FACTORY_GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefake0000"
+        )
         ClaudeCodeWorker().execute(_context())
 
     observed_env = json.loads(env_log.read_text("utf-8"))
     assert "ANTHROPIC_API_KEY" in observed_env
     assert "DATABASE_URL" not in observed_env
-    assert "GITHUB_TOKEN" not in observed_env
+    assert "DARK_FACTORY_GITHUB_TOKEN" not in observed_env
 
 
 def test_default_registry_returns_a_claude_code_worker_instance() -> None:
@@ -460,16 +462,16 @@ def test_pattern_only_secret_not_in_settings_is_still_redacted(
 ) -> None:
     from dark_factory.workers.claude_code import ClaudeCodeWorker
 
-    github_token = "ghp_" + ("x" * 40)
+    pattern_shaped_token = "ghp_" + ("x" * 40)
     fake_dir = tmp_path / "fakebin"
-    write_fake_claude(fake_dir, stdout_payload=_payload_leaking(github_token))
+    write_fake_claude(fake_dir, stdout_payload=_payload_leaking(pattern_shaped_token))
 
     with fake_claude_env(monkeypatch, fake_dir):
         ClaudeCodeWorker().execute(_context())
 
     log_path = _run_root_for(tmp_path) / "logs" / "DEVELOPMENT" / "attempt-1.stdout.log"
     log_text = log_path.read_text("utf-8")
-    assert github_token not in log_text
+    assert pattern_shaped_token not in log_text
 
 
 def test_non_utf8_stdout_byte_does_not_raise(

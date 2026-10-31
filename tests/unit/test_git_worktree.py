@@ -219,7 +219,9 @@ def test_git_env_contains_only_allowlisted_names_plus_identity(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@host/db")
-    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefakefake")
+    monkeypatch.setenv(
+        "DARK_FACTORY_GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefakefake"
+    )
     for name in GIT_ENV_ALLOWLIST:
         if name not in os.environ:
             monkeypatch.setenv(name, f"value-for-{name}")
@@ -227,7 +229,7 @@ def test_git_env_contains_only_allowlisted_names_plus_identity(
     env = git_env()
 
     assert "DATABASE_URL" not in env
-    assert "GITHUB_TOKEN" not in env
+    assert "DARK_FACTORY_GITHUB_TOKEN" not in env
     for name in GIT_ENV_ALLOWLIST:
         assert env[name] == os.environ[name]
     for key, value in GIT_IDENTITY_ENV.items():

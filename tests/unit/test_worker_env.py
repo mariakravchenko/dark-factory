@@ -8,6 +8,8 @@ guarantees lives in ``tests/integration/test_worker_env_boundary.py``
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from pydantic import SecretStr
 
@@ -23,7 +25,9 @@ def _set_sensitive_parent_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "DATABASE_URL_DIRECT", "postgresql://fake@fake-direct.invalid/df"
     )
-    monkeypatch.setenv("GITHUB_TOKEN", "ghp_fake0000000000000000000000000000")
+    monkeypatch.setenv(
+        "DARK_FACTORY_GITHUB_TOKEN", "ghp_fake0000000000000000000000000000"
+    )
     monkeypatch.setenv("MY_UNRELATED_KEY", "unrelated-value")
 
 
@@ -39,11 +43,20 @@ def test_infrastructure_credentials_and_unrelated_keys_never_appear(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _set_sensitive_parent_env(monkeypatch)
+    # Non-vacuity check: an absence assertion below proves nothing if the
+    # seeding step above never actually seeded the parent process. Confirm
+    # the credential is genuinely present in the parent at the moment
+    # `build_worker_env` is called, so the exclusion assertion is proving a
+    # real boundary, not an accident of an unseeded name.
+    assert (
+        os.environ["DARK_FACTORY_GITHUB_TOKEN"]
+        == "ghp_fake0000000000000000000000000000"
+    )
     result = build_worker_env("DEVELOPMENT")
     for forbidden in (
         "DATABASE_URL",
         "DATABASE_URL_DIRECT",
-        "GITHUB_TOKEN",
+        "DARK_FACTORY_GITHUB_TOKEN",
         "MY_UNRELATED_KEY",
     ):
         assert forbidden not in result

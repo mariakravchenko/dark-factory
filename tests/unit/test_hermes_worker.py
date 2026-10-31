@@ -229,13 +229,15 @@ def test_subprocess_env_has_credential_and_lacks_infra_secrets(
     with fake_hermes_env(monkeypatch, fake_dir):
         # Both present in the parent process for the duration of the call --
         # build_worker_env() must still exclude them from the child.
-        monkeypatch.setenv("GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefake0000")
+        monkeypatch.setenv(
+            "DARK_FACTORY_GITHUB_TOKEN", "ghp_fakefakefakefakefakefakefakefake0000"
+        )
         HermesWorker().execute(_context())
 
     observed_env = json.loads(env_log.read_text("utf-8"))
     assert "ANTHROPIC_API_KEY" in observed_env
     assert "DATABASE_URL" not in observed_env
-    assert "GITHUB_TOKEN" not in observed_env
+    assert "DARK_FACTORY_GITHUB_TOKEN" not in observed_env
 
 
 def test_missing_credential_returns_failed_and_spawns_nothing(
