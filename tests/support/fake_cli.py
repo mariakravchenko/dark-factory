@@ -46,7 +46,7 @@ EXPECTED_OUTPUTS_HEADING = "## Expected outputs"
 
 # The exact bullet shape `context_prompt_sections` emits per declared output
 # filename: "- <filename> (write under <destination>)". Group 1 is the
-# filename, group 2 is the destination directory (run-root-relative).
+# filename, group 2 is the destination directory (worktree-relative).
 OUTPUT_BULLET_RE = re.compile(r"^- (\S+) \(write under (.+)\)$", re.MULTILINE)
 
 # The declared-outputs step's own source, formatted into the generated
@@ -58,7 +58,6 @@ OUTPUT_BULLET_RE = re.compile(r"^- (\S+) \(write under (.+)\)$", re.MULTILINE)
 # generated script has no import-time dependency on this module.
 _DECLARED_OUTPUTS_STEP = """\
 if declared_outputs:
-    import glob
     import re as _re
 
     from dark_factory.workers.fake import (
@@ -76,18 +75,15 @@ if declared_outputs:
         _section = _prompt[_heading_index:]
         _bullets = _re.findall(output_bullet_pattern, _section, _re.MULTILINE)
         if _bullets:
-            _run_roots = sorted(glob.glob(os.path.join(".dark-factory", "runs", "*")))
-            if _run_roots:
-                _run_root = _run_roots[0]
-                _criterion_ids = criterion_ids_from_text(_prompt)
-                for _filename, _destination in _bullets:
-                    _dest_dir = os.path.join(_run_root, _destination)
-                    os.makedirs(_dest_dir, exist_ok=True)
-                    _content = synthesize_artifact_content(_filename, _criterion_ids)
-                    with open(
-                        os.path.join(_dest_dir, _filename), "w", encoding="utf-8"
-                    ) as _out_fh:
-                        _out_fh.write(_content)
+            _criterion_ids = criterion_ids_from_text(_prompt)
+            for _filename, _destination in _bullets:
+                _dest_dir = _destination
+                os.makedirs(_dest_dir, exist_ok=True)
+                _content = synthesize_artifact_content(_filename, _criterion_ids)
+                with open(
+                    os.path.join(_dest_dir, _filename), "w", encoding="utf-8"
+                ) as _out_fh:
+                    _out_fh.write(_content)
 """
 
 # The run-root-writes step's own source, formatted into the generated
@@ -153,18 +149,19 @@ def write_fake_cli(
     element containing :data:`EXPECTED_OUTPUTS_HEADING` (that element is the
     prompt, whichever flag preceded it, so this one generated step serves all
     three CLIs with no knowledge of their flag names), parses the bullets
-    under that heading with :data:`OUTPUT_BULLET_RE`, locates the run root by
-    globbing ``.dark-factory/runs/*`` relative to the process's own working
-    directory, computes criterion ids by calling
+    under that heading with :data:`OUTPUT_BULLET_RE`, resolves each parsed
+    destination relative to the process's own working directory -- exactly
+    as a real agent's native write tool resolves it, since the destination
+    `context_prompt_sections` emits is itself worktree-relative -- computes
+    criterion ids by calling
     :func:`~dark_factory.workers.fake.criterion_ids_from_text` on the whole
     prompt string, and writes
     :func:`~dark_factory.workers.fake.synthesize_artifact_content` for each
-    parsed bullet. A missing heading, a missing run root, or a zero-bullet
-    parse writes nothing and does not change the exit code -- a fake that
-    cannot find its destination behaves like an agent that produced nothing,
-    which the artifact-validation gate then reports as a contract error,
-    rather than crashing with a traceback that would be read as an adapter
-    bug.
+    parsed bullet. A missing heading or a zero-bullet parse writes nothing
+    and does not change the exit code -- a fake that cannot find its
+    destination behaves like an agent that produced nothing, which the
+    artifact-validation gate then reports as a contract error, rather than
+    crashing with a traceback that would be read as an adapter bug.
 
     The run-root-writes step, when ``run_root_writes`` is a non-empty
     mapping, discovers the run root by the same ``.dark-factory/runs/*``

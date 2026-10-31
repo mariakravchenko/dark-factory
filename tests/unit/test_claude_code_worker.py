@@ -1250,6 +1250,42 @@ def test_artifacts_read_grant_produces_path_scoped_read_in_execute_argv(
     assert value == f"Read(.dark-factory/runs/{_RUN_ID}/artifacts/**)"
 
 
+def test_expected_outputs_prompt_path_is_identical_to_granted_write_glob(
+    repo_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ``## Expected outputs`` prompt destination `context_prompt_sections`
+    emits must be byte-identical to the glob inside the `Write(<glob>/**)`
+    specifier `_base_argv` emits for the same context -- the prompt, the
+    grant, and the collection-side directory are three spellings of one
+    location that must agree (261030-op0)."""
+    from dark_factory.workers import cli_runtime
+    from dark_factory.workers.claude_code import _base_argv
+
+    from tests.support.fake_cli import OUTPUT_BULLET_RE
+
+    context = _context(role="BA", tools=["artifacts.write"], outputs=["output.json"])
+
+    prompt = cli_runtime.build_prompt(context)
+    match = OUTPUT_BULLET_RE.search(prompt)
+    assert match is not None
+    destination = match.group(2)
+
+    fake_dir = tmp_path / "fakebin"
+    with fake_claude_env(monkeypatch, fake_dir):
+        argv = _base_argv(context)
+
+    allowed_value = argv[argv.index("--allowedTools") + 1]
+    write_spec = next(
+        spec for spec in allowed_value.split(",") if spec.startswith("Write(")
+    )
+    glob = write_spec[len("Write(") : -len("/**)")]
+
+    assert destination == glob
+
+    work_dir = repo_dir.parent / "dark-factory-runs" / _RUN_ID
+    assert (work_dir / destination) == _run_root_for(tmp_path) / context.artifacts_dir
+
+
 # --------------------------------------------------------------------------- #
 # 08-01 Task 3: a real adapter reports the artifacts its CLI actually wrote,
 # through the shared cli_runtime.collect_declared_artifacts helper.

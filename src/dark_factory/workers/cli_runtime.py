@@ -139,6 +139,21 @@ def context_prompt_sections(context: object) -> list[str]:
     so both start from the identical task/instructions/inputs material --
     neither the clarification protocol nor any resume-specific section is
     included here.
+
+    **Why the ``## Expected outputs`` destination is worktree-relative:**
+    the agent's cwd at spawn is the *worktree* (``cwd=work_dir``), but
+    ``RoleContext.artifacts_dir`` is run-root-relative (e.g.
+    ``artifacts/<ROLE>``). A role that writes exactly where a run-root-
+    relative destination names is denied by the real ``claude`` CLI, because
+    ``claude_code._base_argv`` grants ``Write``/``Edit`` under the worktree-
+    relative glob ``.dark-factory/runs/<run_id>/artifacts/<ROLE>/**``. This
+    function therefore prefixes the destination with
+    ``.dark-factory/runs/<run_id>/`` whenever both ``run_id`` and
+    ``artifacts_dir`` are present -- deliberately the identical string
+    ``_base_argv`` grants -- and falls back to the bare, run-root-relative
+    ``artifacts_dir`` only when ``run_id`` is absent (mirroring
+    ``_base_argv``'s own ``if run_id and artifacts_dir`` guard exactly, so
+    the two cannot diverge on the degenerate case).
     """
     sections: list[str] = []
 
@@ -181,8 +196,14 @@ def context_prompt_sections(context: object) -> list[str]:
     outputs = getattr(context, "outputs", None) or []
     if outputs:
         artifacts_dir = getattr(context, "artifacts_dir", "")
+        run_id = getattr(context, "run_id", None)
+        destination = (
+            f".dark-factory/runs/{run_id}/{artifacts_dir}"
+            if run_id and artifacts_dir
+            else artifacts_dir
+        )
         bullets = "\n".join(
-            f"- {filename} (write under {artifacts_dir})" for filename in outputs
+            f"- {filename} (write under {destination})" for filename in outputs
         )
         sections.append(f"## Expected outputs\n{bullets}")
 
