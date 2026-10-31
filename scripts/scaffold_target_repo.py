@@ -374,6 +374,7 @@ jobs:
 GITIGNORE_CONTENT = """\
 .env
 .venv/
+uv.lock
 __pycache__/
 *.pyc
 .pytest_cache/
