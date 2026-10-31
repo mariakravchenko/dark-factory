@@ -63,7 +63,7 @@ _FAKE_DB_URL_DIRECT = (
     f"postgresql+psycopg://sc5user:{_LIVE_DB_PASSWORD}"
     "@sc5-fake-direct.invalid:5432/sc5factory"
 )
-_FAKE_GITHUB_TOKEN = "ghp_LIVEsc5github000000000000000000000000000"
+_FAKE_DARK_FACTORY_GITHUB_TOKEN = "ghp_LIVEsc5github000000000000000000000000000"
 
 # --------------------------------------------------------------------------- #
 # Seeded credential shapes in the *task text* (the task-input path).
@@ -83,9 +83,7 @@ _SEEDED_GHP = "ghp_abcdefghij0123456789ABCDEFGHIJ0123456789"
 _SEEDED_KV = f"password={_SEEDED_PASSWORD}"
 
 _TASK_LINE1 = f"{_SEEDED_TASK_URI} {_SEEDED_GHP}"
-_TASK_BODY = (
-    f"{_TASK_LINE1}\n{_SEEDED_KV}\nlive={_FAKE_DB_URL}\nghtok={_FAKE_GITHUB_TOKEN}"
-)
+_TASK_BODY = f"{_TASK_LINE1}\n{_SEEDED_KV}\nlive={_FAKE_DB_URL}\nghtok={_FAKE_DARK_FACTORY_GITHUB_TOKEN}"
 _TASK_SOURCE = "text:" + _TASK_BODY
 
 # The worker's own summary carries a credential too, so the worker-output path is
@@ -93,7 +91,7 @@ _TASK_SOURCE = "text:" + _TASK_BODY
 _WORKER_SUMMARY = (
     "analysis complete. embedded "
     f"{_SEEDED_TASK_URI} and {_SEEDED_KV} and creds {_FAKE_DB_URL} "
-    f"plus {_FAKE_GITHUB_TOKEN}"
+    f"plus {_FAKE_DARK_FACTORY_GITHUB_TOKEN}"
 )
 
 # A documentation-style connection-string example -- pattern-shaped but not a
@@ -111,7 +109,7 @@ _FORBIDDEN_LITERALS = (
     _SEEDED_GHP,
     _FAKE_DB_URL,
     _FAKE_DB_URL_DIRECT,
-    _FAKE_GITHUB_TOKEN,
+    _FAKE_DARK_FACTORY_GITHUB_TOKEN,
     _LIVE_DB_PASSWORD,
 )
 
@@ -136,7 +134,7 @@ def sc5_secrets(monkeypatch: pytest.MonkeyPatch) -> Settings:
         _env_file=None,  # type: ignore[call-arg]
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
-        github_token=_FAKE_GITHUB_TOKEN,
+        dark_factory_github_token=_FAKE_DARK_FACTORY_GITHUB_TOKEN,
     )
     from dark_factory import logging as df_logging
     from dark_factory.persistence import mutations
@@ -200,7 +198,7 @@ def seeded_run(
             task=_TASK_BODY,
             summary=_WORKER_SUMMARY,
             db=_FAKE_DB_URL,
-            gh=_FAKE_GITHUB_TOKEN,
+            gh=_FAKE_DARK_FACTORY_GITHUB_TOKEN,
         )
         log_text = buffer.getvalue()
 
@@ -286,7 +284,7 @@ def test_whole_table_sweep_finds_no_live_configured_secret_values(
     for literal in (
         _FAKE_DB_URL,
         _FAKE_DB_URL_DIRECT,
-        _FAKE_GITHUB_TOKEN,
+        _FAKE_DARK_FACTORY_GITHUB_TOKEN,
         _LIVE_DB_PASSWORD,
     ):
         assert sweep.count(literal) == 0, (
@@ -314,7 +312,7 @@ def test_normalized_task_scope_split_keeps_doc_uri_but_scrubs_live_values(
 
     # ... but the live configured values are removed even from the task text.
     assert _FAKE_DB_URL not in task_text
-    assert _FAKE_GITHUB_TOKEN not in task_text
+    assert _FAKE_DARK_FACTORY_GITHUB_TOKEN not in task_text
     assert _LIVE_DB_PASSWORD not in task_text
 
     # ... and every other sink redacts the doc URI unconditionally.
@@ -338,8 +336,12 @@ def test_seeded_ghp_token_reaches_no_event_payload_or_log_line(
     assert _SEEDED_GHP not in seeded_run.event_payloads_text
     assert _SEEDED_GHP not in seeded_run.role_exec_blob_text
     assert _SEEDED_GHP not in seeded_run.log_text
-    # the log line we emitted carried every secret -- redaction must have fired
-    assert "[redacted:github_token]" in seeded_run.log_text
+    # the log line we emitted carried every secret -- redaction must have fired.
+    # `gh=` is a known-value site (the value is the exact configured
+    # `dark_factory_github_token`, not merely shape-matched), so per F3/F4 the
+    # label is the renamed field name, not the generic shape-matched pattern
+    # label a token of this prefix would otherwise receive.
+    assert "[redacted:dark_factory_github_token]" in seeded_run.log_text
     assert "[redacted:database_url]" in seeded_run.log_text
 
 

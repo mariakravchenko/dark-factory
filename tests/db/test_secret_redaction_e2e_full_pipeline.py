@@ -133,7 +133,7 @@ _SEEDED_DB_URL_DIRECT = (
     f"postgresql+psycopg://sc7user:{_SEEDED_DB_PASSWORD}"
     "@sc7-fake-direct.invalid:5432/sc7factory"
 )
-_SEEDED_GITHUB_TOKEN = "ghp_" + "SEEDEDliveTOKENConfiguredValue0123456"
+_SEEDED_DARK_FACTORY_GITHUB_TOKEN = "ghp_" + "SEEDEDliveTOKENConfiguredValue0123456"
 _SEEDED_ANTHROPIC_KEY = "sk-ant-SEEDEDsecretSEEDEDsecretSEEDEDsec01"
 
 _SEEDED_GHP_PATTERN = "ghp_" + "PATTERNonlyNotConfigured123456789012"
@@ -144,7 +144,7 @@ _FORBIDDEN_LITERALS = (
     _SEEDED_DB_URL,
     _SEEDED_DB_URL_DIRECT,
     _SEEDED_DB_PASSWORD,
-    _SEEDED_GITHUB_TOKEN,
+    _SEEDED_DARK_FACTORY_GITHUB_TOKEN,
     _SEEDED_ANTHROPIC_KEY,
     _SEEDED_GHP_PATTERN,
     _SEEDED_KV,
@@ -164,7 +164,7 @@ _BASE_BRANCH = "main"
 
 _ISSUE_BODY = (
     "Please rotate the credentials before the audit: "
-    f"{_SEEDED_DB_URL} and {_SEEDED_GITHUB_TOKEN} must be retired."
+    f"{_SEEDED_DB_URL} and {_SEEDED_DARK_FACTORY_GITHUB_TOKEN} must be retired."
 )
 
 _SEEDED_QUESTION = (
@@ -213,7 +213,7 @@ _ROLE_FILES: dict[str, dict[str, str]] = {
     "QA": _QA_FILES,
 }
 _ROLE_SUMMARIES: dict[str, str] = {
-    "BA": f"BA analysis complete; rotate {_SEEDED_GITHUB_TOKEN} before merging.",
+    "BA": f"BA analysis complete; rotate {_SEEDED_DARK_FACTORY_GITHUB_TOKEN} before merging.",
     "ARCHITECTURE": "architecture design complete",
     "QA": "QA verified every acceptance criterion",
 }
@@ -485,11 +485,11 @@ def seeded_pipeline_run(
     # the pipeline -- assert it here, against the literal inputs this fixture
     # is about to hand to production code, before any absence assertion runs.
     assert _SEEDED_DB_URL in _ISSUE_BODY
-    assert _SEEDED_GITHUB_TOKEN in _ISSUE_BODY
+    assert _SEEDED_DARK_FACTORY_GITHUB_TOKEN in _ISSUE_BODY
     assert _SEEDED_GHP_PATTERN in _SEEDED_QUESTION
     assert _SEEDED_KV in _SEEDED_QUESTION
     assert _SEEDED_ANTHROPIC_KEY in _SEEDED_ANSWER
-    assert _SEEDED_GITHUB_TOKEN in _ROLE_SUMMARIES["BA"]
+    assert _SEEDED_DARK_FACTORY_GITHUB_TOKEN in _ROLE_SUMMARIES["BA"]
     assert _SEEDED_DB_URL_DIRECT in _ARCHITECTURE_FILES["design.md"]
     assert _SEEDED_GHP_PATTERN in _DEV_RESULT_TEXT
     assert _SEEDED_ANTHROPIC_KEY in _DEV_RESULT_TEXT
@@ -500,7 +500,7 @@ def seeded_pipeline_run(
         _env_file=None,
         database_url=_SEEDED_DB_URL,
         database_url_direct=_SEEDED_DB_URL_DIRECT,
-        github_token=_SEEDED_GITHUB_TOKEN,
+        dark_factory_github_token=_SEEDED_DARK_FACTORY_GITHUB_TOKEN,
         anthropic_api_key=_SEEDED_ANTHROPIC_KEY,
     )
     # Every call site that redacts a sink this test seeds resolves its own
@@ -601,7 +601,7 @@ def seeded_pipeline_run(
                 (
                     _SEEDED_DB_URL,
                     _SEEDED_DB_URL_DIRECT,
-                    _SEEDED_GITHUB_TOKEN,
+                    _SEEDED_DARK_FACTORY_GITHUB_TOKEN,
                     _SEEDED_ANTHROPIC_KEY,
                     _SEEDED_GHP_PATTERN,
                     _SEEDED_KV,
@@ -798,7 +798,7 @@ def test_at_least_five_seeded_constants_split_between_configured_and_pattern_onl
         _env_file=None,
         database_url=_SEEDED_DB_URL,
         database_url_direct=_SEEDED_DB_URL_DIRECT,
-        github_token=_SEEDED_GITHUB_TOKEN,
+        dark_factory_github_token=_SEEDED_DARK_FACTORY_GITHUB_TOKEN,
         anthropic_api_key=_SEEDED_ANTHROPIC_KEY,
     )
     known = settings.known_secret_values()

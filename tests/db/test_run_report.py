@@ -138,7 +138,7 @@ def _table_counts(session_factory: SessionFactory, run_id: UUID) -> dict[str, in
 
 _FAKE_DB_URL = "postgresql+psycopg://df_fake_user:df_fake_pw_0123456789@fake.invalid:5432/df_fake_db"
 _FAKE_DB_URL_DIRECT = "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
-_FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
+_FAKE_DARK_FACTORY_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
 
 _DEFINITIONS: dict[str, tuple[str, str]] = {
     "BA": ("[]", "[requirements.md, acceptance_criteria.json]"),
@@ -228,7 +228,7 @@ def _fake_secrets_patched() -> Iterator[None]:
         _env_file=None,  # type: ignore[call-arg]
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
-        github_token=_FAKE_GITHUB_TOKEN,
+        dark_factory_github_token=_FAKE_DARK_FACTORY_GITHUB_TOKEN,
     )
     from unittest.mock import patch
 

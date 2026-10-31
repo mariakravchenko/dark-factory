@@ -67,7 +67,7 @@ _FAKE_DB_URL_DIRECT = (
     f"postgresql+psycopg://int06user:{_LIVE_DB_PASSWORD}"
     "@int06-fake-direct.invalid:5432/int06factory"
 )
-_FAKE_GITHUB_TOKEN = "ghp_LIVEint06github00000000000000000000000000"
+_FAKE_DARK_FACTORY_GITHUB_TOKEN = "ghp_LIVEint06github00000000000000000000000000"
 
 # --------------------------------------------------------------------------- #
 # Credential shapes seeded into the worker's QUESTION text: a connection-string
@@ -103,7 +103,7 @@ _FORBIDDEN = (
     _LIVE_DB_PASSWORD,
     _FAKE_DB_URL,
     _FAKE_DB_URL_DIRECT,
-    _FAKE_GITHUB_TOKEN,
+    _FAKE_DARK_FACTORY_GITHUB_TOKEN,
     _Q_URI,
     _Q_TOKEN,
     _A_TOKEN,
@@ -129,7 +129,7 @@ def interaction_secrets(monkeypatch: pytest.MonkeyPatch) -> Settings:
         _env_file=None,  # type: ignore[call-arg]
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
-        github_token=_FAKE_GITHUB_TOKEN,
+        dark_factory_github_token=_FAKE_DARK_FACTORY_GITHUB_TOKEN,
     )
     from dark_factory import logging as df_logging
 
@@ -192,7 +192,7 @@ def swept(
             question=_QUESTION_BODY,
             answer=_ANSWER_BODY,
             db=_FAKE_DB_URL,
-            gh=_FAKE_GITHUB_TOKEN,
+            gh=_FAKE_DARK_FACTORY_GITHUB_TOKEN,
         )
         log_text = buffer.getvalue()
 
