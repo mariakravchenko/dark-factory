@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 status: Awaiting next milestone
-stopped_at: Completed quick task 261031-fta-add-uv-lock-to-scripts-scaffold-target-r
-last_updated: "2026-10-31T09:40:00.000Z"
+stopped_at: Completed quick task 261031-jmw-remove-the-webhook-receiver-subsystem-fr
+last_updated: "2026-10-31T13:00:00.000Z"
 last_activity: 2026-10-31
-last_activity_desc: Completed quick task 261031-fta (ignore uv.lock in scaffold's generated .gitignore template)
-state_head: 92948c6
+last_activity_desc: Completed quick task 261031-jmw (removed the webhook receiver subsystem; manual gh workflow dispatch resume is now the only documented path)
+state_head: 69abd57
 current_phase: 12
 progress:
   total_phases: 12
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-31 — Completed quick task 261031-fta: Ignore uv.lock in scaffold_target_repo.py's generated .gitignore template
+Last activity: 2026-10-31 — Completed quick task 261031-jmw: Removed the webhook receiver subsystem; manual gh workflow dispatch resume is now the only documented resume path
 
 ## Performance Metrics
 
@@ -291,6 +291,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- ⚠️ [Quick 261031-jmw, 2026-10-31] The webhook-receiver removal rewired 3 db-tier test modules (`tests/db/test_clarification_comment_is_redacted.py`, `tests/db/test_run_report.py`, `tests/db/test_artifacts_show_reads_committed_content.py`) and deleted 2 others (`test_webhook_dispatches_resume.py`, `test_webhook_resolves_answer.py`). The executor's sandbox had no reachable Postgres, so `uv run pytest -q -m db` was never actually run against a live database for this change — only `--collect-only` (clean, 224/1242 collected). Needs a human-supplied Neon/local Postgres run of the full `db` tier before this is fully trusted.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 - ⚠️ [Phase 12] 4 non-blocking code-review warnings (`12-REVIEW.md`): text-mode `status` output omits `wip_commit_sha` (JSON-only, a parity gap not a data-loss); error-list rendering shows raw JSONB repr instead of extracted message text; `read_quality_gate` collapses distinct `GitError` causes into one indistinguishable message; `scrub_artifact_text_in_place` uses `errors="replace"` on artifact content (latent corruption risk for non-UTF-8 artifacts reaching a PR diff). None are security/correctness blockers; worth a follow-up pass.
 - ⚠️ [Phase 10] Discovered during live UAT (real Claude Code workers against a real external repo, `mariakravchenko/app-new`): two pre-existing worker/prompt-construction gaps, neither Phase 10 scope, both worth a future hardening pass. (1) `context_prompt_sections`'s "Expected outputs" prompt section tells a role to write under `artifacts/<ROLE>` but the actually-permitted path (per `--allowedTools`) requires a `.dark-factory/runs/<run-id>/` prefix that's silently omitted — a role has to discover the real path by trial and error against permission denials, and sometimes gives up instead of self-correcting. **RESOLVED by quick task `261030-op0`:** the fix was entirely in `context_prompt_sections`'s prompt text (the grant, the collection logic, and `git/scope.py`'s pathspec were already correct and agreed with each other). (2) The same prompt section gives a role only a bare output *filename*, never the JSON schema it must match — a role operating on a real target repo (with no access to Dark Factory's own `domain/artifacts.py` source) has no way to discover the exact pydantic shape and will invent a plausible-but-wrong one. Both worked around locally (in the target repo's own instructions.md, not Dark Factory's source) for this UAT session; not filed as Phase 10 gaps since neither is in this phase's scope. **RESOLVED by quick task `261031-c01`:** `context_prompt_sections`'s `## Expected outputs` section now renders each machine artifact's real `model_json_schema()`, read from the one filename->model registry the D-09 gate itself dereferences, so a role on an external target repo is handed the exact pydantic shape instead of inventing one.
@@ -314,6 +315,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | 261031-c01 | Inject the real pydantic model_json_schema() for each machine artifact (acceptance_criteria.json, constraints.json, implementation_summary.json, test_report.json, verdict.json) into context_prompt_sections's "Expected outputs" prompt section, so a role can no longer invent a plausible-but-wrong shape — found live against a real app-int CI run (BA's acceptance_criteria.json failed extra=forbid validation with 31 errors) | 2026-10-31 | 2446b7d | [261031-c01-fix-context-prompt-sections-s-expected-o](./quick/261031-c01-fix-context-prompt-sections-s-expected-o/) |
 | 261031-cp4 | Install uv (astral-sh/setup-uv, pinned to match ci.yml) before the "Install dark-factory" step in scaffold_target_repo.py's RUN_WORKFLOW_TEMPLATE and RESUME_WORKFLOW_TEMPLATE — the default-generated quality_gate.commands use "uv run pytest"/"uv run ruff check" but no workflow step installed uv — found live against a real app-int CI run (Quality Gate step failed with FileNotFoundError: 'uv', after BA/ARCHITECTURE/DEVELOPMENT/QA all passed) | 2026-10-31 | bfe0aea | [261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo](./quick/261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo/) |
 | 261031-fta | Add uv.lock to scaffold_target_repo.py's GITIGNORE_CONTENT template — a target repo with no committed lockfile regenerates one on every uv run (quality gate, QA's own test runs), and the untracked-but-not-ignored uv.lock tripped enforce_write_scope() for any role whose write_scope doesn't cover the repo root — found live against a real app-int CI run (QA attempt 1 failed with "wrote outside its configured write_scope ['tests/**']: ['uv.lock']" even though QA itself had deleted the file; attempt_changed_paths()'s `git ls-files --others --exclude-standard` already respects .gitignore, confirmed not itself buggy) | 2026-10-31 | 92948c6 | [261031-fta-add-uv-lock-to-scripts-scaffold-target-r](./quick/261031-fta-add-uv-lock-to-scripts-scaffold-target-r/) |
+| 261031-jmw | Remove the webhook receiver subsystem (src/dark_factory/webhook/, dispatch_workflow()/for_dispatch(), github_webhook_secret/dispatch_github_token settings, the webhook pyproject extra, GitHubPendingInteraction, 8 webhook-only test modules) now that a real app-int run proved the manual flow works end-to-end: a human replies on the clarifying-question issue, then `gh workflow run resume.yml -f run_id=<id> -f answer=<text>` — added that `answer` input to both shipped resume.yml templates, mirroring app-int's env-indirection shape (D-03) for expression-injection hardening. Rewrote README/docs/.env.example to document only this path. Decisions: keep submit_answer's github_comment_id param + docstring reword (D-02), retire GitHubPendingInteraction as fully caller-less (D-01). Full unit+contract tier 826 passed, ruff+mypy --strict clean; db tier not run (no reachable Postgres in the execution sandbox) — needs a human-supplied Neon run before fully trusting the 3 rewired db-tier modules | 2026-10-31 | 69abd57 | [261031-jmw-remove-the-webhook-receiver-subsystem-fr](./quick/261031-jmw-remove-the-webhook-receiver-subsystem-fr/) |
 
 ## Deferred Items
 
