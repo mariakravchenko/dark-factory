@@ -31,8 +31,8 @@ agent CLIs rather than being one:
   only after **both** gates pass.
 - **Durable, resumable runs.** A run's complete lifecycle state lives in Neon
   PostgreSQL. Any process, on any machine, can pick a run up from its last
-  committed step — after a crash, a local-to-CI handoff, a GitHub webhook, or
-  a human who answers a clarifying question three days later.
+  committed step — after a crash, a local-to-CI handoff, or a human who
+  answers a clarifying question three days later.
 - **Worker-agnostic roles.** Each role is assigned a worker (`claude-code`,
   `copilot`, `hermes`, or the in-process `fake` test worker) in a config file,
   not in code — reassigning a role to a different agent runtime is a YAML
@@ -110,9 +110,6 @@ Edit `.env` and set:
 - **`GITHUB_TOKEN`** — Dark Factory's own token for posting clarification
   comments and opening pull requests. Required once a run's source is a
   GitHub issue or its pipeline includes publishing.
-- **`DISPATCH_GITHUB_TOKEN`** — a separate, narrowly-scoped token the webhook
-  receiver uses to dispatch a CI resume job (see "Finish a run in CI" below).
-  Not needed for purely local runs.
 - **A worker-runtime credential** (e.g. `ANTHROPIC_API_KEY` for `claude-code`)
   — whichever your scaffolded roles were assigned.
 
@@ -319,12 +316,11 @@ earlier steal.
 ### What this is
 
 A run that pauses for a human on your laptop does not have to be resumed on
-your laptop. When the human replies on the GitHub issue, the webhook receiver
-records the answer in Neon and then asks GitHub Actions to start a job that
-resumes the run — a genuinely different machine, with nothing carried over but
-the run id. The invariant holds throughout: **the trigger carries no lifecycle
-logic; every entry point — the local CLI, the webhook receiver, a dispatched CI
-job — reaches the same `advance(run_id)`.**
+your laptop. When the human replies on the GitHub issue, dispatching a small
+CI workflow resumes the run on a genuinely different machine, with nothing
+carried over but the run id. The invariant holds throughout: **the trigger
+carries no lifecycle logic; every entry point — the local CLI, a dispatched
+CI job — reaches the same `advance(run_id)`.**
 
 ### The deployment model
 
@@ -337,8 +333,7 @@ check out Dark Factory's own repository. Instead:
 2. Hand-author `.dark-factory.yaml` and `.dark-factory/roles/*.yaml` in your
    own repository, modelled on the ones this repository ships.
 3. Add one small `resume.yml` workflow to your own repository (below).
-4. Give your webhook receiver a `DISPATCH_GITHUB_TOKEN` (below).
-5. Make your roles' assigned worker runtime available wherever
+4. Make your roles' assigned worker runtime available wherever
    `dark-factory resume` runs — a credential alone does not satisfy this; see
    "The worker runtime" below.
 
@@ -391,9 +386,10 @@ block:
   Quality Gate PASS creates the pull request through the API, which this
   scope authorizes.
 
-The scope stops there deliberately: `actions: write` is absent because the
-only workflow-dispatch call Dark Factory makes happens in the webhook
-receiver, on the separate `DISPATCH_GITHUB_TOKEN`, never inside these jobs.
+The scope stops there deliberately: `actions: write` is absent because
+nothing in Dark Factory dispatches a workflow — the dispatch is a human
+action using the human's own `gh` credentials, never a call any job or any
+Dark Factory process needs to cover.
 
 Two things worth knowing before pointing it at a real repository: an
 existing file in the target is left untouched unless you pass `--force`;
@@ -414,17 +410,19 @@ not clone Dark Factory's own repository" premise above does not hold.
    the run; it may pause `WAITING_HUMAN` with a clarifying comment on the
    issue.
 2. The human replies on the issue.
-3. GitHub delivers an `issue_comment` webhook to the receiver's
-   `/webhooks/github` route; it verifies the signature, resolves the reply to
-   its pending interaction and records the answer.
-4. The receiver reads the run's own persisted `repository.github_owner` /
-   `github_repo` and asks GitHub to dispatch `resume.yml` on that repository,
-   carrying the run id as input.
-5. A fresh GitHub Actions runner checks out the repository, installs
-   `dark-factory` and runs `dark-factory resume <run_id>`, which
-   re-materializes everything from Neon plus a fresh git worktree.
-6. The run reaches `COMPLETED` (possibly publishing a PR) or pauses again,
-   and the loop repeats from step 2.
+3. The human runs `gh workflow run resume.yml -f run_id=<id> -f
+   answer=<text>` against the target repository — or any external script
+   does, since the dispatch itself carries no Dark Factory logic.
+4. A fresh GitHub Actions runner checks out the repository, installs
+   `dark-factory` and runs `dark-factory resume <run_id> --answer <text>`,
+   which records the answer and re-materializes everything from Neon plus a
+   fresh git worktree. `--answer` may be omitted to simply re-drive a run
+   that is not currently waiting on a human — that is what the optional
+   `answer` input buys.
+5. The run reaches `COMPLETED` (possibly publishing a PR) or pauses again,
+   and the loop repeats from step 2. The human's answer is recorded durably
+   by `dark-factory resume --answer` itself, and a run can always be resumed
+   again from any machine with `dark-factory resume <run_id>`.
 
 ### The reference workflow
 
@@ -432,8 +430,9 @@ Copy the block below into your own repository at
 `.github/workflows/resume.yml`. Dark Factory **neither ships nor validates**
 this file — it is a reference, and you own it. The sentinel comments
 bracketing it are load-bearing: a test in this repository extracts this
-exact block by those sentinels and asserts it still parses and still says
-what the dispatcher sends, so their spelling must not change.
+exact block by those sentinels and asserts it still parses and still
+declares the inputs the documented `gh workflow run` command passes, so
+their spelling must not change.
 
 <!-- resume-workflow-reference: begin -->
 ```yaml
@@ -531,10 +530,10 @@ moment the first role needs input. `pull-requests: write` gives the job
 authority to open the PR after QA PASS and Quality Gate PASS — the one
 publication the whole policy gates on; omit it and that create-PR call 403s
 instead. The job's token stops there: it carries no `actions` scope, because
-the only `actions`-scoped call is dispatching this very workflow, made by the
-webhook receiver on the separate `DISPATCH_GITHUB_TOKEN` — see "The dispatch
-credential" below. As with `contents`, an absent scope here surfaces as a
-403 from the GitHub API, not as a git-level error.
+nothing in Dark Factory dispatches a workflow at all — the dispatch is a
+human action using the human's own `gh` credentials, outside any job's
+token. As with `contents`, an absent scope here surfaces as a 403 from the
+GitHub API, not as a git-level error.
 
 `fetch-depth: 0` on the checkout step is the third thing this same proof hit
 before a role genuinely completed end to end. `actions/checkout`'s default
@@ -583,40 +582,6 @@ to, and the credential environment variable it reads:
 (`fake`, the fourth registered worker, needs neither a binary nor a
 credential — it scripts its results in-process, which is exactly how the
 `db`-tier suite runs in CI with no agent credentials configured at all.)
-
-This table says nothing about `DISPATCH_GITHUB_TOKEN`; that credential
-belongs to the webhook receiver that dispatches this job, not to the job
-itself, and is documented in its own subsection next.
-
-### The dispatch credential
-
-Provision a **fine-grained** personal access token, scoped to the one target
-repository, with the `Actions: Read and write` permission — nothing else.
-That permission name — `actions: write` — is the fine-grained token's own
-label and has **no equivalent checkbox on the classic-token creation
-screen**; a classic token needs the much broader `repo` scope instead, which
-works but grants far more than this call needs. Use a classic token only as a
-documented fallback if a fine-grained token is unavailable to you.
-
-Set the result as `DISPATCH_GITHUB_TOKEN` — matching `.env.example` exactly —
-on whatever process hosts your webhook receiver. It is a third credential,
-deliberately separate from `GITHUB_TOKEN` (comment/PR operations) and
-`GITHUB_WEBHOOK_SECRET` (verifying inbound deliveries): one field per
-credential purpose, so "did the infrastructure credential ever reach
-somewhere it should not" stays answerable from the field name alone.
-
-### When the resume does not fire
-
-| Outcome | Log event | Detail |
-|---|---|---|
-| Dispatched | `webhook.dispatch.requested` | The `workflow_dispatch` call succeeded. |
-| Skipped — repository not configured | `webhook.dispatch.skipped` (`reason=repository_not_configured`) | The run's persisted `workflow["repository"]` has no `github_owner`/`github_repo`/`base_branch` — ordinary for a `text:`-sourced run. |
-| Skipped — no dispatch token | `webhook.dispatch.skipped` (`reason=dispatch_github_token_not_configured`) | This receiver process has no `DISPATCH_GITHUB_TOKEN` configured. |
-| Failed | `webhook.dispatch.failed` | The `workflow_dispatch` API call itself raised (a real GitHub error). |
-
-In every one of these cases the human's answer is already durably recorded —
-a missing dispatch delays the resume, it never loses the answer. The manual
-fallback from any machine, always, is `dark-factory resume <run_id>`.
 
 ## Configuration reference
 

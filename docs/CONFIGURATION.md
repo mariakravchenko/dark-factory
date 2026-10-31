@@ -34,7 +34,6 @@ every value a visibly-fake placeholder.
 | `LEASE_TTL_SECONDS` | Optional | `900` | Seconds a claimed run stays owned without a renewal (single-owner execution). Not a secret — this is the genuine production default. Must be strictly positive. |
 | `LEASE_HEARTBEAT_SECONDS` | Optional | `300` | Seconds between the owning process's lease-expiry renewals while a role step is in flight. Must be strictly **less than** `LEASE_TTL_SECONDS`, or settings loading fails at startup. One third of the TTL is the standard ratio, chosen so two consecutive missed renewals still land inside the TTL. |
 | `GITHUB_TOKEN` | Optional | `None` | Dark Factory's own GitHub credential, used for its own comment/PR creation. Loaded even when unused so the redaction layer knows its literal value for exact-substring scrubbing. Never passed to a worker subprocess. |
-| `DISPATCH_GITHUB_TOKEN` | Optional | `None` | A separate, dispatch-only GitHub token used exclusively by the webhook receiver to call GitHub's `workflow_dispatch` API on the run's target repository after a human answer has been durably recorded. Deliberately distinct from `GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` — one field per credential purpose. Intended shape: a fine-grained PAT scoped to the single target repository with `Actions: Read and write`; a classic `repo`-scope PAT also works but grants more privilege than necessary. Belongs to the webhook receiver process only, and is never passed to a worker subprocess. |
 
 The following additional settings are declared on `Settings` but are **not**
 listed in `.env.example`; set them as plain environment variables (or add
@@ -42,7 +41,6 @@ them to `.env`) when the corresponding feature is used.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GITHUB_WEBHOOK_SECRET` | Optional | `None` | Verifies inbound GitHub webhook deliveries at the webhook receiver. Distinct from `GITHUB_TOKEN` (calls Dark Factory *makes to* GitHub) and `DISPATCH_GITHUB_TOKEN` (the dispatch-only token) — this one authenticates deliveries *arriving at* Dark Factory. |
 | `ANTHROPIC_API_KEY` | Optional | `None` | Credential for the `claude-code` worker adapter (and shared by the `hermes` adapter, which has no dedicated credential of its own). Its absence is harmless until a role actually tries to invoke one of those workers, at which point the adapter raises a typed `MissingWorkerCredentialError` rather than spawning anything. |
 | `COPILOT_GITHUB_TOKEN` | Optional | `None` | A worker's own authentication material for the `copilot` adapter — injected into the `copilot` subprocess only, never Dark Factory's own GitHub credential. The GitHub Copilot CLI requires a fine-grained, personal-account-owned PAT carrying the `Copilot Requests` permission; a classic PAT (`ghp_*`) is rejected by the CLI. |
 | `COPILOT_MODEL` | Optional | `None` | Model identifier passed to the `copilot` CLI. Unset means the CLI's own default model is used. |

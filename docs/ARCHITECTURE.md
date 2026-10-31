@@ -21,25 +21,23 @@ orchestrator entry point, `advance(run_id)`, always starts by reconstructing
 the run's entire state from the database and executes exactly one committed
 step before returning. This is what makes "resume after a crash" and "run
 the happy path" the same code path: there is no separate recovery branch to
-drift out of sync, and any process on any machine — a local CLI invocation,
-a GitHub Actions job, a webhook receiver — can call `advance` on a run id
-and pick up exactly where a previous process stopped.
+drift out of sync, and any process on any machine — a local CLI invocation
+or a GitHub Actions job — can call `advance` on a run id and pick up exactly
+where a previous process stopped.
 
 Secondary architectural concerns are each isolated behind their own module
 boundary: a `git` package that owns worktrees, commits and write-scope
 enforcement; a `github` package that is the only code constructing a
-`githubkit` client; a pluggable `WorkerRegistry` / `ToolRegistry` /
+`githubkit` client; and a pluggable `WorkerRegistry` / `ToolRegistry` /
 `ActionRegistry` / `.dark-factory.yaml` config layer so new workers, tool
 capabilities, hooks and pipelines can be added with zero orchestrator
-changes; and a `webhook` receiver that is a separate optional extra, never
-imported by the core.
+changes.
 
 ## Component diagram
 
 ```mermaid
 graph TD
     CLI["cli.py<br/>(Typer: run / resume / status / events / runs / artifacts)"]
-    WEBHOOK["webhook/app.py<br/>(optional ASGI receiver)"]
     RUNNER["orchestrator/runner.py<br/>start_run / advance / drive"]
     LIFECYCLE["orchestrator/lifecycle.py<br/>pure transition()"]
     LEASE["orchestrator/lease.py<br/>single-owner Postgres lease"]
@@ -58,7 +56,6 @@ graph TD
     ARTIFACTS["artifacts/store.py, validation.py<br/>run-tree filesystem"]
 
     CLI --> RUNNER
-    WEBHOOK --> ANSWERS
     CONFIG --> RUNNER
     RUNNER --> LIFECYCLE
     RUNNER --> LEASE
@@ -79,9 +76,9 @@ graph TD
     PUBLISH --> GITHUB
 ```
 
-Dark Factory's own `pyproject.toml` enforces two of these boundaries
-structurally rather than by convention: the `mcp` and `webhook` extras must
-be uninstallable without breaking the orchestrator core, and tests
+Dark Factory's own `pyproject.toml` enforces one of these boundaries
+structurally rather than by convention: the `mcp` extra must be
+uninstallable without breaking the orchestrator core, and tests
 (`test_no_mcp_import_in_core.py`) walk the import graph to prove it.
 
 ## Data flow
@@ -137,11 +134,10 @@ same small set of steps on every call to `advance(run_id)`:
    `DEVELOPMENT` under a configured iteration cap, or fails the run once the
    cap is exhausted.
 8. **Pause and resume.** A `NEEDS_INPUT` worker result moves the run to
-   `WAITING_HUMAN` and releases the lease. A human answer — via
-   `dark-factory resume --answer` or the webhook receiver's
-   `orchestrator/answers.submit_answer` — is the only way out of
-   `WAITING_HUMAN`; the webhook path also dispatches a GitHub Actions
-   `workflow_dispatch` so a laptop-paused run can finish headlessly in CI.
+   `WAITING_HUMAN` and releases the lease. `dark-factory resume --answer`,
+   calling `orchestrator/answers.submit_answer`, is the only way out of
+   `WAITING_HUMAN` — dispatchable from any machine, including a GitHub
+   Actions job, so a laptop-paused run can finish headlessly in CI.
 9. **Drive to a stop.** The CLI's `drive` loop calls `advance` repeatedly
    until the run reaches a *stop* status (`COMPLETED`, `FAILED`, or
    `WAITING_HUMAN`) — distinct from the narrower *terminal* set
@@ -184,7 +180,6 @@ src/dark_factory/
 ├── git/                # Worktree, diff/commit/push, write-scope and
 │                       #   artifact-scope enforcement — all subprocess-based
 ├── github/             # The one githubkit client wrapper
-├── webhook/            # Optional ASGI receiver (separate install extra)
 ├── artifacts/          # Run-tree filesystem paths, read/write, schema validation
 ├── context/            # Assembles a role's RoleContext from its declared inputs
 ├── input/              # Source classification (text: / spec: / github:) and loading
@@ -197,9 +192,9 @@ The split mirrors the project's core constraint set directly: `orchestrator/`
 is kept deliberately small and I/O-light so the outer delivery lifecycle
 never becomes "one giant LLM loop"; `persistence/mutations.py` is the single
 write surface so a durability or redaction bug has exactly one place to
-exist; `git/`, `github/`, and `webhook/` are each isolated behind their own
-package so infrastructure credentials and subprocess/HTTP concerns never
-leak into orchestration logic; and `workers/`, `tools/`, `actions/` share
+exist; `git/` and `github/` are each isolated behind their own package so
+infrastructure credentials and subprocess/HTTP concerns never leak into
+orchestration logic; and `workers/`, `tools/`, `actions/` share
 the same name-to-callable registry shape so "Role ≠ Worker" — any role is
 assignable to any worker with zero workflow-code change.
 

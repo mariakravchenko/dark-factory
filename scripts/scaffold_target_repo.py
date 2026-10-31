@@ -234,17 +234,6 @@ DATABASE_URL_DIRECT=postgresql+psycopg://USER:PASSWORD@ep-example-000000.us-east
 # (read/write) permissions.
 GITHUB_TOKEN=
 
-# Dispatch-only credential, used ONLY by the webhook receiver to trigger
-# resume.yml via workflow_dispatch after a human's answer is recorded.
-# Fine-grained PAT scoped to THIS repo only, "Actions: Read and write"
-# permission -- nothing else. Deliberately separate from GITHUB_TOKEN above.
-DISPATCH_GITHUB_TOKEN=
-
-# Shared secret configured on this repo's webhook (GitHub repo Settings ->
-# Webhooks -> your webhook -> Secret). Used to verify inbound deliveries are
-# genuinely from GitHub before anything is parsed.
-GITHUB_WEBHOOK_SECRET=
-
 # --- Worker runtime credential(s) -------------------------------------------
 
 {{WORKER_CREDENTIALS}}

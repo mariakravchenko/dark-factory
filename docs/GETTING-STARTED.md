@@ -135,8 +135,6 @@ when a role is actually assigned that worker:
 | `DATABASE_URL` | Required | — | The **pooled** Neon connection string (host contains `-pooler`), used by the application engine at runtime. Rewrite the scheme to `postgresql+psycopg://`. | Neon Console → your project → Connection Details → pooled connection string. |
 | `DATABASE_URL_DIRECT` | Required | — | The **direct** (non-pooled) Neon connection string (host without `-pooler`). Alembic uses this one — DDL and PgBouncer transaction pooling do not mix. | Neon Console → Connection Details → disable connection pooling to reveal the direct host. |
 | `GITHUB_TOKEN` | Optional | `None` | Dark Factory's own credential for posting clarification comments and opening pull requests. Required once a run's source is a GitHub issue or its pipeline publishes. | GitHub: a classic PAT with `repo` scope, or a fine-grained PAT scoped to this repository with Contents (read/write), Issues (read/write), and Pull requests (read/write) permissions. |
-| `DISPATCH_GITHUB_TOKEN` | Optional | `None` | A separate, dispatch-only token the webhook receiver uses to trigger `resume.yml` via `workflow_dispatch` after a human's answer is recorded. Not needed for purely local runs. | GitHub: a fine-grained PAT scoped to this one target repository, with the `Actions: Read and write` permission only — no equivalent checkbox exists on the classic-token screen. |
-| `GITHUB_WEBHOOK_SECRET` | Optional | `None` | Verifies inbound GitHub webhook deliveries at the webhook receiver before anything is parsed. Only needed for the optional webhook auto-resume path (Step 7). | A shared secret you choose yourself, then set identically on the repository's webhook (Settings → Webhooks → your webhook → Secret). |
 | `ANTHROPIC_API_KEY` | Required only if a role uses `claude-code` or `hermes` | `None` | Credential for the `claude-code` worker adapter (and shared by `hermes`, which has no dedicated credential of its own). Its absence only surfaces as a typed `MissingWorkerCredentialError` when a role actually tries to invoke one of those workers. | Anthropic Console — an API key for the account that will run these roles. <!-- VERIFY: exact Anthropic Console URL/navigation for API key creation is an external-service workflow that cannot be verified from this repository alone. --> |
 | `COPILOT_GITHUB_TOKEN` | Required only if a role uses `copilot` | `None` | A worker's own authentication material for the `copilot` adapter, injected into the `copilot` subprocess only — never Dark Factory's own `GITHUB_TOKEN`. | GitHub: a fine-grained, **personal-account-owned** PAT carrying the `Copilot Requests` permission. A classic PAT (`ghp_*`) is rejected by the Copilot CLI. |
 | `LOG_LEVEL` | Optional | `INFO` | structlog output level. One of `CRITICAL`, `FATAL`, `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`, `NOTSET` (case-insensitive). An unrecognized value fails settings loading at startup. | Set it yourself; not fetched from anywhere. |
@@ -252,19 +250,13 @@ README.md's "Finish a run in CI" section explains exactly why each of those
 is load-bearing, including two real failure modes hit while proving this
 path end-to-end.
 
-## Step 7 (optional) — GitHub issue intake and webhook auto-resume
-
-A run can also start from a GitHub issue (`dark-factory run
-github:<owner>/<repo>#<n>`) and, when it pauses for a human, be resumed
-automatically on a different machine once that human replies on the issue —
-a webhook receiver records the answer and dispatches `resume.yml` for you,
-using the `DISPATCH_GITHUB_TOKEN` and `GITHUB_WEBHOOK_SECRET` from the table
-in Step 3. This requires hosting the separate webhook receiver process
-(installed via the `webhook` extra: `starlette` + `uvicorn`) and is covered
-in full — including the webhook route, the dispatch credential's exact
-scope, and the table of skip/fail outcomes when a dispatch doesn't fire — in
-README.md's **"Finish a run in CI"** section. The manual fallback from any
-machine, always, is `dark-factory resume <run_id>`.
+A run can also start from a GitHub issue locally — `dark-factory run
+github:<owner>/<repo>#<n>` — the same source form item 4 above passes to the
+`run` workflow's `source` input. When a run started this way pauses for a
+human, resuming it (locally or via `resume.yml` on a different machine) is
+exactly the flow README.md's **"Finish a run in CI"** section documents in
+full; the manual fallback from any machine, always, is `dark-factory resume
+<run_id>`.
 
 ## Common setup issues
 

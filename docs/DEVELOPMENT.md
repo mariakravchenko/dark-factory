@@ -17,7 +17,7 @@ pulling in the optional extras and the dev dependency group.
 git clone <repository-url>
 cd dark-factory
 
-# 2. Install the full dependency set: runtime + the mcp/webhook extras + dev tools
+# 2. Install the full dependency set: runtime + the mcp extra + dev tools
 #    (ruff, mypy, pytest, testcontainers, polyfactory, time-machine).
 uv sync --all-extras --dev
 
@@ -32,12 +32,11 @@ the committed `uv.lock`, so every contributor and CI resolve to the exact same
 versions. Prefix every command below with `uv run` (or activate `.venv` yourself) —
 there is no global install.
 
-Two of the three optional-dependency extras — `mcp` and `webhook` — are structurally
-isolated from the orchestrator core: `tests/unit/test_no_mcp_import_in_core.py` and
-`tests/unit/test_webhook_import_needs_no_database.py` assert that uninstalling either
-extra still leaves the core importable and functional. `--all-extras` pulls both in
-for local development so the full test suite can run, but neither is required to work
-on the core orchestrator.
+The `mcp` optional-dependency extra is structurally isolated from the orchestrator
+core: `tests/unit/test_no_mcp_import_in_core.py` asserts that uninstalling it still
+leaves the core importable and functional. `--all-extras` pulls it in for local
+development so the full test suite can run, but it is not required to work on the
+core orchestrator.
 
 ## Build / check commands
 
