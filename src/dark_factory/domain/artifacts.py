@@ -47,6 +47,7 @@ __all__ = [
     "ConstraintItem",
     "ConstraintsDocument",
     "ImplementationSummary",
+    "MACHINE_ARTIFACT_MODELS",
     "TestCaseResult",
     "TestReport",
     "Verdict",
@@ -243,3 +244,20 @@ class Verdict(BaseModel):
                 f"criteria/issues"
             )
         return self
+
+
+# filename -> pydantic model, one entry per D-10 machine artifact. Dispatch is
+# always by filename, never by role name; ``requirements.md`` / ``design.md``
+# are absent here and so are carried as unvalidated human documentation
+# (ART-02). This dict lives in the domain layer -- not in
+# ``artifacts/validation.py`` -- so ``workers/cli_runtime.py`` can build
+# prompt text from it (261031-c01) without importing ``artifacts.validation``,
+# whose ``persistence.mutations`` import reaches ``dark_factory.git.worktree``
+# (GIT-02).
+MACHINE_ARTIFACT_MODELS: dict[str, type[BaseModel]] = {
+    "acceptance_criteria.json": AcceptanceCriteriaDocument,
+    "constraints.json": ConstraintsDocument,
+    "implementation_summary.json": ImplementationSummary,
+    "test_report.json": TestReport,
+    "verdict.json": Verdict,
+}

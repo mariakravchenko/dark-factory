@@ -25,34 +25,20 @@ from collections.abc import Sequence
 from pathlib import Path
 from uuid import UUID
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from dark_factory.artifacts import ArtifactContractError, ArtifactSchemaError
 from dark_factory.artifacts.paths import checksum
 from dark_factory.domain.artifacts import (
-    AcceptanceCriteriaDocument,
-    ConstraintsDocument,
-    ImplementationSummary,
-    TestReport,
-    Verdict,
+    MACHINE_ARTIFACT_MODELS,  # re-export: keeps this established import path
+    # alive for tests/unit/test_artifact_models.py (261031-c01) now that the
+    # dict itself lives in domain/artifacts.py.
 )
 from dark_factory.domain.worker import ArtifactRef
 from dark_factory.persistence.mutations import ArtifactReferenceWrite
 from dark_factory.tools.registry import ToolRegistry
 
 __all__ = ["MACHINE_ARTIFACT_MODELS", "collect_role_artifacts"]
-
-# filename -> pydantic model, one entry per D-10 machine artifact. Dispatch is
-# always by filename, never by role name; ``requirements.md`` / ``design.md``
-# are absent here and so are carried as unvalidated human documentation
-# (ART-02).
-MACHINE_ARTIFACT_MODELS: dict[str, type[BaseModel]] = {
-    "acceptance_criteria.json": AcceptanceCriteriaDocument,
-    "constraints.json": ConstraintsDocument,
-    "implementation_summary.json": ImplementationSummary,
-    "test_report.json": TestReport,
-    "verdict.json": Verdict,
-}
 
 
 def collect_role_artifacts(

@@ -1285,6 +1285,58 @@ def test_expected_outputs_prompt_path_is_identical_to_granted_write_glob(
     assert (work_dir / destination) == _run_root_for(tmp_path) / context.artifacts_dir
 
 
+def test_machine_artifact_outputs_carry_their_real_pydantic_schema() -> None:
+    """A declared machine-artifact filename (a key of `MACHINE_ARTIFACT_MODELS`)
+    gets its real `model_json_schema()` rendered into the `## Expected
+    outputs` section; a declared Markdown filename gets none (261031-c01,
+    Phase 10 UAT finding 2: a role with no access to `domain/artifacts.py`
+    invented a plausible-but-wrong JSON shape and produced 31 validation
+    errors)."""
+    import json as _json
+
+    from dark_factory.domain.artifacts import MACHINE_ARTIFACT_MODELS
+    from dark_factory.workers import cli_runtime
+
+    context = _context(
+        role="BA", outputs=["requirements.md", "acceptance_criteria.json"]
+    )
+    prompt = cli_runtime.build_prompt(context)
+
+    expected_schema = _json.dumps(
+        MACHINE_ARTIFACT_MODELS["acceptance_criteria.json"].model_json_schema(),
+        indent=2,
+    )
+    assert expected_schema in prompt
+    assert "AcceptanceCriterion" in expected_schema
+    assert "AcceptanceCriterion" in prompt
+
+    assert "### requirements.md schema" not in prompt
+    assert "### acceptance_criteria.json schema" in prompt
+
+
+def test_output_bullets_remain_parseable_with_schemas_present() -> None:
+    """`tests/support/fake_cli.py`'s `OUTPUT_BULLET_RE` still finds every
+    declared output filename, in declaration order, once schema blocks are
+    appended below the bullet list (261031-c01) -- the bullet line itself is
+    byte-frozen and untouched by this change."""
+    from dark_factory.workers import cli_runtime
+    from tests.support.fake_cli import OUTPUT_BULLET_RE
+
+    context = _context(
+        role="BA", outputs=["requirements.md", "acceptance_criteria.json"]
+    )
+    prompt = cli_runtime.build_prompt(context)
+
+    filenames = [match.group(1) for match in OUTPUT_BULLET_RE.finditer(prompt)]
+    assert filenames == ["requirements.md", "acceptance_criteria.json"]
+
+    design_context = _context(role="ARCHITECTURE", outputs=["design.md"])
+    design_prompt = cli_runtime.build_prompt(design_context)
+    assert "## Expected outputs" in design_prompt
+    assert "- design.md" in design_prompt
+    assert "```json" not in design_prompt
+
+
 # --------------------------------------------------------------------------- #
 # 08-01 Task 3: a real adapter reports the artifacts its CLI actually wrote,
 # through the shared cli_runtime.collect_declared_artifacts helper.

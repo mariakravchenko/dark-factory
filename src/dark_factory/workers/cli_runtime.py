@@ -31,6 +31,13 @@ from uuid import UUID
 from dark_factory.artifacts import ArtifactPathError, resolve_under_run_root
 from dark_factory.artifacts.paths import checksum, run_root
 from dark_factory.config.settings import get_settings
+
+# Imported from the domain layer, NOT from dark_factory.artifacts.validation
+# (261031-c01): validation.py's persistence.mutations import reaches
+# dark_factory.git.worktree (GIT-02), and this module must never import
+# dark_factory.git, even transitively. Do not "simplify" this back to the
+# validation.py import path -- that would reintroduce the forbidden edge.
+from dark_factory.domain.artifacts import MACHINE_ARTIFACT_MODELS
 from dark_factory.domain.worker import ArtifactRef, WorkerResult
 from dark_factory.events.redaction import redact
 
@@ -39,6 +46,7 @@ __all__ = [
     "NEEDS_INPUT_MARKER",
     "NEEDS_INPUT_PROTOCOL",
     "NEEDS_INPUT_RE",
+    "OUTPUT_SCHEMA_PREAMBLE",
     "RESUME_CONTINUATION_PROMPT",
     "attempt_log_paths",
     "build_prompt",
@@ -93,6 +101,17 @@ RESUME_CONTINUATION_PROMPT = (
 # runaway transcript cannot bloat the JSONB `result`/`error` column the
 # orchestrator persists (Task 2).
 MAX_ERROR_EXCERPT = 2000
+
+# 261031-c01 (Phase 10 UAT finding 2): the one-line instruction that precedes
+# a machine artifact's rendered JSON Schema in the `## Expected outputs`
+# section. Names the three failure modes the pydantic model actually
+# enforces -- exact validation, required fields, no extra fields, exact enum
+# spelling -- without elaboration.
+OUTPUT_SCHEMA_PREAMBLE = (
+    "The file content must validate against this JSON Schema exactly: "
+    "every required field present, no fields outside it, every enum value "
+    "spelled exactly as listed."
+)
 
 
 def extract_needs_input(result_text: str) -> str | None:
@@ -154,6 +173,22 @@ def context_prompt_sections(context: object) -> list[str]:
     ``artifacts_dir`` only when ``run_id`` is absent (mirroring
     ``_base_argv``'s own ``if run_id and artifacts_dir`` guard exactly, so
     the two cannot diverge on the degenerate case).
+
+    **Why a machine artifact carries its real pydantic schema (261031-c01):**
+    a role running against an external target repo has no access to Dark
+    Factory's own ``domain/artifacts.py`` source, so a bare filename is not
+    enough information -- Phase 10 UAT (real Claude Code workers against
+    ``mariakravchenko/app-new``) observed a role invent a plausible-but-wrong
+    JSON shape and produce 31 validation errors. The schema text rendered
+    below each declared machine-artifact filename comes from
+    ``MACHINE_ARTIFACT_MODELS`` -- the SAME registry object
+    ``dark_factory.artifacts.validation.collect_role_artifacts`` dereferences
+    for the D-09 gate -- so what the role is told and what the gate enforces
+    cannot diverge. The schema text must stay on lines BELOW the complete
+    bullet list: ``tests/support/fake_cli.py``'s ``OUTPUT_BULLET_RE`` anchors
+    the bullet line's shape with ``$``, so appending anything to a bullet
+    line itself would silently stop the fake CLI from parsing any declared
+    output.
     """
     sections: list[str] = []
 
@@ -205,7 +240,17 @@ def context_prompt_sections(context: object) -> list[str]:
         bullets = "\n".join(
             f"- {filename} (write under {destination})" for filename in outputs
         )
-        sections.append(f"## Expected outputs\n{bullets}")
+        blocks = [f"## Expected outputs\n{bullets}"]
+        for filename in outputs:
+            model = MACHINE_ARTIFACT_MODELS.get(filename)
+            if model is None:
+                continue
+            schema_json = json.dumps(model.model_json_schema(), indent=2)
+            blocks.append(
+                f"### {filename} schema\n{OUTPUT_SCHEMA_PREAMBLE}\n"
+                f"```json\n{schema_json}\n```"
+            )
+        sections.append("\n\n".join(blocks))
 
     return sections
 
