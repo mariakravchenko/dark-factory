@@ -282,6 +282,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The Quality Gate step (inside `dark-factory resume`) re-runs this
+      # repository's own `.dark-factory.yaml` `quality_gate.commands` --
+      # the scaffold's generated default pair invokes `uv run`. A
+      # GitHub-hosted runner image ships no uv, so without this step the
+      # gate fails before executing a single check. `enable-cache` is
+      # omitted: its cache key globs for a lockfile a target repository may
+      # not have. If your gate commands do not invoke uv, delete this step.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Install dark-factory
         run: pip install "{{INSTALL_SOURCE}}"
 
@@ -330,6 +340,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # The Quality Gate step (inside `dark-factory run`) re-runs this
+      # repository's own `.dark-factory.yaml` `quality_gate.commands` --
+      # the scaffold's generated default pair invokes `uv run`. A
+      # GitHub-hosted runner image ships no uv, so without this step the
+      # gate fails before executing a single check. `enable-cache` is
+      # omitted: its cache key globs for a lockfile a target repository may
+      # not have. If your gate commands do not invoke uv, delete this step.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Install dark-factory
         run: pip install "{{INSTALL_SOURCE}}"
