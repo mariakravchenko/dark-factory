@@ -64,7 +64,6 @@ SessionFactory = Callable[[], Session]
 _FAKE_DB_URL = "postgresql+psycopg://df_fake_user:df_fake_pw_0123456789@fake.invalid:5432/df_fake_db"
 _FAKE_DB_URL_DIRECT = "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
 _FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
-_FAKE_WEBHOOK_SECRET = "whsec_FAKEfakeFAKEfake0000000000000000"
 
 # The exact literal content `tests/support/fake_artifacts.py`'s
 # `LazyFourRoleWorker` writes for QA's `verdict.json` -- sourced from that
@@ -164,7 +163,6 @@ def _fake_secrets_patched() -> Iterator[None]:
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
         github_token=_FAKE_GITHUB_TOKEN,
-        github_webhook_secret=_FAKE_WEBHOOK_SECRET,
     )
     with patch.object(mutations, "get_settings", lambda: fake_settings):
         yield

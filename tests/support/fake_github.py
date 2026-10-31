@@ -131,21 +131,3 @@ class FakeGitHubClient:
         )
         self._maybe_raise("find_pull_request_for_branch")
         return self._existing_pull_request
-
-    def dispatch_workflow(
-        self, owner: str, repo: str, *, workflow_id: str, ref: str, run_id: str
-    ) -> None:
-        self.calls.append(
-            (
-                "dispatch_workflow",
-                {
-                    "owner": owner,
-                    "repo": repo,
-                    "workflow_id": workflow_id,
-                    "ref": ref,
-                    "run_id": run_id,
-                },
-            )
-        )
-        self._maybe_raise("dispatch_workflow")
-        return None

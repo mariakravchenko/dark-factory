@@ -77,20 +77,20 @@ _REPOSITORY_BLOCK = "repository:\n  base_branch: main\n"
 
 # The exact-value substitution path (D-18): this literal MUST equal
 # tests/conftest.py's ``fake_settings`` fixture's configured
-# ``github_webhook_secret`` -- a sanity assertion below pins that equality.
-# ``whsec_``-prefixed text matches none of the compiled D-15 patterns, so
+# ``anthropic_api_key`` -- a sanity assertion below pins that equality.
+# ``sk-ant-``-prefixed text matches none of the compiled D-15 patterns, so
 # redact() can only catch it here via known-value substitution, never by shape.
-_CONFIGURED_WEBHOOK_SECRET = "whsec_FAKEfakeFAKEfake0000000000000000"
+_CONFIGURED_KNOWN_VALUE_SECRET = "sk-ant-FAKEfakeFAKEfake0000000000000000"
 
 # The compiled-pattern-table path (D-15): a ``ghp_``-shaped literal configured
 # in no Settings field at all -- redact() can only catch this one by shape,
 # never by known-value lookup.
 _PATTERN_ONLY_TOKEN = "ghp_" + "PLANTEDtoken".ljust(40, "0")
 
-_NON_SECRET_WORDING = "Should the webhook secret be rotated, or the deploy token"
+_NON_SECRET_WORDING = "Should the worker credential be rotated, or the deploy token"
 
 _QUESTIONS = [
-    f"{_NON_SECRET_WORDING} {_CONFIGURED_WEBHOOK_SECRET} / {_PATTERN_ONLY_TOKEN}?",
+    f"{_NON_SECRET_WORDING} {_CONFIGURED_KNOWN_VALUE_SECRET} / {_PATTERN_ONLY_TOKEN}?",
     "Either way, please decide before the next release window.",
 ]
 
@@ -232,10 +232,10 @@ def test_the_posted_comment_body_is_scrubbed_and_matches_the_persisted_question(
     # configured value, or the exact-value-substitution assertion below would
     # prove nothing (it would only ever be caught by the pattern table, which
     # is not what this half of the test claims to prove).
-    assert fake_settings.github_webhook_secret is not None
+    assert fake_settings.anthropic_api_key is not None
     assert (
-        fake_settings.github_webhook_secret.get_secret_value()
-        == _CONFIGURED_WEBHOOK_SECRET
+        fake_settings.anthropic_api_key.get_secret_value()
+        == _CONFIGURED_KNOWN_VALUE_SECRET
     )
 
     root = _write_github_ba_tree(config_root_factory)
@@ -265,7 +265,7 @@ def test_the_posted_comment_body_is_scrubbed_and_matches_the_persisted_question(
     body = create_calls[0][1]["body"]
 
     # ABSENCE: neither planted literal reaches the recorded comment body.
-    assert _CONFIGURED_WEBHOOK_SECRET not in body
+    assert _CONFIGURED_KNOWN_VALUE_SECRET not in body
     assert _PATTERN_ONLY_TOKEN not in body
     # PRESENCE: the redaction marker really fired -- a body that merely lost
     # the secret by accident (e.g. an empty question list) must not pass.
@@ -275,7 +275,7 @@ def test_the_posted_comment_body_is_scrubbed_and_matches_the_persisted_question(
 
     interaction = _the_interaction(engine, run_id)
     assert interaction is not None
-    assert _CONFIGURED_WEBHOOK_SECRET not in interaction.question
+    assert _CONFIGURED_KNOWN_VALUE_SECRET not in interaction.question
     assert _PATTERN_ONLY_TOKEN not in interaction.question
     assert "[redacted:" in interaction.question
 
@@ -351,7 +351,7 @@ def test_a_crashed_attempt_resumes_without_a_second_post_or_a_text_mismatch(
         f"before the simulated crash; calls={shared_client.calls}"
     )
     posted_body = first_attempt_creates[0][1]["body"]
-    assert _CONFIGURED_WEBHOOK_SECRET not in posted_body
+    assert _CONFIGURED_KNOWN_VALUE_SECRET not in posted_body
     assert _PATTERN_ONLY_TOKEN not in posted_body
     assert "[redacted:" in posted_body
 
@@ -414,7 +414,7 @@ def test_the_planted_literals_never_reach_an_event_payload_or_role_execution_col
     assert final is RunStatus.WAITING_HUMAN
 
     blob = _role_execution_and_event_blob(engine, run_id)
-    assert _CONFIGURED_WEBHOOK_SECRET not in blob
+    assert _CONFIGURED_KNOWN_VALUE_SECRET not in blob
     assert _PATTERN_ONLY_TOKEN not in blob
 
 
@@ -426,5 +426,5 @@ def test_build_clarification_comment_still_contains_both_planted_literals() -> N
     the ABSENCE assertions in the tests above would be meaningless if
     `build_clarification_comment` itself happened to already strip them."""
     raw = build_clarification_comment(_QUESTIONS)
-    assert _CONFIGURED_WEBHOOK_SECRET in raw
+    assert _CONFIGURED_KNOWN_VALUE_SECRET in raw
     assert _PATTERN_ONLY_TOKEN in raw

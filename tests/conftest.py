@@ -441,13 +441,15 @@ _FAKE_DB_URL = (
 )
 _FAKE_DB_URL_DIRECT = "postgresql://df_fake_user:df_fake_pw_0123456789@fake-direct.invalid:5432/df_fake_db"
 _FAKE_GITHUB_TOKEN = "ghp_FAKEfakeFAKEfake0000000000000000000000"
-# Phase 10 (plan 10-04, GIT-06): a fake, greppable webhook-signing secret --
-# used by tests/unit/test_webhook_signature.py and
-# tests/db/test_webhook_resolves_answer.py to sign fixture deliveries via the
-# exact same `githubkit.webhooks.sign`/`verify` construction the production
-# receiver uses. Eight-plus characters, matching `known_secret_values()`'s
-# own minimum-length floor for redaction coverage.
-_FAKE_WEBHOOK_SECRET = "whsec_FAKEfakeFAKEfake0000000000000000"
+# A fake, greppable, shape-unmatched known value for redaction coverage --
+# used by tests/db/test_clarification_comment_is_redacted.py to prove
+# `redact()`'s known-value-substitution mode independently of its pattern
+# table. Eight-plus characters, matching `known_secret_values()`'s own
+# minimum-length floor, and confirmed against `events/redaction.py`'s
+# `_PATTERNS` to match none of them (postgres URL, `github_pat_`, `gh[porsu]_`,
+# bearer-auth, 40/64-char hex) -- a value that matched a pattern would let
+# the two-mode proof pass by shape instead of by known-value substitution.
+_FAKE_ANTHROPIC_KEY = "sk-ant-FAKEfakeFAKEfake0000000000000000"
 
 
 @pytest.fixture
@@ -458,7 +460,7 @@ def fake_settings() -> Settings:
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
         github_token=_FAKE_GITHUB_TOKEN,
-        github_webhook_secret=_FAKE_WEBHOOK_SECRET,
+        anthropic_api_key=_FAKE_ANTHROPIC_KEY,
     )
 
 
