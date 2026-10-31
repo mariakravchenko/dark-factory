@@ -1,7 +1,7 @@
 """GIT-03: ``githubkit`` is reachable only from a small, explicitly named and
 reasoned set of modules under ``src/dark_factory/`` -- turning plan 10-01's
-and plan 10-04's module-docstring promises into a mechanical, self-sanity-
-tested guard (Phase 10, plan 10-05, T-10-26/T-10-29/T-10-30).
+module-docstring promise into a mechanical, self-sanity-tested guard
+(Phase 10, plan 10-05, T-10-26/T-10-29/T-10-30).
 
 Mirrors ``tests/unit/test_git_ownership_boundary.py``'s AST-walk idiom
 exactly: a module-level ``_ALLOWED`` set, a ``_modules()`` generator skipping
@@ -10,34 +10,11 @@ so a failure names the offending file and line, and a companion sanity test
 proving the guard would trip on a synthetic violation -- a guard that cannot
 detect a violation proves nothing (T-10-29).
 
-**The allowed set has three entries, not the two this plan's own prose
-anticipated.** Reading the actual Phase 10 source (rather than only the
-plan's own read_first list, which named only ``github/client.py`` and
-``webhook/app.py``) surfaces a third genuine ``githubkit`` import:
-``webhook/resolve.py`` imports ``githubkit.utils.UNSET``, the sentinel
-githubkit's own typed webhook models use to distinguish "field absent from
-the JSON payload" from "field explicitly null". Each of the three is named
-and reasoned below; none constructs a ``GitHub`` client, unwraps a token or
-makes an HTTP request outside ``github/client.py`` itself -- the actual
-threat this guard defends against (T-10-26: bypassing the wrapper's
-credential unwrap, error redaction and typed return models):
+The allowed set has one entry:
 
 * ``src/dark_factory/github/client.py`` -- the one wrapper (D-03). Owns
   every outbound GitHub REST call, the single ``SecretStr`` token unwrap
   frame, and redact-before-raise error handling.
-* ``src/dark_factory/webhook/app.py`` -- imports ``githubkit.webhooks.verify``
-  and ``parse``: the inbound HMAC-signature check and typed-event parse for
-  a delivery GitHub already sent. Takes no token, makes no HTTP request, and
-  routing it through the REST wrapper would give that wrapper a dependency
-  on the webhook package's own concerns for no benefit (plan 10-05's own
-  "Preferred" option).
-* ``src/dark_factory/webhook/resolve.py`` -- imports ``githubkit.utils.UNSET``.
-  ``resolve_issue_comment`` is, by plan 10-04's own design, a pure function
-  that receives an already-parsed, githubkit-typed ``IssueCommentEvent`` and
-  reads its fields directly (this is the entire point of keeping the
-  resolution decision testable without a server or a socket) -- interpreting
-  an already-verified inbound payload's own typed sentinel is not an
-  outbound GitHub API call, carries no credential, and needs no redaction.
 
 Reading the AST rather than the raw text is load-bearing here exactly as it
 is in the git precedent: ``github/client.py``'s own module docstring names
@@ -58,8 +35,6 @@ pytestmark = pytest.mark.unit
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "dark_factory"
 _ALLOWED = {
     _SRC_ROOT / "github" / "client.py",
-    _SRC_ROOT / "webhook" / "app.py",
-    _SRC_ROOT / "webhook" / "resolve.py",
 }
 
 

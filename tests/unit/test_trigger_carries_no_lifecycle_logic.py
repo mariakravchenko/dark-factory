@@ -1,5 +1,5 @@
-"""TRIG-01: there is one orchestration implementation; CLI, webhook and CI are
-only triggers, and a trigger carries zero lifecycle logic.
+"""TRIG-01: there is one orchestration implementation; CLI and CI are only
+triggers, and a trigger carries zero lifecycle logic.
 
 ROADMAP.md's Phase 11 invariant, quoted verbatim: "triggers carry zero
 lifecycle logic; the run's working state is re-materialized from Neon plus
@@ -11,13 +11,6 @@ tree mention ``advance()`` in prose only -- ``persistence/engine.py``,
 ``workers/*.py`` modules -- and must not trip it. A docstring or comment is
 never an ``ast.FunctionDef``, ``ast.Call`` or ``ast.Import``/``ast.ImportFrom``
 node, so this walk is structurally blind to prose regardless of wording.
-
-Restates ``tests/unit/test_webhook_process_boundary.py``'s D-02 invariant
-from TRIG-01's own angle in its third test below (the *call-site* allowlist,
-not the *import* allowlist) -- that module remains the primary guard for the
-webhook package's import boundary; this one only adds the "and it never
-calls the two names that actually run the pipeline" restatement TRIG-01
-itself cares about.
 
 **Deviation, documented (11-03-SUMMARY.md).** The plan authoring this test
 stated ``_PERMITTED_CALL_SITES`` should contain two entries,
@@ -49,7 +42,6 @@ import pytest
 pytestmark = pytest.mark.unit
 
 _SRC_ROOT = Path(__file__).resolve().parents[2] / "src" / "dark_factory"
-_WEBHOOK_ROOT = _SRC_ROOT / "webhook"
 
 _LIFECYCLE_ENTRY_POINTS = frozenset({"advance", "drive"})
 """TRIG-01's orchestrator entry points -- the only two names a trigger may
@@ -68,10 +60,8 @@ exactly once. ``advance`` itself has zero call sites anywhere in
 single-step trigger, but no shipped trigger calls it directly); this
 constant tracks that fact and must be updated deliberately -- never
 silently -- the day a second trigger legitimately calls either name. The
-webhook receiver is a trigger too, but it deliberately calls neither
-(T-10-21): it records an answer and asks GitHub to start a process that
-will call them. The CI runner is a trigger too, and it reaches ``drive``
-through this same ``cli.py`` -- there is no CI-specific module."""
+CI runner is a trigger too, and it reaches ``drive`` through this same
+``cli.py`` -- there is no CI-specific module."""
 
 
 def _relative(path: Path) -> str:
@@ -157,25 +147,4 @@ def test_only_named_triggers_call_the_lifecycle_entry_points() -> None:
     assert calling_modules == _PERMITTED_CALL_SITES, (
         "advance/drive called from outside the named trigger allowlist "
         f"{sorted(_PERMITTED_CALL_SITES)}: {sorted(calling_modules)}"
-    )
-
-
-def test_the_webhook_receiver_calls_neither() -> None:
-    """Restates ``tests/unit/test_webhook_process_boundary.py``'s D-02
-    invariant from TRIG-01's own angle (the call-site allowlist, not the
-    import-allowlist that module's own guard already covers) -- see that
-    module for the primary guard; this is not a duplicate."""
-    offending_calls: list[str] = []
-    offending_imports: list[str] = []
-    for path in sorted(_WEBHOOK_ROOT.rglob("*.py")):
-        tree = _parse(path)
-        rel = _relative(path)
-        if _calls(tree):
-            offending_calls.append(rel)
-        if _imports(tree):
-            offending_imports.append(rel)
-
-    assert not offending_calls, f"webhook module(s) call advance/drive: {offending_calls}"
-    assert not offending_imports, (
-        f"webhook module(s) import advance/drive: {offending_imports}"
     )
