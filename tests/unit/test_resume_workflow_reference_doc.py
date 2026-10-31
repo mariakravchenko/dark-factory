@@ -159,8 +159,8 @@ def test_the_reference_workflow_declares_a_run_id_input() -> None:
     inputs = dispatch.get("inputs") or {}
     assert "run_id" in inputs, (
         "expected a run_id input under workflow_dispatch.inputs -- this is "
-        "the exact name plan 11-01's dispatch_workflow sends, found: "
-        f"{list(inputs)!r}"
+        "the exact name the documented 'gh workflow run resume.yml "
+        f"-f run_id=<id>' command passes, found: {list(inputs)!r}"
     )
     run_id_input = inputs["run_id"]
     assert run_id_input.get("required") is True, (
