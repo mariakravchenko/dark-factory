@@ -76,13 +76,12 @@ def submit_answer(
     ``apply_transition``. Returns the new status (the role status).
 
     ``github_comment_id`` (Phase 10, plan 10-04, D-05) is the id of the
-    inbound GitHub comment that answered the question, threaded straight into
-    the ``HumanInteractionWrite`` this function already builds -- the
-    webhook receiver's durable, business-level dedup key. Every other caller
-    (the CLI's ``resume --answer``) omits it, leaving it ``None`` and
-    changing nothing about the existing precondition checks, lease, re-read
-    or ``expected_status`` guard: the webhook path is a *caller* of this
-    function, not a second mutation path (D-02).
+    GitHub comment that answered the question, threaded straight into the
+    ``HumanInteractionWrite`` this function already builds -- a durable,
+    business-level dedup key (Phase 10, D-05). Today's only caller (the
+    CLI's ``resume --answer``) omits it, leaving it ``None`` and changing
+    nothing about the existing precondition checks, lease, re-read or
+    ``expected_status`` guard.
 
     Raises :class:`RunNotFoundError` for an unknown id,
     :class:`NotWaitingForHuman` when the run is not paused,

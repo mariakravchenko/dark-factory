@@ -50,14 +50,11 @@ from sqlalchemy.orm import Session
 from dark_factory.domain.interaction import InteractionStatus
 from dark_factory.domain.status import RunStatus
 from dark_factory.domain.task import NormalizedTask
-from dark_factory.input.resolver import SourceKind
 from dark_factory.persistence.models import HumanInteraction, RoleExecution, Run
 
 __all__ = [
-    "GitHubPendingInteraction",
     "LatestExecution",
     "RunState",
-    "github_pending_interaction",
     "load_run_state",
     "pending_question",
 ]
@@ -265,71 +262,4 @@ def pending_question(session: Session, run_id: UUID) -> str | None:
             HumanInteraction.run_id == run_id,
             HumanInteraction.status == InteractionStatus.WAITING,
         )
-    )
-
-
-class GitHubPendingInteraction(BaseModel):
-    """The narrow shape :func:`github_pending_interaction` returns -- just
-    enough for the webhook resolver to act, never an ORM instance."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    run_id: UUID
-    interaction_id: UUID
-    role_execution_id: UUID
-    clarification_comment_id: int | None
-
-
-def github_pending_interaction(
-    session: Session, *, owner: str, repo: str, issue_number: int
-) -> GitHubPendingInteraction | None:
-    """The run-and-interaction lookup a webhook delivery resolves against
-    (Phase 10, GIT-06).
-
-    Returns the run id, the interaction id, the interaction's owning
-    role-execution id and its ``clarification_comment_id`` for a run whose
-    ``normalized_task.metadata`` matches ``owner``/``repo``/``issue_number``
-    together (never issue number alone -- two repositories can reuse the same
-    issue number) and whose status is ``WAITING_HUMAN`` with a ``WAITING``
-    interaction; ``None`` when any of those does not hold, including a
-    matching issue whose run has already moved on (``COMPLETED``, ``FAILED``,
-    mid-role, or already resumed).
-
-    ``uq_one_waiting_interaction_per_run`` guarantees at most one ``WAITING``
-    interaction row per run, exactly as ``pending_question`` relies on above;
-    combined with the ``status == WAITING_HUMAN`` filter, at most one row
-    should ever match this query in ordinary operation.
-
-    The three identity fields are read via SQLAlchemy 2.0's JSONB accessor
-    operators (``Run.normalized_task["metadata"]["owner"].as_string()``,
-    compiling to Postgres's ``->>``), never by string-matching
-    ``Run.source_ref`` -- the plan's own explicit instruction, so a future
-    ``source_ref`` format change cannot silently break this lookup.
-    """
-    row = session.execute(
-        select(
-            Run.id,
-            HumanInteraction.id,
-            HumanInteraction.role_execution_id,
-            HumanInteraction.clarification_comment_id,
-        )
-        .select_from(Run)
-        .join(HumanInteraction, HumanInteraction.run_id == Run.id)
-        .where(
-            Run.source_kind == SourceKind.GITHUB.value,
-            Run.status == RunStatus.WAITING_HUMAN,
-            HumanInteraction.status == InteractionStatus.WAITING,
-            Run.normalized_task["metadata"]["owner"].as_string() == owner,
-            Run.normalized_task["metadata"]["repo"].as_string() == repo,
-            Run.normalized_task["metadata"]["issue_number"].as_integer()
-            == issue_number,
-        )
-    ).first()
-    if row is None:
-        return None
-    return GitHubPendingInteraction(
-        run_id=row[0],
-        interaction_id=row[1],
-        role_execution_id=row[2],
-        clarification_comment_id=row[3],
     )
