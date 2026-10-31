@@ -240,17 +240,17 @@ def context_prompt_sections(context: object) -> list[str]:
         bullets = "\n".join(
             f"- {filename} (write under {destination})" for filename in outputs
         )
-        blocks = [f"## Expected outputs\n{bullets}"]
+        output_blocks = [f"## Expected outputs\n{bullets}"]
         for filename in outputs:
             model = MACHINE_ARTIFACT_MODELS.get(filename)
             if model is None:
                 continue
             schema_json = json.dumps(model.model_json_schema(), indent=2)
-            blocks.append(
+            output_blocks.append(
                 f"### {filename} schema\n{OUTPUT_SCHEMA_PREAMBLE}\n"
                 f"```json\n{schema_json}\n```"
             )
-        sections.append("\n\n".join(blocks))
+        sections.append("\n\n".join(output_blocks))
 
     return sections
 

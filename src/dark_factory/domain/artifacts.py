@@ -41,13 +41,13 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from dark_factory.domain.status import IssueSeverity, VerdictStatus
 
 __all__ = [
+    "MACHINE_ARTIFACT_MODELS",
     "AcceptanceCriteriaDocument",
     "AcceptanceCriterion",
     "ChangedFile",
     "ConstraintItem",
     "ConstraintsDocument",
     "ImplementationSummary",
-    "MACHINE_ARTIFACT_MODELS",
     "TestCaseResult",
     "TestReport",
     "Verdict",
