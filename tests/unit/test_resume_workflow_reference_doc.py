@@ -29,7 +29,6 @@ pytestmark = pytest.mark.unit
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _README_PATH = _REPO_ROOT / "README.md"
-_ENV_EXAMPLE_PATH = _REPO_ROOT / ".env.example"
 
 # These two sentinel strings and the README's own local -> CI handoff section
 # (Task 1 of this plan) must agree -- either file changing alone, without the
@@ -50,8 +49,6 @@ _CI_HANDOFF_SECTION_NEXT_HEADING = "## Configuration reference"
 # substring for test_the_install_guidance_precedes_the_resume_step below --
 # see that test's docstring for the full reasoning.
 _INSTALL_GUIDANCE_SUBSTRING = "Install the worker runtime"
-
-_DISPATCH_TOKEN_NAME = "DISPATCH_GITHUB_TOKEN"
 
 # The exact permissions mapping the reference workflow's job token must
 # declare, in this order. YAML parses the hyphenated key `pull-requests` as
@@ -171,27 +168,56 @@ def test_the_reference_workflow_declares_a_run_id_input() -> None:
     )
 
 
+def test_the_reference_workflow_declares_an_optional_answer_input() -> None:
+    workflow = yaml.safe_load(_extract_reference_workflow_yaml())
+    trigger = _trigger_block(workflow)
+
+    dispatch = trigger["workflow_dispatch"] or {}
+    inputs = dispatch.get("inputs") or {}
+    assert "answer" in inputs, (
+        "expected an answer input under workflow_dispatch.inputs -- the "
+        "documented 'gh workflow run resume.yml -f run_id=<id> -f "
+        f"answer=<text>' command needs it declared, found: {list(inputs)!r}"
+    )
+    answer_input = inputs["answer"]
+    assert answer_input.get("required") is False, (
+        f"expected the answer input to be marked optional, got: {answer_input!r}"
+    )
+    assert answer_input.get("type") == "string", (
+        f"expected the answer input's type to be 'string', got: {answer_input!r}"
+    )
+
+
 def test_the_reference_workflow_resumes_exactly_once() -> None:
+    """D-03: the reference workflow binds ``inputs.run_id`` through the
+    resume step's own ``env:`` block (the standard hardening against
+    expression injection from a ``workflow_dispatch`` input) rather than
+    interpolating ``${{ inputs.run_id }}`` directly into the ``run:`` text --
+    so this guard reads the step's combined ``run`` + ``env`` text, not
+    ``run`` alone, or it would reject the hardened shape it is meant to
+    accept. The "exactly one step" count and the "not a literal id" intent
+    are both unchanged."""
     workflow = yaml.safe_load(_extract_reference_workflow_yaml())
     jobs = workflow.get("jobs") or {}
     assert jobs, "expected at least one job in the reference workflow"
 
-    resume_runs: list[str] = []
+    resume_steps: list[dict[str, Any]] = []
     for job in jobs.values():
         for step in job.get("steps") or []:
             run = step.get("run")
             if isinstance(run, str) and "dark-factory resume" in run:
-                resume_runs.append(run)
+                resume_steps.append(step)
 
-    assert len(resume_runs) == 1, (
+    assert len(resume_steps) == 1, (
         "expected exactly one step invoking 'dark-factory resume', found "
-        f"{len(resume_runs)}: {resume_runs!r}"
+        f"{len(resume_steps)}: {resume_steps!r}"
     )
-    (resume_run,) = resume_runs
-    assert "inputs.run_id" in resume_run, (
-        "expected the resume step's run value to reference the workflow "
-        "input expression (the 'inputs.' or 'github.event.inputs.' form), "
-        f"not a literal id, got: {resume_run!r}"
+    (resume_step,) = resume_steps
+    combined_text = str(resume_step.get("run", "")) + str(resume_step.get("env", {}))
+    assert "inputs.run_id" in combined_text, (
+        "expected the resume step's run text or env block to reference the "
+        "workflow input expression (the 'inputs.' or 'github.event.inputs.' "
+        f"form), not a literal id, got: {resume_step!r}"
     )
 
 
@@ -219,18 +245,6 @@ def test_the_reference_workflow_carries_no_run_state_branch() -> None:
     )
 
 
-def test_the_dispatch_credential_is_named_consistently() -> None:
-    readme_text = _README_PATH.read_text(encoding="utf-8")
-    env_example_text = _ENV_EXAMPLE_PATH.read_text(encoding="utf-8")
-
-    assert _DISPATCH_TOKEN_NAME in readme_text, (
-        f"expected {_DISPATCH_TOKEN_NAME!r} to appear in README.md"
-    )
-    assert _DISPATCH_TOKEN_NAME in env_example_text, (
-        f"expected {_DISPATCH_TOKEN_NAME!r} to appear in .env.example"
-    )
-
-
 def test_the_reference_workflow_grants_exactly_the_needed_permissions() -> None:
     """The job's token authority is bounded by exactly this `permissions:`
     mapping -- asserted as a whole-mapping equality, not a per-key
@@ -244,10 +258,11 @@ def test_the_reference_workflow_grants_exactly_the_needed_permissions() -> None:
     the job's own REST calls -- `contents` for the post-role push, `issues`
     for the clarification comment posted when a role reaches
     ROLE_NEEDS_INPUT, `pull-requests` for the PR opened after QA PASS plus
-    Quality Gate PASS. The `actions` scope is absent by design: the only
-    actions-scoped call is dispatching this very workflow, which runs from
-    the webhook receiver on the separate `DISPATCH_GITHUB_TOKEN` documented
-    under "The dispatch credential", never from inside this job.
+    Quality Gate PASS. The `actions` scope is absent by design: nothing in
+    Dark Factory dispatches a workflow at all -- the dispatch is a human
+    action (`gh workflow run resume.yml -f run_id=<id> -f answer=<text>`)
+    outside any job's token, not a call this or any other job's credential
+    needs to cover.
     """
     workflow = yaml.safe_load(_extract_reference_workflow_yaml())
     observed = workflow.get("permissions")

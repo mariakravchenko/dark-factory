@@ -263,6 +263,10 @@ name: resume
         description: "The Dark Factory run id to resume"
         required: true
         type: string
+      answer:
+        description: "Answer to the run's open human question (omit to just re-drive)"
+        required: false
+        type: string
 
 # contents: push each role's work back to origin. issues: post the
 # clarification comment when a run pauses WAITING_HUMAN. pull-requests:
@@ -304,8 +308,15 @@ jobs:
       #   run: <install your worker runtime's CLI here, per its own docs>
 
       - name: Resume the run
-        run: dark-factory resume "${{ inputs.run_id }}"
+        run: |
+          if [ -n "$RUN_ANSWER" ]; then
+            dark-factory resume "$RUN_ID" --answer "$RUN_ANSWER"
+          else
+            dark-factory resume "$RUN_ID"
+          fi
         env:
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ANSWER: ${{ inputs.answer }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
