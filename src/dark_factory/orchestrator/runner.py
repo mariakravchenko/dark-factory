@@ -171,7 +171,7 @@ TransitionCallback = Callable[[RunStatus, RunStatus], None]
 # second one. Threaded through exactly like ``tool_registry`` /
 # ``action_registry`` are, and called lazily -- only on the branch that
 # actually needs a client -- so a run that publishes nothing and asks nothing
-# never constructs one and works with ``github_token`` unset.
+# never constructs one and works with ``dark_factory_github_token`` unset.
 GitHubClientFactory = Callable[[], GitHubClient]
 
 
@@ -974,7 +974,7 @@ def _run_current_role(
     calls :func:`~dark_factory.orchestrator.publish.run_publish_step`.
     ``github_client_factory`` is called lazily -- only when ``create_pr`` is
     true -- so a run that publishes nothing never constructs a client and
-    never needs ``github_token`` configured. A publish failure sets
+    never needs ``dark_factory_github_token`` configured. A publish failure sets
     ``signal = Signal.ROLE_FAILED`` and folds the redacted error into
     ``outcome``, in the same shape the ``GitError`` catch below already uses,
     so a run whose PR was never created does not reach ``COMPLETED`` (T-10-32).
@@ -1371,8 +1371,8 @@ def _run_current_role(
                                 )
                                 # A construction failure (most commonly
                                 # MissingGitHubCredentialError -- no
-                                # `github_token` configured for a repository
-                                # that publishes) is folded into the same
+                                # `dark_factory_github_token` configured for a
+                                # repository that publishes) is folded into the same
                                 # PublishResult.error shape run_publish_step
                                 # itself returns for a create_pull_request
                                 # failure, rather than propagating uncaught.
@@ -1403,8 +1403,9 @@ def _run_current_role(
                                             gate_settings.known_secret_values()
                                         ),
                                         push_token=(
-                                            gate_settings.github_token.get_secret_value()
-                                            if gate_settings.github_token is not None
+                                            gate_settings.dark_factory_github_token.get_secret_value()
+                                            if gate_settings.dark_factory_github_token
+                                            is not None
                                             else None
                                         ),
                                     )
@@ -1475,8 +1476,8 @@ def _run_current_role(
                 if artifact_sha is not None:
                     settings = get_settings()
                     push_token = (
-                        settings.github_token.get_secret_value()
-                        if settings.github_token is not None
+                        settings.dark_factory_github_token.get_secret_value()
+                        if settings.dark_factory_github_token is not None
                         else None
                     )
                     push_working_branch(

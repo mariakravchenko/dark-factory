@@ -107,7 +107,7 @@ def test_pattern_shaped_secret_in_log_event_is_redacted(
 
     monkeypatch.setenv("DATABASE_URL", FAKE_LIVE_DB_URL)
     monkeypatch.setenv("DATABASE_URL_DIRECT", FAKE_LIVE_DB_URL)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("DARK_FACTORY_GITHUB_TOKEN", raising=False)
 
     import structlog
 
@@ -151,7 +151,7 @@ def test_pattern_shaped_database_url_from_env_never_reaches_the_sink(
 
     monkeypatch.setenv("DATABASE_URL", FAKE_LIVE_DB_URL)
     monkeypatch.setenv("DATABASE_URL_DIRECT", FAKE_LIVE_DB_URL)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("DARK_FACTORY_GITHUB_TOKEN", raising=False)
 
     import structlog
 
@@ -199,7 +199,7 @@ def test_known_secret_value_no_pattern_can_rescue_never_reaches_the_sink(
 
     monkeypatch.setenv("DATABASE_URL", FAKE_OPAQUE_DB_URL)
     monkeypatch.delenv("DATABASE_URL_DIRECT", raising=False)
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("DARK_FACTORY_GITHUB_TOKEN", raising=False)
 
     import structlog
 

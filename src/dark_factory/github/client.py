@@ -1,10 +1,10 @@
 """The one ``githubkit`` wrapper (D-03).
 
 This is the only module in ``dark_factory`` that constructs a ``githubkit``
-client. ``Settings.github_token`` is the only credential that ever reaches
-it: the token is unwrapped from ``SecretStr`` at the single construction
-frame (:meth:`GitHubClient.from_settings`) and never placed in an exception
-message, log field or event payload. Every error message this module
+client. ``Settings.dark_factory_github_token`` is the only credential that
+ever reaches it: the token is unwrapped from ``SecretStr`` at the single
+construction frame (:meth:`GitHubClient.from_settings`) and never placed in
+an exception message, log field or event payload. Every error message this module
 raises passes through :func:`dark_factory.events.redaction.redact` before
 it is raised -- the same defense-in-depth
 :func:`~dark_factory.git.diff.push_working_branch` already applies,
@@ -133,7 +133,7 @@ class GitHubClient:
         self._known_secrets = (
             known_secrets
             if known_secrets is not None
-            else ({token: "github_token"} if len(token) >= 8 else {})
+            else ({token: "dark_factory_github_token"} if len(token) >= 8 else {})
         )
         self._client = GitHub(token, timeout=float(timeout))
         # A plain instance attribute, not a module-level cache (Phase 10,
@@ -144,14 +144,15 @@ class GitHubClient:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> GitHubClient:
-        """Build a client from ``Settings.github_token`` -- the single
-        frame where the token is unwrapped from ``SecretStr``."""
-        if settings.github_token is None:
+        """Build a client from ``Settings.dark_factory_github_token`` -- the
+        single frame where the token is unwrapped from ``SecretStr``."""
+        if settings.dark_factory_github_token is None:
             raise MissingGitHubCredentialError(
-                "GITHUB_TOKEN is not configured (Settings.github_token is None)"
+                "DARK_FACTORY_GITHUB_TOKEN is not configured "
+                "(Settings.dark_factory_github_token is None)"
             )
         return cls(
-            token=settings.github_token.get_secret_value(),
+            token=settings.dark_factory_github_token.get_secret_value(),
             known_secrets=settings.known_secret_values(),
         )
 

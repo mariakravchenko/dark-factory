@@ -22,7 +22,7 @@ Error hierarchy:
   headers.
 * :class:`MissingGitHubCredentialError` -- raised by
   :meth:`~dark_factory.github.client.GitHubClient.from_settings` when
-  ``Settings.github_token`` is ``None`` at the point of use, mirroring
+  ``Settings.dark_factory_github_token`` is ``None`` at the point of use, mirroring
   ``anthropic_api_key``'s absence-as-typed-error precedent documented in
   ``config/settings.py``.
 
@@ -67,7 +67,8 @@ class GitHubApiError(GitHubError):
 
 
 class MissingGitHubCredentialError(GitHubError):
-    """Raised when ``Settings.github_token`` is ``None`` at the point of use."""
+    """Raised when ``Settings.dark_factory_github_token`` is ``None`` at the
+    point of use."""
 
 
 # Import the submodule after the error hierarchy is declared, so its own

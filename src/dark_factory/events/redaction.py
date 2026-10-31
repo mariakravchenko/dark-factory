@@ -26,6 +26,15 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 # --- Sensitivity vocabulary (D-15 list) --------------------------------------
+#
+# Both `dark_factory_github_token` and `github_token` are carried here
+# deliberately -- this is an ADD, not a replace. `dark_factory_github_token`
+# is this project's own Settings field name (config/settings.py); `github_token`
+# is retained because it is still the spelling third-party workflow text (a
+# target repo's own CI config, echoed back into a WorkerResult) legitimately
+# uses. Dropping the old entry would silently stop redacting that third-party
+# text; dropping the new entry would leave the renamed credential's
+# key-name/key=value redaction paths uncovered.
 
 _SENSITIVE_KEYS: frozenset[str] = frozenset(
     {
@@ -38,6 +47,7 @@ _SENSITIVE_KEYS: frozenset[str] = frozenset(
         "apikey",
         "access_key",
         "database_url",
+        "dark_factory_github_token",
         "github_token",
         "authorization",
         "bearer",

@@ -23,7 +23,7 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, **overrides: str | None) -> None:
     values: dict[str, str | None] = {
         "DATABASE_URL": FAKE_DB_URL,
         "DATABASE_URL_DIRECT": FAKE_DB_URL_DIRECT,
-        "GITHUB_TOKEN": None,
+        "DARK_FACTORY_GITHUB_TOKEN": None,
         "LOG_LEVEL": None,
         "LEASE_TTL_SECONDS": None,
         "LEASE_HEARTBEAT_SECONDS": None,
@@ -59,7 +59,7 @@ def test_required_urls_load_and_optional_token_defaults_to_none(
 
     assert settings.database_url.get_secret_value() == FAKE_DB_URL
     assert settings.database_url_direct.get_secret_value() == FAKE_DB_URL_DIRECT
-    assert settings.github_token is None
+    assert settings.dark_factory_github_token is None
 
 
 def test_log_level_defaults_to_info(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -115,18 +115,18 @@ def test_configure_logging_honours_the_configured_level(
 def test_secrets_are_secretstr(monkeypatch: pytest.MonkeyPatch) -> None:
     from dark_factory.config.settings import Settings
 
-    _set_env(monkeypatch, GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
+    _set_env(monkeypatch, DARK_FACTORY_GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
     settings = Settings(_env_file=None)
 
     assert type(settings.database_url).__name__ == "SecretStr"
     assert type(settings.database_url_direct).__name__ == "SecretStr"
-    assert type(settings.github_token).__name__ == "SecretStr"
+    assert type(settings.dark_factory_github_token).__name__ == "SecretStr"
 
 
 def test_repr_contains_no_live_secret_value(monkeypatch: pytest.MonkeyPatch) -> None:
     from dark_factory.config.settings import Settings
 
-    _set_env(monkeypatch, GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
+    _set_env(monkeypatch, DARK_FACTORY_GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
     settings = Settings(_env_file=None)
 
     rendered = repr(settings) + str(settings)
@@ -152,12 +152,12 @@ def test_known_secret_values_maps_value_to_lowercase_field_name(
 ) -> None:
     from dark_factory.config.settings import Settings
 
-    _set_env(monkeypatch, GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
+    _set_env(monkeypatch, DARK_FACTORY_GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
     known = Settings(_env_file=None).known_secret_values()
 
     assert known[FAKE_DB_URL] == "database_url"
     assert known[FAKE_DB_URL_DIRECT] == "database_url_direct"
-    assert known[FAKE_GITHUB_TOKEN] == "github_token"
+    assert known[FAKE_GITHUB_TOKEN] == "dark_factory_github_token"
 
 
 def test_known_secret_values_omits_unset_optional_secret(
@@ -168,7 +168,7 @@ def test_known_secret_values_omits_unset_optional_secret(
     _set_env(monkeypatch)
     known = Settings(_env_file=None).known_secret_values()
 
-    assert "github_token" not in known.values()
+    assert "dark_factory_github_token" not in known.values()
     assert all(isinstance(k, str) and isinstance(v, str) for k, v in known.items())
 
 
@@ -177,11 +177,11 @@ def test_known_secret_values_omits_secret_shorter_than_8_chars(
 ) -> None:
     from dark_factory.config.settings import Settings
 
-    _set_env(monkeypatch, GITHUB_TOKEN="short")
+    _set_env(monkeypatch, DARK_FACTORY_GITHUB_TOKEN="short")
     known = Settings(_env_file=None).known_secret_values()
 
     assert "short" not in known
-    assert "github_token" not in known.values()
+    assert "dark_factory_github_token" not in known.values()
 
 
 def test_lease_settings_default_to_900_and_300(
@@ -256,7 +256,7 @@ def test_known_secret_values_never_contains_a_lease_field(
 ) -> None:
     from dark_factory.config.settings import Settings
 
-    _set_env(monkeypatch, GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
+    _set_env(monkeypatch, DARK_FACTORY_GITHUB_TOKEN=FAKE_GITHUB_TOKEN)
     known = Settings(_env_file=None).known_secret_values()
 
     assert "lease_ttl_seconds" not in known.values()

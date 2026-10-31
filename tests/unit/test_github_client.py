@@ -256,7 +256,7 @@ def _patch_sdk(
 
 def test_from_settings_with_no_github_token_raises_missing_credential_error() -> None:
     with pytest.raises(MissingGitHubCredentialError):
-        GitHubClient.from_settings(_settings(github_token=None))
+        GitHubClient.from_settings(_settings(dark_factory_github_token=None))
 
 
 def test_from_settings_with_a_token_builds_a_working_client(
@@ -267,7 +267,7 @@ def test_from_settings_with_a_token_builds_a_working_client(
     _patch_sdk(monkeypatch, issues_client=issues_client)
 
     client = GitHubClient.from_settings(
-        _settings(github_token="ghp_faketoken1234567890")
+        _settings(dark_factory_github_token="ghp_faketoken1234567890")
     )
     result = client.fetch_issue("o", "r", issue_number=1)
 
@@ -352,7 +352,7 @@ def test_api_error_message_omits_a_known_secret_value(
     )
     _patch_sdk(monkeypatch, issues_client=issues_client)
 
-    client = GitHubClient.from_settings(_settings(github_token=token))
+    client = GitHubClient.from_settings(_settings(dark_factory_github_token=token))
     with pytest.raises(GitHubApiError) as excinfo:
         client.fetch_issue("o", "r", issue_number=1)
 

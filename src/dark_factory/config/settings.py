@@ -29,9 +29,10 @@ class Settings(BaseSettings):
 
     ``DATABASE_URL`` is the pooled Neon ``-pooler`` host used by the application
     engine; ``DATABASE_URL_DIRECT`` is the non-pooled host used only by Alembic,
-    because DDL and PgBouncer transaction pooling do not mix. ``GITHUB_TOKEN`` is
-    loaded even though Phase 1 never calls GitHub — it is loaded so ``redact()``
-    knows its literal value for exact-substring scrubbing (D-16).
+    because DDL and PgBouncer transaction pooling do not mix.
+    ``DARK_FACTORY_GITHUB_TOKEN`` is loaded even though Phase 1 never calls
+    GitHub — it is loaded so ``redact()`` knows its literal value for
+    exact-substring scrubbing (D-16).
 
     ``lease_ttl_seconds`` (900) and ``lease_heartbeat_seconds`` (300) resolve the
     roadmap's Open Decision 2. 900 s is the top of the roadmap's 5-to-15-minute
@@ -45,8 +46,9 @@ class Settings(BaseSettings):
     overridable from the environment, so a test can inject a 2-second lease.
 
     ``anthropic_api_key`` (Plan 07-01, D-02) is optional -- exactly like
-    ``github_token`` -- so nothing new is required at process startup for an
-    environment that only ever runs ``fake``-worker pipelines. Its absence
+    ``dark_factory_github_token`` -- so nothing new is required at process
+    startup for an environment that only ever runs ``fake``-worker pipelines.
+    Its absence
     only surfaces when a role actually tries to invoke the ``claude-code``
     worker (``ClaudeCodeWorker.execute()`` raises a typed
     ``MissingWorkerCredentialError`` before spawning anything).
@@ -58,15 +60,23 @@ class Settings(BaseSettings):
     truncated mid-flight.
 
     ``copilot_github_token`` (Plan 08-01, D-01) is deliberately a *separate*
-    field from ``github_token`` even though both are GitHub-scoped PATs:
-    ``github_token`` is Dark Factory's own infrastructure credential (used
-    for its own push/PR creation, TOOL-04/SEC-01) and must never reach a
-    worker subprocess, while ``copilot_github_token`` is a worker's own
-    authentication material, injected into the ``copilot`` subprocess
-    exclusively through ``build_worker_env(role, env_var_name=
-    "COPILOT_GITHUB_TOKEN", value=...)``. Conflating the two fields would
-    make "did the infrastructure credential ever reach a worker" unanswerable
-    from the field name alone. The GitHub Copilot CLI requires a
+    field from ``dark_factory_github_token`` even though both are
+    GitHub-scoped PATs: ``dark_factory_github_token`` is Dark Factory's own
+    infrastructure credential (used for its own push/PR creation,
+    TOOL-04/SEC-01) and must never reach a worker subprocess, while
+    ``copilot_github_token`` is a worker's own authentication material,
+    injected into the ``copilot`` subprocess exclusively through
+    ``build_worker_env(role, env_var_name="COPILOT_GITHUB_TOKEN",
+    value=...)``. Conflating the two fields would make "did the
+    infrastructure credential ever reach a worker" unanswerable from the
+    field name alone. The environment variable is deliberately not the name
+    GitHub reserves for its own auto-injected Actions installation token:
+    that name cannot be used for a repository secret a user creates, and the
+    reserved installation token GitHub auto-injects there instead cannot
+    call ``GET /user`` as a matter of platform rule, not permission scoping
+    -- a workflow that assigned the reserved name to this field would silently
+    authenticate as that unusable installation token instead of the real
+    credential. The GitHub Copilot CLI requires a
     fine-grained, personal-account-owned personal access token carrying the
     ``Copilot Requests`` permission -- a classic PAT (``ghp_*``) is rejected
     by the CLI (08-RESEARCH.md Finding 3). Like ``anthropic_api_key``, its
@@ -91,7 +101,7 @@ class Settings(BaseSettings):
 
     database_url: SecretStr
     database_url_direct: SecretStr
-    github_token: SecretStr | None = None
+    dark_factory_github_token: SecretStr | None = None
     log_level: str = "INFO"
     lease_ttl_seconds: int = 900
     lease_heartbeat_seconds: int = 300

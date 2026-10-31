@@ -207,7 +207,7 @@ def test_retry_exhaustion_raises_git_push_error_with_a_redacted_message(
     monkeypatch.setenv("DATABASE_URL", _FAKE_DB_URL)
     monkeypatch.setenv("DATABASE_URL_DIRECT", _FAKE_DB_URL_DIRECT)
     token = "fake-push-token-abcdefghijklmno"
-    monkeypatch.setenv("GITHUB_TOKEN", token)
+    monkeypatch.setenv("DARK_FACTORY_GITHUB_TOKEN", token)
 
     from dark_factory.config.settings import get_settings
 
@@ -246,6 +246,6 @@ def test_retry_exhaustion_raises_git_push_error_with_a_redacted_message(
 
         assert attempts["push"] == 3
         assert token not in str(excinfo.value)
-        assert "[redacted:github_token]" in str(excinfo.value)
+        assert "[redacted:dark_factory_github_token]" in str(excinfo.value)
     finally:
         get_settings.cache_clear()

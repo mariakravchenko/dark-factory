@@ -459,7 +459,7 @@ def fake_settings() -> Settings:
         _env_file=None,  # type: ignore[call-arg]
         database_url=_FAKE_DB_URL,
         database_url_direct=_FAKE_DB_URL_DIRECT,
-        github_token=_FAKE_GITHUB_TOKEN,
+        dark_factory_github_token=_FAKE_GITHUB_TOKEN,
         anthropic_api_key=_FAKE_ANTHROPIC_KEY,
     )
 
@@ -542,7 +542,7 @@ def _write_config_tree(root: Path, roles: Sequence[str]) -> Path:
         # Phase 10 (plan 10-06, GIT-03): defaults to false, not the
         # `PublishingConfig` field's own `true` default. Every other db test
         # in this suite drives a run to `COMPLETED` with no `github_owner` /
-        # `github_repo` / `GITHUB_TOKEN` configured; before this plan that
+        # `github_repo` / `DARK_FACTORY_GITHUB_TOKEN` configured; before this plan that
         # was harmless (nothing read those fields), but plan 10-06's
         # terminal-role gate-PASS block now attempts a real publish whenever
         # `create_pr` is true, and a run with no repository config cannot
