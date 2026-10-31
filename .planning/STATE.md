@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 status: Awaiting next milestone
-stopped_at: Completed quick task 261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo
-last_updated: "2026-10-31T07:30:00.000Z"
+stopped_at: Completed quick task 261031-fta-add-uv-lock-to-scripts-scaffold-target-r
+last_updated: "2026-10-31T09:40:00.000Z"
 last_activity: 2026-10-31
-last_activity_desc: Completed quick task 261031-cp4 (install uv in scaffold workflow templates before dark-factory install)
-state_head: bfe0aea
+last_activity_desc: Completed quick task 261031-fta (ignore uv.lock in scaffold's generated .gitignore template)
+state_head: 92948c6
 current_phase: 12
 progress:
   total_phases: 12
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-31 — Completed quick task 261031-cp4: Install uv in scaffold_target_repo.py's generated workflows before the dark-factory install step
+Last activity: 2026-10-31 — Completed quick task 261031-fta: Ignore uv.lock in scaffold_target_repo.py's generated .gitignore template
 
 ## Performance Metrics
 
@@ -313,6 +313,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | 261030-op0 | Fix context_prompt_sections's "Expected outputs" prompt destination so it matches the worktree-relative glob --allowedTools actually grants (.dark-factory/runs/<run_id>/artifacts/<ROLE>), not the run-root-relative artifacts/<ROLE> it previously emitted — found live against two real app-int CI runs | 2026-10-30 | c2bf996 | [261030-op0-fix-base-argv-in-claude-code-py-artifact](./quick/261030-op0-fix-base-argv-in-claude-code-py-artifact/) |
 | 261031-c01 | Inject the real pydantic model_json_schema() for each machine artifact (acceptance_criteria.json, constraints.json, implementation_summary.json, test_report.json, verdict.json) into context_prompt_sections's "Expected outputs" prompt section, so a role can no longer invent a plausible-but-wrong shape — found live against a real app-int CI run (BA's acceptance_criteria.json failed extra=forbid validation with 31 errors) | 2026-10-31 | 2446b7d | [261031-c01-fix-context-prompt-sections-s-expected-o](./quick/261031-c01-fix-context-prompt-sections-s-expected-o/) |
 | 261031-cp4 | Install uv (astral-sh/setup-uv, pinned to match ci.yml) before the "Install dark-factory" step in scaffold_target_repo.py's RUN_WORKFLOW_TEMPLATE and RESUME_WORKFLOW_TEMPLATE — the default-generated quality_gate.commands use "uv run pytest"/"uv run ruff check" but no workflow step installed uv — found live against a real app-int CI run (Quality Gate step failed with FileNotFoundError: 'uv', after BA/ARCHITECTURE/DEVELOPMENT/QA all passed) | 2026-10-31 | bfe0aea | [261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo](./quick/261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo/) |
+| 261031-fta | Add uv.lock to scaffold_target_repo.py's GITIGNORE_CONTENT template — a target repo with no committed lockfile regenerates one on every uv run (quality gate, QA's own test runs), and the untracked-but-not-ignored uv.lock tripped enforce_write_scope() for any role whose write_scope doesn't cover the repo root — found live against a real app-int CI run (QA attempt 1 failed with "wrote outside its configured write_scope ['tests/**']: ['uv.lock']" even though QA itself had deleted the file; attempt_changed_paths()'s `git ls-files --others --exclude-standard` already respects .gitignore, confirmed not itself buggy) | 2026-10-31 | 92948c6 | [261031-fta-add-uv-lock-to-scripts-scaffold-target-r](./quick/261031-fta-add-uv-lock-to-scripts-scaffold-target-r/) |
 
 ## Deferred Items
 
