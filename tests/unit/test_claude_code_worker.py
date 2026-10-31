@@ -1260,7 +1260,6 @@ def test_expected_outputs_prompt_path_is_identical_to_granted_write_glob(
     location that must agree (261030-op0)."""
     from dark_factory.workers import cli_runtime
     from dark_factory.workers.claude_code import _base_argv
-
     from tests.support.fake_cli import OUTPUT_BULLET_RE
 
     context = _context(role="BA", tools=["artifacts.write"], outputs=["output.json"])
