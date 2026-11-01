@@ -824,6 +824,24 @@ cd dark-factory
 uv sync --all-extras --dev
 ```
 
+To run everything at once, with no marker filtering:
+
+```bash
+uv run pytest -q
+```
+
+`.github/workflows/ci.yml` runs on every push (any branch) and every pull
+request, as two jobs — `quality` (lint, mypy, the fast tiers, and the `db`
+tier) and `integration` (the end-to-end CLI-as-subprocess tier), gated so
+`integration` only runs once `quality` passes. **No repository secret is
+required for either job to go green on a fork**: the `db` and `integration`
+tiers resolve PostgreSQL via `tests/conftest.py`'s testcontainers rung,
+which the hosted `ubuntu-latest` runner's own Docker daemon provides with no
+`services:` block. The three tests that *would* need a real worker CLI
+installed (`test_claude_code_live.py`, `test_copilot_live.py`,
+`test_hermes_live.py`) self-skip when their binary isn't on `PATH`, which it
+isn't on this runner — so they report a named skip, never a failure.
+
 The quality gates, in the order `.github/workflows/ci.yml` runs them:
 
 | Command | What it does |
