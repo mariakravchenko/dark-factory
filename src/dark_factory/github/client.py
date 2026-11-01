@@ -128,8 +128,6 @@ class GitHubClient:
         timeout: int = 30,
         known_secrets: dict[str, str] | None = None,
     ) -> None:
-        self._token = token
-        self._timeout = timeout
         self._known_secrets = (
             known_secrets
             if known_secrets is not None
