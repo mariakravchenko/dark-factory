@@ -1,15 +1,19 @@
 <!-- generated-by: gsd-doc-writer -->
 # Dark Factory
 
-Dark Factory is a durable orchestration platform that runs a software-delivery
-task through a managed pipeline of AI engineering roles — **Business Analyst →
-Architect → Developer → QA → an independent Quality Gate → PR** — instead of
-one unsupervised agent loop. Give it a task (a plain-text description, a spec
-file, or a GitHub issue) and it drives that task through each role, has an
-independent step verify the work before anything ships, and opens the pull
-request only once both QA and the Quality Gate agree it is good — all while
-persisting every step to PostgreSQL so the run survives a crash, a laptop-to-CI
-handoff, or a multi-day wait on a human answer.
+Dark Factory is a workflow-automation tool you install into **your own**
+repository to run an automated software-delivery pipeline — **Business
+Analyst → Architect → Developer → QA → an independent Quality Gate → PR** —
+driven from a local CLI invocation or from GitHub Actions. Give it a task (a
+plain-text description, a spec file, or a GitHub issue) and it drives that
+task through each role, has an independent step verify the work before
+anything ships, and opens the pull request only once both QA and the Quality
+Gate agree it is good.
+
+It persists every step to PostgreSQL, so a run survives a crash, a
+laptop-to-CI handoff, or a multi-day wait on a human answer — any process on
+any machine can pick a run back up from its last committed step, with
+nothing carried over but the run id.
 
 ## Why this instead of just running an agent CLI
 
@@ -38,14 +42,6 @@ agent CLIs rather than being one:
   not in code — reassigning a role to a different agent runtime is a YAML
   edit, never an `if worker == "claude"` branch in the orchestrator.
 
-## The fastest way to get running
-
-**See [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md)** for prerequisites,
-installation, and the first command that produces a real run against a Neon
-database. The rest of this README is reference material: the full CLI
-surface, the pause/resume model, the local-to-CI handoff, and the decisions
-baked into the schema.
-
 ## Prerequisites
 
 - **Python 3.12** (`requires-python = ">=3.12"`).
@@ -55,16 +51,35 @@ baked into the schema.
 - **The repository you want Dark Factory to work on** — any existing git repo
   with a remote on GitHub. Dark Factory runs *inside* that repository, not
   the other way around.
+- **Whichever worker-runtime CLI your roles will use** — `claude`, `copilot`,
+  and/or `hermes` binaries on `PATH`, plus that runtime's own credential (see
+  "Environment variables and secrets" below). The `fake` worker needs
+  neither, and is the fastest way to prove the pipeline end-to-end with zero
+  agent credentials.
 
 ## Install it into your own repository
 
-Dark Factory is not yet published to PyPI, so getting it running has one
-unavoidable one-time step: a clone of **this** repository, used only to (a)
-install the CLI from source, and (b) borrow its schema migrations and its
-`scripts/scaffold_target_repo.py` config generator — neither of which ships
-inside the installed package yet. Nothing below becomes a permanent
-dependency of your repository; once your repo is configured and its schema
-applied, every command after that runs from *your* repo, not this one.
+Dark Factory is pip-installable and runs from inside the repository it is
+automating, not from a checkout of Dark Factory's own source — but two
+different setup paths have two different needs here:
+
+- **In CI**, a job installs `dark-factory` from a git URL (`pip install
+  "dark-factory @ git+https://github.com/<your-org>/dark-factory.git"`, or
+  `pip install dark-factory` once it's published to PyPI) — **no checkout of
+  this repository is ever needed.** "Finish a run in CI" below documents this
+  path in full.
+- **Locally**, getting a target repository fully set up still needs a
+  one-time checkout of *this* repository, for two things that do not ship
+  inside the installed package yet: Alembic's schema migrations, and
+  `scripts/scaffold_target_repo.py`, the fast path for generating your
+  target repository's config tree. There is currently no `dark-factory init`
+  command that would make the checkout unnecessary — a deliberate, recorded
+  deferral, not an oversight.
+
+Nothing below becomes a permanent dependency of your repository: once your
+repo's schema is applied and its config tree is scaffolded, every command
+after that runs from *your* repo, using the installed package, never this
+checkout.
 
 ```bash
 # One-time: clone Dark Factory just to install it and borrow its tooling.
@@ -75,20 +90,10 @@ uv tool install .
 
 `dark-factory` is now a command on your `PATH`, from any directory.
 
-```bash
-# Generate the config tree your repository needs — run from inside the
-# dark-factory clone, pointed AT your repository.
-python3 scripts/scaffold_target_repo.py \
-  --target /path/to/your-repo \
-  --github-owner your-org --github-repo your-repo
-```
-
-This writes `.dark-factory.yaml`, four role YAMLs, their instruction files,
-`.env.example`, `.gitignore`, and two GitHub Actions workflows into
-*your* repository. See [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) for
-every flag (per-role worker overrides, custom quality-gate commands) and
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md) for what each generated file
-means if you'd rather hand-author them instead.
+See "Scaffold your repository's config tree" immediately below for
+generating `.dark-factory.yaml`, the role YAMLs, instruction files,
+`.env.example`, `.gitignore`, and both GitHub Actions workflows in *your*
+repository.
 
 ```bash
 # From here on, work happens in YOUR repository, not this one.
@@ -96,35 +101,9 @@ cd /path/to/your-repo
 cp .env.example .env
 ```
 
-Edit `.env` and set:
-
-- **`DATABASE_URL`** — the **pooled** Neon connection string. In the Neon
-  Console, open your project → Connection Details → select the pooled string
-  (its host contains `-pooler`). Rewrite the scheme to `postgresql+psycopg://`.
-  This is what the application engine uses at runtime.
-- **`DATABASE_URL_DIRECT`** — the **direct** (non-pooled) Neon connection string.
-  In Connection Details, disable connection pooling to reveal it (host **without**
-  `-pooler`). Rewrite the scheme to `postgresql+psycopg://`. **Alembic uses this
-  one** because DDL and PgBouncer transaction pooling do not mix — running
-  migrations through the pooled endpoint is unreliable.
-- **`DARK_FACTORY_GITHUB_TOKEN`** — Dark Factory's own token for posting
-  clarification comments and opening pull requests. Required once a run's
-  source is a GitHub issue or its pipeline includes publishing. Deliberately
-  not named `GITHUB_TOKEN`: that exact name is reserved by GitHub Actions for
-  the ephemeral installation token it auto-injects into every job, so a
-  repository secret cannot be created under it, and that installation token
-  cannot call `GET /user` as a matter of platform rule. See
-  [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full mechanism.
-- **A worker-runtime credential** (e.g. `ANTHROPIC_API_KEY` for `claude-code`)
-  — whichever your scaffolded roles were assigned.
-
-Two optional, **non-secret** variables tune the single-owner lease. Leave them
-unset to take the production defaults; `.env.example` documents both in full.
-
-| Variable | Default | Unit | What it controls |
-|----------|---------|------|------------------|
-| `LEASE_TTL_SECONDS` | `900` | seconds | How long a claimed run stays owned without a renewal. After a hard crash the run is unclaimable until this elapses on the database clock — there is no earlier-steal escape hatch. |
-| `LEASE_HEARTBEAT_SECONDS` | `300` | seconds | How often the owning process pushes its lease expiry forward while a step runs. Must be strictly less than `LEASE_TTL_SECONDS` (settings loading fails otherwise); one third of the TTL is the standard ratio. |
+Edit `.env` and set every variable "Environment variables and secrets" below
+documents — at minimum `DATABASE_URL`, `DATABASE_URL_DIRECT`, and whichever
+worker-runtime credential your scaffolded roles were assigned.
 
 ```bash
 # Apply the schema to your Neon database. This still needs the dark-factory
@@ -136,6 +115,56 @@ uv run alembic upgrade head
 cd /path/to/your-repo
 
 # Start a run from a plain-text task and drive it through the pipeline.
+dark-factory run text:"add a health endpoint"
+```
+
+### Scaffold your repository's config tree
+
+A standalone script in the Dark Factory checkout, `scripts/scaffold_target_repo.py`,
+generates the files a target repository needs instead of hand-authoring them
+— `.dark-factory.yaml`, the four role YAMLs, their instruction files,
+`.env.example`, `.gitignore`, and two GitHub Actions workflows
+(`resume.yml` and `run.yml`). It is a stopgap for this hand-authoring step,
+not a replacement for the deferred `dark-factory init` command — that
+decision stands. This script is a developer tool deliberately kept outside
+the shipped package: it is **not** a `dark-factory` subcommand, is **not**
+installed by `pip install dark-factory`, and therefore requires the checkout
+from the section above to run.
+
+```bash
+uv run python scripts/scaffold_target_repo.py \
+  --target /path/to/your-repo \
+  --github-owner your-org \
+  --github-repo your-repo
+
+# Per-role worker overrides and a custom quality-gate command:
+uv run python scripts/scaffold_target_repo.py \
+  --target /path/to/your-repo \
+  --github-owner your-org \
+  --github-repo your-repo \
+  --worker-architecture copilot \
+  --quality-gate-command "make test"
+```
+
+The generated `run.yml` is a manual `workflow_dispatch` workflow with one
+required `source` input, passed verbatim to `dark-factory run` — accepting
+the same three source forms the local CLI accepts: a `text:`-prefixed
+string, a `spec:`-prefixed file path, or a `github:`-prefixed issue number.
+It is wired to the same Actions secrets the generated `resume.yml` uses, and
+both generated workflows carry the identical three-key `permissions` block
+— see "The reference workflow" below for exactly why each scope is
+load-bearing.
+
+Two things worth knowing before pointing it at a real repository: an
+existing file in the target is left untouched unless you pass `--force`;
+and the instruction files it writes are copied from this repository's own
+`.dark-factory/instructions/`, with a generated write-scope section
+appended so the prose matches what write-scope enforcement will actually
+allow.
+
+## Run a task
+
+```bash
 dark-factory run text:"add a health endpoint"
 ```
 
@@ -172,21 +201,7 @@ the Developer instead, up to `quality_gate_max_iterations` times.
 process; on an already-terminal run it prints the id and the summary block and
 adds no transition lines.
 
-### Exit codes (`run` / `resume`)
-
-| Code | Meaning |
-|------|---------|
-| `0` | The run reached `COMPLETED`. |
-| `0` | The run stopped **cleanly waiting for a human** (`WAITING_HUMAN`) — the process did exactly what it was asked to and there is nothing to retry. |
-| `0` | **Another process owns the run** and this one declined to act — it printed `run <id> is owned by another process; exiting without changes` on stderr and changed nothing. This is a normal outcome of two processes touching one run, not a fault. |
-| `1` | The run reached `FAILED` — a real, persisted terminal delivery failure. |
-| `2` | Bad invocation or an orchestration error where **nothing new was persisted** — unresolvable input, unknown run id, bad UUID, config/validation error, answering a run that is not waiting, a lost lease. |
-
-The two extra `0` cases are the ones a wrapper script is most likely to
-misread: a clean pause and a declined ownership race are **successes**. Only `1`
-(persisted `FAILED`) and `2` (nothing advanced) are failures.
-
-## The CLI surface
+### The CLI surface
 
 | Command | Purpose |
 |---------|---------|
@@ -195,7 +210,7 @@ misread: a clean pause and a declined ownership race are **successes**. Only `1`
 | `dark-factory status <run-id> [--json]` | The full report for one run: state, role history, artifacts, interactions, quality-gate results, PR info, and transition history. |
 | `dark-factory events <run-id> [--json] [--type ...]` | The `run_events` audit trail for a run, in order, optionally filtered by event type (repeatable). |
 | `dark-factory runs [--status ...]` | List every run, newest first, optionally filtered by status. The entry point when you don't already have a run id. |
-| `dark-factory artifacts <run-id> [--show <artifact-id>]` | List a run's artifact references, or print one artifact's content read from the run's working branch via `git show`. |
+| `dark-factory artifacts <run-id> [--show <artifact-id>]` | List a run's artifact references, or print one artifact's content read from the run's working branch via `git show`. Artifacts are references, not content: the `artifacts` table records only metadata (id, type, path, checksum) — the actual content lives on the filesystem under `.dark-factory/runs/<run-id>/`, travels between machines by being committed to a `.dark-factory/` path on the run's working branch, and is excluded from the published PR diff. |
 
 `status` and `events` render as text tables/panels by default; `--json` emits
 a single parseable JSON object/array for scripting — the same field set in
@@ -210,6 +225,20 @@ dark-factory status 54e1153f-4cb5-4e2f-92a8-dea95ba06846 --json
 `base_branch` and `working_branch` are populated once a run creates its
 isolated git worktree (step 2 of the pipeline onward); a `text:`-sourced run
 with no repository context leaves them `null`.
+
+### Exit codes (`run` / `resume`)
+
+| Code | Meaning |
+|------|---------|
+| `0` | The run reached `COMPLETED`. |
+| `0` | The run stopped **cleanly waiting for a human** (`WAITING_HUMAN`) — the process did exactly what it was asked to and there is nothing to retry. |
+| `0` | **Another process owns the run** and this one declined to act — it printed `run <id> is owned by another process; exiting without changes` on stderr and changed nothing. This is a normal outcome of two processes touching one run, not a fault. |
+| `1` | The run reached `FAILED` — a real, persisted terminal delivery failure. |
+| `2` | Bad invocation or an orchestration error where **nothing new was persisted** — unresolvable input, unknown run id, bad UUID, config/validation error, answering a run that is not waiting, a lost lease. |
+
+The two extra `0` cases are the ones a wrapper script is most likely to
+misread: a clean pause and a declined ownership race are **successes**. Only `1`
+(persisted `FAILED`) and `2` (nothing advanced) are failures.
 
 ## Pause a run for a human, then resume it
 
@@ -327,89 +356,20 @@ carried over but the run id. The invariant holds throughout: **the trigger
 carries no lifecycle logic; every entry point — the local CLI, a dispatched
 CI job — reaches the same `advance(run_id)`.**
 
-### The deployment model
+In CI, the job installs `dark-factory` as a dependency — no checkout of Dark
+Factory's own repository, ever (see "Install it into your own repository"
+above). It needs your target repository's `.dark-factory.yaml` and
+`.dark-factory/roles/*.yaml` already committed, the `resume.yml` workflow
+below added to `.github/workflows/`, and the worker runtime your roles are
+assigned to available on the runner — a credential alone does not satisfy
+this; see "The worker runtime" below.
 
-Dark Factory is a pip-installable package. A deployer does **not** clone or
-check out Dark Factory's own repository. Instead:
+#### Scaffolding `resume.yml` and `run.yml`
 
-1. Install `dark-factory` as a dependency inside your own repository's own
-   toolchain (`uv add dark-factory` once published, or the equivalent for
-   your package manager).
-2. Hand-author `.dark-factory.yaml` and `.dark-factory/roles/*.yaml` in your
-   own repository, modelled on the ones this repository ships.
-3. Add one small `resume.yml` workflow to your own repository (below).
-4. Make your roles' assigned worker runtime available wherever
-   `dark-factory resume` runs — a credential alone does not satisfy this; see
-   "The worker runtime" below.
-
-There is currently no `dark-factory init` command to scaffold steps 2 and 3 —
-a deliberate, recorded deferral, not an oversight.
-
-#### Scaffolding steps 2 and 3
-
-A standalone script in this repository, `scripts/scaffold_target_repo.py`,
-generates the files steps 2 and 3 above describe hand-authoring — the repo
-config (`.dark-factory.yaml`), the four role YAMLs, the four instruction
-files, `.env.example`, the `resume.yml` workflow, and `.gitignore` — plus a
-second generated workflow, `run.yml`, that starts a run in CI the same way
-the resume one finishes one. It is a stopgap for this hand-authoring step,
-not a replacement for the deferred `dark-factory init` command — that
-decision stands.
-
-```bash
-uv run python scripts/scaffold_target_repo.py \
-  --target /path/to/your-repo \
-  --github-owner your-org \
-  --github-repo your-repo
-
-# Per-role worker overrides and a custom quality-gate command:
-uv run python scripts/scaffold_target_repo.py \
-  --target /path/to/your-repo \
-  --github-owner your-org \
-  --github-repo your-repo \
-  --worker-architecture copilot \
-  --quality-gate-command "make test"
-```
-
-The generated `run.yml` is a manual `workflow_dispatch` workflow with one
-required `source` input, passed verbatim to `dark-factory run` — accepting
-the same three source forms the local CLI accepts: a `text:`-prefixed
-string, a `spec:`-prefixed file path, or a `github:`-prefixed issue number.
-It is wired to the same Actions secrets the generated `resume.yml` uses,
-and both generated workflows carry the identical three-key `permissions`
-block:
-
-- `contents: write` — a run commits and pushes each role's work, and
-  `actions/checkout`'s persisted credential is scoped by this block, so it
-  is what stands between that push and a 403.
-- `issues: write` — the job hands `dark-factory` a user-supplied
-  `DARK_FACTORY_GITHUB_TOKEN` Actions secret (see "The Actions secrets this
-  job needs", below), not the reserved Actions auto-token: that token's own
-  REST authority comes from the PAT's own configured scopes, not from this
-  `permissions:` block. Dark Factory posts its own clarification comment on
-  the issue when a run pauses `WAITING_HUMAN` (and reads the issue when the
-  source is `github:`-prefixed).
-- `pull-requests: write` — publication after QA PASS and an independent
-  Quality Gate PASS creates the pull request through the API, which this
-  scope authorizes.
-
-The scope stops there deliberately: `actions: write` is absent because
-nothing in Dark Factory dispatches a workflow — the dispatch is a human
-action using the human's own `gh` credentials, never a call any job or any
-Dark Factory process needs to cover.
-
-Two things worth knowing before pointing it at a real repository: an
-existing file in the target is left untouched unless you pass `--force`;
-and the instruction files it writes are copied from this repository's own
-`.dark-factory/instructions/`, with a generated write-scope section
-appended so the prose matches what write-scope enforcement will actually
-allow.
-
-This script is a developer tool deliberately kept outside the shipped
-package — it is **not** a `dark-factory` subcommand, is **not** installed
-by `pip install dark-factory`, and therefore requires a checkout of this
-repository to run. That is the one place the deployment model's "you do
-not clone Dark Factory's own repository" premise above does not hold.
+Both generated workflows come from the same scaffold step described in
+"Scaffold your repository's config tree" above — `resume.yml` (the reference
+block below) and its sibling `run.yml`, which starts a run in CI the same
+way `resume.yml` finishes one.
 
 ### The full flow
 
@@ -596,7 +556,7 @@ credential — it scripts its results in-process, which is exactly how the
 
 A target repository's behavior is declared in `.dark-factory.yaml` at its
 root, read once per run at creation time; the resolved snapshot is what every
-resume replays, so editing this file never changes an in-flight run.
+resume replays, so editing it never changes an in-flight run.
 
 ```yaml
 version: 1
@@ -640,26 +600,5 @@ either one alone.
 No secrets live in this file — infrastructure credentials (`DATABASE_URL`,
 `DARK_FACTORY_GITHUB_TOKEN`, worker credentials) are environment-only,
 loaded by `pydantic-settings` and never written into run config, artifacts,
-or logs. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for why the
-GitHub credential is deliberately not named `GITHUB_TOKEN`.
-
-## Decisions baked into the schema
-
-A few schema-shaping decisions are worth knowing before reading the
-persistence layer:
-
-- **`base_branch` and `working_branch`** are nullable columns on `runs` —
-  populated once a run opens its isolated git worktree, left `null` for a
-  `text:`-sourced run with no repository context.
-- **`qa_developer_iterations` and `quality_gate_iterations`** are non-null,
-  zero-default integer columns on `runs`, incremented only through one
-  mutation path — never derived by folding `run_events` or counting
-  `role_executions` rows.
-- **Artifacts are references, not content.** The `artifacts` table holds
-  artifact *references* only — `id`, `run_id`, `role_execution_id`, `type`,
-  `path`, `checksum`, `metadata`, `created_at` — **never artifact content**.
-  Content lives on the filesystem under `.dark-factory/runs/<run-id>/` and
-  travels between machines by being committed to a `.dark-factory/` path on
-  the run's working branch, excluded from the published diff.
-
+or logs.
 </content>
