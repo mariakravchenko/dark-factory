@@ -754,6 +754,15 @@ four roles on a different worker.
 production source, which is the "cannot publish" half of its permission
 boundary.
 
+**`write_scope` only governs your repository's source tree** (`src/**`,
+`tests/**`, etc.) — a role whose `write_scope` is `[]`, like `BA` and
+`ARCHITECTURE` above, still writes its declared `outputs` normally. Those
+go to a completely separate location, the run's own gitignored
+`.dark-factory/runs/<run_id>/artifacts/<role>/` tree, gated by the
+`artifacts.write` tool grant instead — an independent enforcement path from
+`write_scope`. "Read-only" above means "cannot touch your source code," not
+"produces no output."
+
 ### Instruction files
 
 Each role's instruction Markdown lives alongside the role YAML under
