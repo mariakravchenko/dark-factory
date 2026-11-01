@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 status: Awaiting next milestone
-stopped_at: Completed quick task 261031-jmw-remove-the-webhook-receiver-subsystem-fr
-last_updated: "2026-10-31T13:00:00.000Z"
-last_activity: 2026-10-31
-last_activity_desc: Completed quick task 261031-jmw (removed the webhook receiver subsystem; manual gh workflow dispatch resume is now the only documented path)
-state_head: 69abd57
+stopped_at: Completed quick task 261031-lhn-rename-dark-factory-s-own-github-api-tok
+last_updated: "2026-11-01T07:10:00.000Z"
+last_activity: 2026-11-01
+last_activity_desc: Completed quick task 261031-lhn (renamed GITHUB_TOKEN to DARK_FACTORY_GITHUB_TOKEN; app-int needs the matching secret/env rename before its next run)
+state_head: 70da05e
 current_phase: 12
 progress:
   total_phases: 12
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-31 — Completed quick task 261031-jmw: Removed the webhook receiver subsystem; manual gh workflow dispatch resume is now the only documented resume path
+Last activity: 2026-11-01 — Completed quick task 261031-lhn: Renamed GITHUB_TOKEN to DARK_FACTORY_GITHUB_TOKEN throughout dark-factory; app-int needs the matching secret/env rename before its next run
 
 ## Performance Metrics
 
@@ -291,6 +291,7 @@ None yet.
 
 ### Blockers/Concerns
 
+- ⚠️ [Quick 261031-lhn, 2026-11-01] The GITHUB_TOKEN→DARK_FACTORY_GITHUB_TOKEN rename touched db/integration-tier call sites and known-value redaction labels in several test modules (`tests/db/test_secret_redaction_e2e_full_pipeline.py`, `tests/integration/test_secret_redaction_e2e.py`, others). Only `--collect-only` was run (416 collected, 0 errors) — no reachable Postgres in the execution sandbox. Needs a human-supplied Neon/local Postgres run of the full `db`/`integration` tiers, especially the SC5 secret-sweep proofs, before fully trusted.
 - ⚠️ [Quick 261031-jmw, 2026-10-31] The webhook-receiver removal rewired 3 db-tier test modules (`tests/db/test_clarification_comment_is_redacted.py`, `tests/db/test_run_report.py`, `tests/db/test_artifacts_show_reads_committed_content.py`) and deleted 2 others (`test_webhook_dispatches_resume.py`, `test_webhook_resolves_answer.py`). The executor's sandbox had no reachable Postgres, so `uv run pytest -q -m db` was never actually run against a live database for this change — only `--collect-only` (clean, 224/1242 collected). Needs a human-supplied Neon/local Postgres run of the full `db` tier before this is fully trusted.
 - ⚠️ [Phase 9] Threat IDs `T-09-12` through `T-09-16` were independently reused across plans 09-03/09-04/09-05 for unrelated threats (each plan numbered forward from what its author believed was the last-used id). Documented and disambiguated in `09-SECURITY.md`; a future phase should number threat ids from a single running counter across all of a phase's plans.
 - ⚠️ [Phase 12] 4 non-blocking code-review warnings (`12-REVIEW.md`): text-mode `status` output omits `wip_commit_sha` (JSON-only, a parity gap not a data-loss); error-list rendering shows raw JSONB repr instead of extracted message text; `read_quality_gate` collapses distinct `GitError` causes into one indistinguishable message; `scrub_artifact_text_in_place` uses `errors="replace"` on artifact content (latent corruption risk for non-UTF-8 artifacts reaching a PR diff). None are security/correctness blockers; worth a follow-up pass.
@@ -316,6 +317,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | 261031-cp4 | Install uv (astral-sh/setup-uv, pinned to match ci.yml) before the "Install dark-factory" step in scaffold_target_repo.py's RUN_WORKFLOW_TEMPLATE and RESUME_WORKFLOW_TEMPLATE — the default-generated quality_gate.commands use "uv run pytest"/"uv run ruff check" but no workflow step installed uv — found live against a real app-int CI run (Quality Gate step failed with FileNotFoundError: 'uv', after BA/ARCHITECTURE/DEVELOPMENT/QA all passed) | 2026-10-31 | bfe0aea | [261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo](./quick/261031-cp4-fix-scripts-scaffold-target-repo-py-s-wo/) |
 | 261031-fta | Add uv.lock to scaffold_target_repo.py's GITIGNORE_CONTENT template — a target repo with no committed lockfile regenerates one on every uv run (quality gate, QA's own test runs), and the untracked-but-not-ignored uv.lock tripped enforce_write_scope() for any role whose write_scope doesn't cover the repo root — found live against a real app-int CI run (QA attempt 1 failed with "wrote outside its configured write_scope ['tests/**']: ['uv.lock']" even though QA itself had deleted the file; attempt_changed_paths()'s `git ls-files --others --exclude-standard` already respects .gitignore, confirmed not itself buggy) | 2026-10-31 | 92948c6 | [261031-fta-add-uv-lock-to-scripts-scaffold-target-r](./quick/261031-fta-add-uv-lock-to-scripts-scaffold-target-r/) |
 | 261031-jmw | Remove the webhook receiver subsystem (src/dark_factory/webhook/, dispatch_workflow()/for_dispatch(), github_webhook_secret/dispatch_github_token settings, the webhook pyproject extra, GitHubPendingInteraction, 8 webhook-only test modules) now that a real app-int run proved the manual flow works end-to-end: a human replies on the clarifying-question issue, then `gh workflow run resume.yml -f run_id=<id> -f answer=<text>` — added that `answer` input to both shipped resume.yml templates, mirroring app-int's env-indirection shape (D-03) for expression-injection hardening. Rewrote README/docs/.env.example to document only this path. Decisions: keep submit_answer's github_comment_id param + docstring reword (D-02), retire GitHubPendingInteraction as fully caller-less (D-01). Full unit+contract tier 826 passed, ruff+mypy --strict clean; db tier not run (no reachable Postgres in the execution sandbox) — needs a human-supplied Neon run before fully trusting the 3 rewired db-tier modules | 2026-10-31 | 69abd57 | [261031-jmw-remove-the-webhook-receiver-subsystem-fr](./quick/261031-jmw-remove-the-webhook-receiver-subsystem-fr/) |
+| 261031-lhn | Rename dark-factory's own GitHub API credential from github_token (env GITHUB_TOKEN) to dark_factory_github_token (env DARK_FACTORY_GITHUB_TOKEN) everywhere — Settings field, all consumers (orchestrator/runner.py, github/client.py), redaction, docs, .env.example, and scaffold_target_repo.py's templates — since the literal name GITHUB_TOKEN collides with GitHub Actions' own reserved secrets.GITHUB_TOKEN, whose ephemeral installation token can never call GET /user regardless of permissions scoping (the live 403 root cause behind clarification-comment posting failures). Caught and fixed a D-15 redaction regression along the way: the old key name had to stay in `_SENSITIVE_KEYS` (third-party workflow text still echoes it) while the new name was added alongside it, not substituted. copilot_github_token/COPILOT_GITHUB_TOKEN correctly left untouched (a separate worker credential). Full unit+contract tier 820 passed/1 skipped, ruff+mypy --strict clean; db/integration tiers collect-only verified (416 collected, 0 errors), not run against live Postgres. **Needs human action in app-int**: its repo secret and .env/DARK_FACTORY_SETUP.md still assign the old GITHUB_TOKEN name — rename to DARK_FACTORY_GITHUB_TOKEN there before the next run, or it will fail to authenticate | 2026-11-01 | 70da05e | [261031-lhn-rename-dark-factory-s-own-github-api-tok](./quick/261031-lhn-rename-dark-factory-s-own-github-api-tok/) |
 
 ## Deferred Items
 
