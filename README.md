@@ -631,6 +631,8 @@ version: 1
 
 repository:
   base_branch: main
+  github_owner: your-org
+  github_repo: your-repo
 
 workflow:
   roles: [BA, ARCHITECTURE, DEVELOPMENT, QA]
@@ -649,6 +651,24 @@ retry:
 publishing:
   create_pr: true
 ```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `version` | int | `1` | Schema version of the document. |
+| `repository` | mapping | `{}` | The target repo's Git conventions — see the three keys below. |
+| `base_branch` | string | `"main"` | The target repo's base branch for new runs. |
+| `github_owner` | string \| null | `null` | GitHub owner of the target repository; used for GitHub-sourced intake and publishing. Repos that use neither need no change. |
+| `github_repo` | string \| null | `null` | GitHub repository name, paired with `github_owner`. Read from config only — never from a CLI locator — so a crafted locator can never redirect a fetch at another repository. |
+| `workflow` | mapping | — (required) | The ordered role pipeline — see `roles` below. |
+| `roles` | list of strings | — (required, min 1 entry) | The ordered pipeline. Each entry must be one of the role-shaped `RunStatus` values: `BA`, `ARCHITECTURE`, `DEVELOPMENT`, `QA`, `VERIFYING`, `PUBLISHING`. A human label or typo is rejected at load time. |
+| `roles_dir` | string | `".dark-factory/roles"` | Directory (relative to the repo root) containing one `<ROLE_NAME>.yaml` file per entry in `workflow.roles`. Resolved and checked against path escape — a `roles_dir` that resolves outside the repo root is rejected. |
+| `quality_gate` | mapping | `{}` | The independent quality-gate commands — see `commands` below. |
+| `commands` | list of strings | `[]` | Shell commands run as the independent quality gate after QA passes. Stored in the effective-config snapshot; executed by the orchestrator's quality-gate step. |
+| `retry` | mapping | `{}` | Feedback-loop iteration caps — see the two keys below. |
+| `qa_developer_max_iterations` | int (>= 0) | `3` | Maximum QA → Developer feedback-loop bounces before the run fails. |
+| `quality_gate_max_iterations` | int (>= 0) | `2` | Maximum quality-gate → Developer feedback-loop bounces before the run fails. |
+| `publishing` | mapping | `{}` | The PR-creation switch — see `create_pr` below. |
+| `create_pr` | bool | `true` | Gates PR creation. Publishing (PR creation) only ever happens after QA PASS *and* independent quality-gate PASS, regardless of this flag's value. |
 
 Each entry in `workflow.roles` points at a `<name>.yaml` file in `roles_dir`
 (`BA.yaml`, `ARCHITECTURE.yaml`, `DEVELOPMENT.yaml`, `QA.yaml` in this
@@ -669,4 +689,68 @@ No secrets live in this file — infrastructure credentials (`DATABASE_URL`,
 `DARK_FACTORY_GITHUB_TOKEN`, worker credentials) are environment-only,
 loaded by `pydantic-settings` and never written into run config, artifacts,
 or logs.
+
+### `.dark-factory/roles/*.yaml`
+
+One file per entry in `workflow.roles`, named `<ROLE_NAME>.yaml` and located
+under the directory named by `roles_dir`. Validated by `RoleDefinition`,
+also `frozen=True` and `extra="forbid"`.
+
+```yaml
+name: DEVELOPMENT
+worker: claude-code
+instructions: ../instructions/development.md
+
+tools:
+  [repo.read, repo.search, repo.write, repo.write_tests, shell.execute, artifacts.read, artifacts.write]
+permissions:
+  write_scope: ["src/**"]
+
+before: [ensure_clean_worktree]
+after: [collect_diff]
+
+inputs: [design.md, constraints.json]
+optional_inputs: [verdict.json, quality_gate.json]
+outputs: [implementation_summary.json]
+examples: []
+```
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | string | — (required) | Must match the `workflow.roles` entry whose file this is, or config loading fails. |
+| `worker` | string | — (required) | Must be a name registered on the worker registry: `fake`, `claude-code`, `copilot`, or `hermes`. Validated by exact-name membership, never dynamic lookup. Reassigning a role to a different worker is a config-only change — the orchestrator never branches on worker identity. |
+| `instructions` | string (path) | — (required) | Path to the role's instruction Markdown, resolved relative to the role YAML's own directory, must stay under the repo root (no `..` escape), and is capped at 64 KiB when inlined into the snapshot. |
+| `tools` | list of strings | `[]` | Capability names this role may invoke, validated by exact-name membership against the tool registry: `artifacts.read`, `artifacts.write`, `repo.read`, `repo.search`, `repo.write`, `repo.write_tests`, `shell.execute`. A capability not in this list is denied before it runs, regardless of what is registered. |
+| `permissions` | mapping | `{}` | The role's write-scope grant — see `write_scope` below. |
+| `write_scope` | list of glob patterns | `[]` (zero tolerance) | Filesystem glob patterns (matched with `fnmatch.fnmatchcase`, not `pathlib`) a role's write-capable tool invocations must stay within. **An empty or absent list means zero tolerance, not "unrestricted"** — every path is a violation when the list is empty. Any changed path outside the declared patterns is reverted and fails the role. |
+| `before` | list of strings | `[]` | Action names run before the role's worker is invoked, validated against the action registry: `ensure_clean_worktree` is the only one meant to be role-configurable today — it recovers a dirty worktree onto the current branch; a role YAML that omits it forgoes that recovery. |
+| `after` | list of strings | `[]` | Action names run after the role's worker returns. `collect_diff` (git-only; writes the PR-bound diff) is listed only on roles that can change repository source (`DEVELOPMENT`, `QA`). |
+| `inputs` | list of strings | `[]` | Artifact filenames this role requires as input, resolved by declared filename (not pipeline adjacency). Config loading / role execution fails if a declared input cannot be resolved. |
+| `optional_inputs` | list of strings | `[]` | Artifact filenames resolved leniently — simply omitted from the role's context when absent, never an error. Used for feedback-loop artifacts (`verdict.json`, `quality_gate.json`) that don't exist on a role's first attempt. |
+| `outputs` | list of strings | `[]` | Artifact filenames this role is expected to produce. |
+| `examples` | list of strings | `[]` | Reserved for future few-shot example references; currently unused by any shipped role. |
+
+### Shipped roles
+
+| Role | Worker | `write_scope` | Inputs | Outputs |
+|------|--------|---------------|--------|---------|
+| `BA` | `fake` | `[]` (read-only) | — | `requirements.md`, `acceptance_criteria.json` |
+| `ARCHITECTURE` | `copilot` | `[]` (read-only) | `acceptance_criteria.json` | `design.md`, `constraints.json` |
+| `DEVELOPMENT` | `claude-code` | `["src/**"]` | `design.md`, `constraints.json` (optional: `verdict.json`, `quality_gate.json`) | `implementation_summary.json` |
+| `QA` | `hermes` | `["tests/**"]` | `acceptance_criteria.json`, `implementation_summary.json` | `test_report.json`, `verdict.json` |
+
+`QA` deliberately has no `repo.write` grant — it may write tests, never
+production source, which is the "cannot publish" half of its permission
+boundary.
+
+### Instruction files
+
+Each role's instruction Markdown lives alongside the role YAML under
+`.dark-factory/instructions/` (`ba.md`, `architecture.md`,
+`development.md`, `qa.md` in this repository's own tree). A role YAML's
+`instructions` path is resolved relative to that role YAML's own directory,
+must resolve under the repository root, and must be a real file — the
+scaffold copies these from this repository's own set, with a generated
+write-scope section appended so the prose matches what write-scope
+enforcement will actually allow.
 </content>
