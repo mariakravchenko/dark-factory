@@ -732,12 +732,23 @@ examples: []
 
 ### Shipped roles
 
-| Role | Worker | `write_scope` | Inputs | Outputs |
-|------|--------|---------------|--------|---------|
-| `BA` | `fake` | `[]` (read-only) | — | `requirements.md`, `acceptance_criteria.json` |
-| `ARCHITECTURE` | `copilot` | `[]` (read-only) | `acceptance_criteria.json` | `design.md`, `constraints.json` |
+The four roles below are what `scripts/scaffold_target_repo.py` generates for
+your repo. Every role defaults to the `claude-code` worker
+(`DEFAULT_WORKER`) — override per-role with `--worker-ba` /
+`--worker-architecture` / `--worker-development` / `--worker-qa` if you want
+a different worker on a given role.
+
+| Role | Worker (default) | `write_scope` | Inputs | Outputs |
+|------|-------------------|---------------|--------|---------|
+| `BA` | `claude-code` | `[]` (read-only) | — | `requirements.md`, `acceptance_criteria.json` |
+| `ARCHITECTURE` | `claude-code` | `[]` (read-only) | `acceptance_criteria.json` | `design.md`, `constraints.json` |
 | `DEVELOPMENT` | `claude-code` | `["src/**"]` | `design.md`, `constraints.json` (optional: `verdict.json`, `quality_gate.json`) | `implementation_summary.json` |
-| `QA` | `hermes` | `["tests/**"]` | `acceptance_criteria.json`, `implementation_summary.json` | `test_report.json`, `verdict.json` |
+| `QA` | `claude-code` | `["tests/**"]` | `acceptance_criteria.json`, `implementation_summary.json` | `test_report.json`, `verdict.json` |
+
+Any role can be reassigned to any worker (`fake`, `claude-code`, `copilot`,
+`hermes`) with zero orchestrator code change — this repository's own
+`.dark-factory/roles/*.yaml` proves it by deliberately running each of its
+four roles on a different worker.
 
 `QA` deliberately has no `repo.write` grant — it may write tests, never
 production source, which is the "cannot publish" half of its permission
