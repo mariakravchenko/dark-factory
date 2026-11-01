@@ -16,7 +16,7 @@ Built entirely on :func:`dark_factory.git.client.run_git` -- the one child
 process wrapper this project enforces, carrying the explicit
 ``["git", *args]`` argument list (T-05-01), the ``GIT_ENV_ALLOWLIST``
 comprehension rather than a parent-environment copy (T-05-04, exactly how a
-``DATABASE_URL`` or a ``GITHUB_TOKEN`` would otherwise reach a child process
+``DATABASE_URL`` or a ``DARK_FACTORY_GITHUB_TOKEN`` would otherwise reach a child process
 with no business seeing one), the mandatory ``timeout`` and
 ``GIT_TERMINAL_PROMPT=0`` (T-05-10), and the pinned commit identity
 (T-05-11). A second low-level ``git show`` invocation anywhere would

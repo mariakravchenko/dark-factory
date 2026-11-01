@@ -19,8 +19,8 @@ keys before committing:
   root cause (1) of G-10-1.
 * ``publishing.create_pr`` -- the shipped value is ``true``, but names no
   ``repository.github_owner`` / ``repository.github_repo`` and has no
-  ``GITHUB_TOKEN`` reachable from a throwaway repo's cwd (``Settings``'s
-  ``env_file=".env"`` is CWD-relative). The moment root cause (1) is fixed
+  ``DARK_FACTORY_GITHUB_TOKEN`` reachable from a throwaway repo's cwd
+  (``Settings``'s ``env_file=".env"`` is CWD-relative). The moment root cause (1) is fixed
   the run would enter the publish branch and fail there instead -- this is
   the latent, serial root cause (2) of G-10-1.
 
@@ -92,9 +92,7 @@ def neutralize_repo_local_config(config_path: Path) -> None:
     document: dict[str, Any] = yaml.safe_load(config_path.read_text("utf-8"))
     document["quality_gate"] = {"commands": list(HARNESS_GATE_COMMANDS)}
     document["publishing"] = {**document["publishing"], "create_pr": False}
-    config_path.write_text(
-        yaml.safe_dump(document, sort_keys=False), encoding="utf-8"
-    )
+    config_path.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
 
 def copy_shipped_config_into(root: Path) -> Path:

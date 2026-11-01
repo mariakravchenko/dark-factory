@@ -26,7 +26,7 @@ __all__ = ["GIT_ENV_ALLOWLIST", "GIT_IDENTITY_ENV", "git_env", "run_git"]
 
 # The names git genuinely needs to find its binary, its cert bundle and a
 # temp directory -- and nothing else. In particular: no DATABASE_URL, no
-# DATABASE_URL_DIRECT, no GITHUB_TOKEN, no name ending in _API_KEY.
+# DATABASE_URL_DIRECT, no DARK_FACTORY_GITHUB_TOKEN, no name ending in _API_KEY.
 GIT_ENV_ALLOWLIST: tuple[str, ...] = (
     "PATH",
     "HOME",

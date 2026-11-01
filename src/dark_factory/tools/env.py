@@ -7,9 +7,9 @@ allowlist starting from an empty mapping, and the parent process
 environment is never duplicated wholesale -- not a copy, not a spread, not
 an exclusion-filter form (an exclusion list fails open for every credential
 nobody thought to name). The concrete consequence, stated plainly:
-no DATABASE_URL and no GITHUB_TOKEN set in the parent process ever
-reaches a worker subprocess built through this module, even when both are
-present in the parent process at the same time.
+no DATABASE_URL and no DARK_FACTORY_GITHUB_TOKEN set in the parent process
+ever reaches a worker subprocess built through this module, even when both
+are present in the parent process at the same time.
 
 ``tests/integration/test_worker_env_boundary.py`` is the cross-process
 proof of that claim (D-10) -- it spawns a real operating-system process
@@ -50,7 +50,7 @@ __all__ = [
 # none of those belong in a worker's environment.
 #
 # In particular, and deliberately: no DATABASE_URL, no DATABASE_URL_DIRECT,
-# no GITHUB_TOKEN, no name ending in _API_KEY.
+# no DARK_FACTORY_GITHUB_TOKEN, no name ending in _API_KEY.
 WORKER_ENV_ALLOWLIST: tuple[str, ...] = (
     "PATH",
     "HOME",
