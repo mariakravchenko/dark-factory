@@ -694,7 +694,9 @@ or logs.
 
 One file per entry in `workflow.roles`, named `<ROLE_NAME>.yaml` and located
 under the directory named by `roles_dir`. Validated by `RoleDefinition`,
-also `frozen=True` and `extra="forbid"`.
+also `frozen=True` and `extra="forbid"`. The scaffold script writes these
+as a starting point — every field is a plain YAML value you can hand-edit
+at any time; there's no code to touch.
 
 ```yaml
 name: DEVELOPMENT
@@ -732,11 +734,15 @@ examples: []
 
 ### Shipped roles
 
-The four roles below are what `scripts/scaffold_target_repo.py` generates for
-your repo. Every role defaults to the `claude-code` worker
-(`DEFAULT_WORKER`) — override per-role with `--worker-ba` /
-`--worker-architecture` / `--worker-development` / `--worker-qa` if you want
-a different worker on a given role.
+The four roles below are **generated starting examples**, not fixed
+defaults — `scripts/scaffold_target_repo.py` writes them as plain YAML
+files directly in your repo, and every field (`worker`, `write_scope`,
+`inputs`, `outputs`, `tools`, `instructions`) is yours to edit afterward
+with no code change required. Every role defaults to the `claude-code`
+worker (`DEFAULT_WORKER`) at generation time — override per-role with
+`--worker-ba` / `--worker-architecture` / `--worker-development` /
+`--worker-qa`, or just hand-edit the generated `.dark-factory/roles/*.yaml`
+later.
 
 | Role | Worker (default) | `write_scope` | Inputs | Outputs |
 |------|-------------------|---------------|--------|---------|
