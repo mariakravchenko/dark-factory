@@ -55,7 +55,6 @@ artifact content can only be read this way.
 
 from __future__ import annotations
 
-
 __all__ = [
     "ARTIFACT_COMMIT_SUBJECT_PREFIX",
     "ARTIFACT_EXCLUDE_PATHSPEC",
