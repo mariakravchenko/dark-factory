@@ -828,4 +828,3 @@ responsive Docker daemon), then **pytest-postgresql** (a local `initdb` on
 is no SQLite or mock fallback.
 
 Commit convention is **Conventional Commits** — `type(scope): subject`.
-</content>
