@@ -146,6 +146,32 @@ uv run python scripts/scaffold_target_repo.py \
   --quality-gate-command "make test"
 ```
 
+It writes thirteen files into the target repository: `.dark-factory.yaml`
+(the repo-behavior contract), the four role YAMLs under
+`.dark-factory/roles/` (`BA.yaml`, `ARCHITECTURE.yaml`, `DEVELOPMENT.yaml`,
+`QA.yaml`), the four instruction Markdown files under
+`.dark-factory/instructions/` (copied from this repository's own set, with a
+generated write-scope section appended), `.env.example` (the variable names
+from "Environment variables and secrets" below, pre-filtered to the workers
+your roles actually use), `.gitignore`, and the two GitHub Actions workflows
+`.github/workflows/resume.yml` and `.github/workflows/run.yml`.
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `--target` | — (required) | Target repository root directory. |
+| `--github-owner` | — (prompted interactively if omitted and stdin is a TTY; required otherwise) | Written into `.dark-factory.yaml`'s `repository.github_owner`. |
+| `--github-repo` | — (prompted interactively if omitted and stdin is a TTY; required otherwise) | Written into `.dark-factory.yaml`'s `repository.github_repo`. |
+| `--base-branch` | `main` | Written into `repository.base_branch`. |
+| `--worker` | `claude-code` | Default worker for all four roles. Legal values: `claude-code`, `copilot`, `hermes`. |
+| `--worker-ba` | unset (falls back to `--worker`) | Per-role worker override for `BA`. |
+| `--worker-architecture` | unset (falls back to `--worker`) | Per-role worker override for `ARCHITECTURE`. |
+| `--worker-development` | unset (falls back to `--worker`) | Per-role worker override for `DEVELOPMENT`. |
+| `--worker-qa` | unset (falls back to `--worker`) | Per-role worker override for `QA`. |
+| `--quality-gate-command` | this repo's own `uv run pytest -q` / `uv run ruff check .` pair | Repeatable — one `quality_gate.commands` entry per use; passing it at all replaces the default pair entirely. |
+| `--install-source` | `dark-factory` | The `pip install "<value>"` target baked into the generated `resume.yml` / `run.yml` workflows. Pass a git-source string (e.g. `"dark-factory @ git+https://github.com/<your-org>/dark-factory.git"`) until the package is published to PyPI. |
+| `--force` | off | Overwrite existing files instead of skipping them. |
+| `--yes` | off | Suppress interactive prompting; requires `--github-owner` and `--github-repo` to already be set. |
+
 The generated `run.yml` is a manual `workflow_dispatch` workflow with one
 required `source` input, passed verbatim to `dark-factory run` — accepting
 the same three source forms the local CLI accepts: a `text:`-prefixed
@@ -161,6 +187,48 @@ and the instruction files it writes are copied from this repository's own
 `.dark-factory/instructions/`, with a generated write-scope section
 appended so the prose matches what write-scope enforcement will actually
 allow.
+
+## Environment variables and secrets
+
+Infrastructure credentials and process-level knobs live only in the
+environment (`.env` or real environment variables), never in
+`.dark-factory.yaml` — that two-tier split is deliberate, so a repo-behavior
+config file can be committed with zero secret-handling review. See
+"Configuration reference" below for the second tier.
+
+Every field `Settings` (`src/dark_factory/config/settings.py`) declares, in
+declaration order, by its uppercased environment-variable name:
+
+| Variable | Required | Default | What it controls | Where to get it |
+|----------|----------|---------|-------------------|------------------|
+| `DATABASE_URL` | Required | — | The **pooled** Neon connection string (host contains `-pooler`), scheme rewritten to `postgresql+psycopg://`. Used by the application engine at runtime. | Neon Console → your project → Connection Details → the pooled connection string. |
+| `DATABASE_URL_DIRECT` | Required | — | The **direct** (non-pooled) Neon connection string (host **without** `-pooler`), same scheme rewrite. **Alembic uses this one** — DDL and PgBouncer transaction pooling do not mix, so migrations through the pooled endpoint are unreliable. | Neon Console → Connection Details → disable connection pooling to reveal the direct host. |
+| `DARK_FACTORY_GITHUB_TOKEN` | Optional | `None` | Dark Factory's own token for posting clarification comments and opening pull requests. Required once a run's source is a GitHub issue or its pipeline publishes. Deliberately not named `GITHUB_TOKEN`: that exact name is reserved by GitHub Actions for the ephemeral installation token it auto-injects into every job, so a repository secret cannot be created under it, and that installation token cannot call `GET /user` as a matter of platform rule. | GitHub: a classic PAT with `repo` scope, or a fine-grained PAT scoped to this repository with Contents (read/write), Issues (read/write), and Pull requests (read/write) permissions. |
+| `LOG_LEVEL` | Optional | `INFO` | structlog output level. | Set it yourself — one of `CRITICAL`, `FATAL`, `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`, `NOTSET` (case-insensitive). |
+| `LEASE_TTL_SECONDS` | Optional, **not a secret** | `900` | How long a claimed run stays owned without a renewal. After a hard crash the run is unclaimable until this elapses on the **database** clock — there is no earlier-steal escape hatch. | Set it yourself; the default is the genuine production value. |
+| `LEASE_HEARTBEAT_SECONDS` | Optional, **not a secret** | `300` | How often the owning process pushes its lease expiry forward while a step runs. Must be strictly less than `LEASE_TTL_SECONDS`. | Set it yourself; one third of the TTL is the standard ratio, so two consecutive missed renewals still land inside the TTL. |
+| `ANTHROPIC_API_KEY` | Optional | `None` | Credential for the `claude-code` worker adapter, shared by `hermes` (which has no dedicated credential of its own). Absence is harmless until a role actually tries to invoke one of those workers. | Anthropic Console — an API key for the account that will run these roles. |
+| `COPILOT_GITHUB_TOKEN` | Optional | `None` | A worker's own authentication material for the `copilot` adapter, injected into the `copilot` subprocess only — never Dark Factory's own `DARK_FACTORY_GITHUB_TOKEN`. | GitHub: a fine-grained, **personal-account-owned** PAT carrying the `Copilot Requests` permission. A classic PAT (`ghp_*`) is rejected by the Copilot CLI. |
+| `COPILOT_MODEL` | Optional | `None` | Model identifier passed to the `copilot` CLI. Unset uses the CLI's own default model. | Set it yourself if you want to pin a model. |
+| `CLAUDE_MODEL` | Optional | `None` | Model identifier appended as `--model <value>` to every `claude` CLI invocation. Unset uses the CLI's own default model. | Set it yourself if you want to pin a model. |
+| `WORKER_TIMEOUT_SECONDS` | Optional | `1800` | The single knob governing every worker subprocess call's timeout, in seconds. | Set it yourself; the default (30 minutes) is a deliberately generous estimate, not a measured figure. |
+
+Settings loading **fails fast at startup** on:
+
+- a `LOG_LEVEL` that is not one of the recognized Python logging level names
+  listed above (case-insensitive);
+- a `LEASE_TTL_SECONDS` that is not strictly positive;
+- a `LEASE_HEARTBEAT_SECONDS` that is not strictly less than
+  `LEASE_TTL_SECONDS`;
+- a `WORKER_TIMEOUT_SECONDS` that is not strictly positive.
+
+Worker credentials are the exception: an absent `ANTHROPIC_API_KEY` or
+`COPILOT_GITHUB_TOKEN` surfaces only when a role actually invokes that
+worker (a typed `MissingWorkerCredentialError`), never at process startup.
+
+These are the same variable names a generated GitHub Actions workflow reads
+as Actions secrets — see "The worker runtime" (under "Finish a run in CI"
+below) for which secret each worker needs, mapped per role.
 
 ## Run a task
 
