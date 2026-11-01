@@ -753,4 +753,79 @@ must resolve under the repository root, and must be a real file — the
 scaffold copies these from this repository's own set, with a generated
 write-scope section appended so the prose matches what write-scope
 enforcement will actually allow.
+
+## Troubleshooting
+
+- **`alembic upgrade head` fails or hangs.** Confirm `DATABASE_URL_DIRECT` is
+  the **non-pooled** host (no `-pooler` in the hostname) — DDL against the
+  pooled endpoint is unreliable because DDL and PgBouncer transaction pooling
+  do not mix.
+- **Settings fail to load with a `lease_heartbeat_seconds` error.** Your
+  `.env` has `LEASE_HEARTBEAT_SECONDS` set greater than or equal to
+  `LEASE_TTL_SECONDS`. It must be strictly less, or the heartbeat can never
+  fire often enough to keep the lease alive.
+- **A role fails immediately with an error naming a missing binary.** The
+  worker assigned to that role (`claude`, `copilot`, or `hermes`) is not on
+  `PATH` wherever `dark-factory run`/`resume` executed. Install that
+  runtime's own CLI per its own docs — Dark Factory never ships or installs
+  it for you. See "The worker runtime" above for which binary each worker
+  needs.
+- **A role fails with `MissingWorkerCredentialError`.** The credential
+  environment variable for that role's assigned worker
+  (`ANTHROPIC_API_KEY` for `claude-code`/`hermes`, `COPILOT_GITHUB_TOKEN` for
+  `copilot`) isn't set in `.env`. This only surfaces when a role actually
+  tries to invoke that worker, not at process startup — see "Environment
+  variables and secrets" above.
+- **The scaffold script exits with "instruction source file not found."**
+  It copies instruction Markdown from *this repository's own*
+  `.dark-factory/instructions/` directory, so it must be run from a Dark
+  Factory checkout — not from an installed package, and not from your
+  target repository.
+- **`alembic upgrade head` or the scaffold script "can't find" the right
+  files when run from your target repository.** Both commands belong to the
+  Dark Factory checkout (see "Install it into your own repository" above),
+  not your target repository.
+
+## Contributing to Dark Factory itself
+
+Everything above is for someone *using* Dark Factory to drive a delivery run
+against their own repository. If you want to work on Dark Factory itself
+instead, stop here — the rest of this section is for you.
+
+```bash
+git clone https://github.com/mariakravchenko/dark-factory.git
+cd dark-factory
+uv sync --all-extras --dev
+```
+
+The quality gates, in the order `.github/workflows/ci.yml` runs them:
+
+| Command | What it does |
+|---------|--------------|
+| `uv run ruff check .` | Lint. |
+| `uv run ruff format --check .` | Verify formatting without rewriting files. |
+| `uv run mypy src/dark_factory` | Strict static type check of the package. |
+| `uv run pytest -q -m "unit or contract"` | Fast tiers — pure functions plus the shared `CodingWorker` contract suite. |
+| `uv run pytest -q -m db` | The `FakeWorker` orchestration suite against a real PostgreSQL 17. |
+| `uv run pytest -q -m integration` | End-to-end CLI-as-subprocess suites. |
+
+The four pytest markers (`pyproject.toml`'s `[tool.pytest.ini_options]`
+`markers` list):
+
+- `unit` — fast, pure-function tests with no database or I/O. The everyday
+  inner loop: `uv run pytest -m unit`.
+- `db` — tests that require a reachable PostgreSQL 17 instance:
+  `uv run pytest -m db`.
+- `integration` — end-to-end tests that drive the CLI as a subprocess.
+- `contract` — the shared `CodingWorker` contract suite, parametrized over
+  worker adapters: `uv run pytest -m "unit or contract"` for the combined
+  fast-tier command.
+
+The `db` and `integration` tiers need a real PostgreSQL 17, resolved by
+`tests/conftest.py`'s probe ladder in order: **testcontainers** (a
+responsive Docker daemon), then **pytest-postgresql** (a local `initdb` on
+`PATH`), then an externally supplied `DARK_FACTORY_TEST_DATABASE_URL`. There
+is no SQLite or mock fallback.
+
+Commit convention is **Conventional Commits** — `type(scope): subject`.
 </content>
