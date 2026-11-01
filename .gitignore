@@ -24,7 +24,7 @@ dist/
 .opencode/
 .gsd/
 
-# Local environment file — load-bearing: keeps a real DATABASE_URL / GITHUB_TOKEN out of git
+# Local environment file — load-bearing: keeps a real DATABASE_URL / DARK_FACTORY_GITHUB_TOKEN out of git
 .env
 
 # Per-run artifact content (Phase 4). The config set — .dark-factory.yaml,

@@ -33,7 +33,7 @@ every value a visibly-fake placeholder.
 | `LOG_LEVEL` | Optional | `INFO` | structlog output level. One of `CRITICAL`, `FATAL`, `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`, `NOTSET` (case-insensitive; normalized to upper case). An unrecognized value fails settings loading at startup. |
 | `LEASE_TTL_SECONDS` | Optional | `900` | Seconds a claimed run stays owned without a renewal (single-owner execution). Not a secret — this is the genuine production default. Must be strictly positive. |
 | `LEASE_HEARTBEAT_SECONDS` | Optional | `300` | Seconds between the owning process's lease-expiry renewals while a role step is in flight. Must be strictly **less than** `LEASE_TTL_SECONDS`, or settings loading fails at startup. One third of the TTL is the standard ratio, chosen so two consecutive missed renewals still land inside the TTL. |
-| `GITHUB_TOKEN` | Optional | `None` | Dark Factory's own GitHub credential, used for its own comment/PR creation. Loaded even when unused so the redaction layer knows its literal value for exact-substring scrubbing. Never passed to a worker subprocess. |
+| `DARK_FACTORY_GITHUB_TOKEN` | Optional | `None` | Dark Factory's own GitHub credential, used for its own comment/PR creation. Loaded even when unused so the redaction layer knows its literal value for exact-substring scrubbing. Never passed to a worker subprocess. Deliberately not named `GITHUB_TOKEN` — see "Why not `GITHUB_TOKEN`?" below. |
 
 The following additional settings are declared on `Settings` but are **not**
 listed in `.env.example`; set them as plain environment variables (or add
@@ -46,6 +46,28 @@ them to `.env`) when the corresponding feature is used.
 | `COPILOT_MODEL` | Optional | `None` | Model identifier passed to the `copilot` CLI. Unset means the CLI's own default model is used. |
 | `CLAUDE_MODEL` | Optional | `None` | Model identifier appended as `--model <value>` to every `claude` CLI invocation by the `claude-code` worker. Unset means the CLI's own default model is used. |
 | `WORKER_TIMEOUT_SECONDS` | Optional | `1800` | The single knob governing every worker subprocess call's timeout, in seconds. Must be strictly positive. 1800s (30 minutes) is a deliberately generous estimate, not a measured figure. |
+
+### Why not `GITHUB_TOKEN`?
+
+`GITHUB_TOKEN` is reserved by GitHub Actions: every job gets an ephemeral
+installation token auto-injected under exactly that name
+(`secrets.GITHUB_TOKEN`), and — as a matter of platform rule, not a
+permissions-scoping gap — a repository secret cannot be created under a
+name GitHub already reserves. A generated workflow that wrote
+`GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` into its `env:` block would
+therefore silently resolve to that reserved installation token instead of
+any value an operator configured, and that installation token can never
+call `GET /user` — the exact call Dark Factory makes to confirm the
+configured credential's own identity. The result is a live `403 Resource
+not accessible by integration`, not a loud configuration error.
+
+Naming the field `DARK_FACTORY_GITHUB_TOKEN` makes the mistake
+unrepresentable: it is a name GitHub permits a user to create as their own
+repository secret, so the generated workflow templates
+(`scripts/scaffold_target_repo.py`) and the README's reference workflow
+both read `secrets.DARK_FACTORY_GITHUB_TOKEN` into an environment variable
+of the same name, and `Settings.dark_factory_github_token` is the only
+thing that ever reads it.
 
 <!-- VERIFY: Creating a Neon project and locating the pooled vs. direct connection strings (Neon Console → Connection Details) is a Neon-console workflow that cannot be verified from this repository alone. -->
 
@@ -207,6 +229,6 @@ The repository's own CI workflow (`.github/workflows/ci.yml`) sets no
 ephemeral `testcontainers` Postgres instance. `README.md` documents a
 separate, reference-only `resume.yml` workflow (not committed to this
 repository, meant to be copied into a deployment repo) that reads
-`DATABASE_URL`, `DATABASE_URL_DIRECT`, `GITHUB_TOKEN`, and
+`DATABASE_URL`, `DATABASE_URL_DIRECT`, `DARK_FACTORY_GITHUB_TOKEN`, and
 `ANTHROPIC_API_KEY` from GitHub Actions secrets to resume a paused run on a
 fresh runner.

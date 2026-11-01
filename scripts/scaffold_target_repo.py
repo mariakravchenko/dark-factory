@@ -231,8 +231,11 @@ DATABASE_URL_DIRECT=postgresql+psycopg://USER:PASSWORD@ep-example-000000.us-east
 # write issue comments, create pull requests, push to branches on this repo.
 # Classic PAT with `repo` scope, or a fine-grained PAT scoped to this repo
 # with Contents (read/write), Issues (read/write), and Pull requests
-# (read/write) permissions.
-GITHUB_TOKEN=
+# (read/write) permissions. Deliberately NOT named GITHUB_TOKEN: GitHub
+# reserves that exact name for the ephemeral installation token it
+# auto-injects into every Actions job, so a repository secret cannot be
+# created under it, and that installation token cannot call GET /user.
+DARK_FACTORY_GITHUB_TOKEN=
 
 # --- Worker runtime credential(s) -------------------------------------------
 
@@ -308,7 +311,7 @@ jobs:
           RUN_ANSWER: ${{ inputs.answer }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DARK_FACTORY_GITHUB_TOKEN: ${{ secrets.DARK_FACTORY_GITHUB_TOKEN }}
 {{WORKER_CREDENTIAL_ENV}}
 """
 
@@ -367,7 +370,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DARK_FACTORY_GITHUB_TOKEN: ${{ secrets.DARK_FACTORY_GITHUB_TOKEN }}
 {{WORKER_CREDENTIAL_ENV}}
 """
 

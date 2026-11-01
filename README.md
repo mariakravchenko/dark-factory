@@ -107,9 +107,14 @@ Edit `.env` and set:
   `-pooler`). Rewrite the scheme to `postgresql+psycopg://`. **Alembic uses this
   one** because DDL and PgBouncer transaction pooling do not mix — running
   migrations through the pooled endpoint is unreliable.
-- **`GITHUB_TOKEN`** — Dark Factory's own token for posting clarification
-  comments and opening pull requests. Required once a run's source is a
-  GitHub issue or its pipeline includes publishing.
+- **`DARK_FACTORY_GITHUB_TOKEN`** — Dark Factory's own token for posting
+  clarification comments and opening pull requests. Required once a run's
+  source is a GitHub issue or its pipeline includes publishing. Deliberately
+  not named `GITHUB_TOKEN`: that exact name is reserved by GitHub Actions for
+  the ephemeral installation token it auto-injects into every job, so a
+  repository secret cannot be created under it, and that installation token
+  cannot call `GET /user` as a matter of platform rule. See
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for the full mechanism.
 - **A worker-runtime credential** (e.g. `ANTHROPIC_API_KEY` for `claude-code`)
   — whichever your scaffolded roles were assigned.
 
@@ -377,11 +382,13 @@ block:
 - `contents: write` — a run commits and pushes each role's work, and
   `actions/checkout`'s persisted credential is scoped by this block, so it
   is what stands between that push and a 403.
-- `issues: write` — the job hands the reserved Actions auto-token to
-  `dark-factory` as `GITHUB_TOKEN`, and that token's REST authority is
-  scoped by this same block; Dark Factory posts its own clarification
-  comment on the issue when a run pauses `WAITING_HUMAN` (and reads the
-  issue when the source is `github:`-prefixed).
+- `issues: write` — the job hands `dark-factory` a user-supplied
+  `DARK_FACTORY_GITHUB_TOKEN` Actions secret (see "The Actions secrets this
+  job needs", below), not the reserved Actions auto-token: that token's own
+  REST authority comes from the PAT's own configured scopes, not from this
+  `permissions:` block. Dark Factory posts its own clarification comment on
+  the issue when a run pauses `WAITING_HUMAN` (and reads the issue when the
+  source is `github:`-prefixed).
 - `pull-requests: write` — publication after QA PASS and an independent
   Quality Gate PASS creates the pull request through the API, which this
   scope authorizes.
@@ -491,7 +498,7 @@ jobs:
           RUN_ANSWER: ${{ inputs.answer }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_URL_DIRECT: ${{ secrets.DATABASE_URL_DIRECT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DARK_FACTORY_GITHUB_TOKEN: ${{ secrets.DARK_FACTORY_GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 <!-- resume-workflow-reference: end -->
@@ -550,9 +557,11 @@ The install step names a git source rather than a package index, because
 dark-factory` (or `uv add dark-factory`) once it ships.
 
 The Actions secrets this job needs: `DATABASE_URL` / `DATABASE_URL_DIRECT`
-(the same Neon connection strings your local `.env` uses), `GITHUB_TOKEN`
-(for the comment/PR operations Dark Factory performs on your behalf), and
-whichever worker credential your roles' assigned worker needs (e.g.
+(the same Neon connection strings your local `.env` uses),
+`DARK_FACTORY_GITHUB_TOKEN` (for the comment/PR operations Dark Factory
+performs on your behalf — a repository secret you create yourself, named
+deliberately unlike GitHub's own reserved `GITHUB_TOKEN`), and whichever
+worker credential your roles' assigned worker needs (e.g.
 `ANTHROPIC_API_KEY` for `claude-code`).
 
 The step's exit code is the same contract the CLI documents above: `0` for a
@@ -629,8 +638,10 @@ the switch that gates PR creation on both PASS results; it never fires on
 either one alone.
 
 No secrets live in this file — infrastructure credentials (`DATABASE_URL`,
-`GITHUB_TOKEN`, worker credentials) are environment-only, loaded by
-`pydantic-settings` and never written into run config, artifacts, or logs.
+`DARK_FACTORY_GITHUB_TOKEN`, worker credentials) are environment-only,
+loaded by `pydantic-settings` and never written into run config, artifacts,
+or logs. See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for why the
+GitHub credential is deliberately not named `GITHUB_TOKEN`.
 
 ## Decisions baked into the schema
 

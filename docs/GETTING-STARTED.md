@@ -134,9 +134,9 @@ when a role is actually assigned that worker:
 |----------|----------|---------|----------------|------------------|
 | `DATABASE_URL` | Required | — | The **pooled** Neon connection string (host contains `-pooler`), used by the application engine at runtime. Rewrite the scheme to `postgresql+psycopg://`. | Neon Console → your project → Connection Details → pooled connection string. |
 | `DATABASE_URL_DIRECT` | Required | — | The **direct** (non-pooled) Neon connection string (host without `-pooler`). Alembic uses this one — DDL and PgBouncer transaction pooling do not mix. | Neon Console → Connection Details → disable connection pooling to reveal the direct host. |
-| `GITHUB_TOKEN` | Optional | `None` | Dark Factory's own credential for posting clarification comments and opening pull requests. Required once a run's source is a GitHub issue or its pipeline publishes. | GitHub: a classic PAT with `repo` scope, or a fine-grained PAT scoped to this repository with Contents (read/write), Issues (read/write), and Pull requests (read/write) permissions. |
+| `DARK_FACTORY_GITHUB_TOKEN` | Optional | `None` | Dark Factory's own credential for posting clarification comments and opening pull requests. Required once a run's source is a GitHub issue or its pipeline publishes. Deliberately not named `GITHUB_TOKEN` — see [docs/CONFIGURATION.md](CONFIGURATION.md#why-not-github_token) for why that name collides with GitHub Actions' own reserved installation token. | GitHub: a classic PAT with `repo` scope, or a fine-grained PAT scoped to this repository with Contents (read/write), Issues (read/write), and Pull requests (read/write) permissions. |
 | `ANTHROPIC_API_KEY` | Required only if a role uses `claude-code` or `hermes` | `None` | Credential for the `claude-code` worker adapter (and shared by `hermes`, which has no dedicated credential of its own). Its absence only surfaces as a typed `MissingWorkerCredentialError` when a role actually tries to invoke one of those workers. | Anthropic Console — an API key for the account that will run these roles. <!-- VERIFY: exact Anthropic Console URL/navigation for API key creation is an external-service workflow that cannot be verified from this repository alone. --> |
-| `COPILOT_GITHUB_TOKEN` | Required only if a role uses `copilot` | `None` | A worker's own authentication material for the `copilot` adapter, injected into the `copilot` subprocess only — never Dark Factory's own `GITHUB_TOKEN`. | GitHub: a fine-grained, **personal-account-owned** PAT carrying the `Copilot Requests` permission. A classic PAT (`ghp_*`) is rejected by the Copilot CLI. |
+| `COPILOT_GITHUB_TOKEN` | Required only if a role uses `copilot` | `None` | A worker's own authentication material for the `copilot` adapter, injected into the `copilot` subprocess only — never Dark Factory's own `DARK_FACTORY_GITHUB_TOKEN`. | GitHub: a fine-grained, **personal-account-owned** PAT carrying the `Copilot Requests` permission. A classic PAT (`ghp_*`) is rejected by the Copilot CLI. |
 | `LOG_LEVEL` | Optional | `INFO` | structlog output level. One of `CRITICAL`, `FATAL`, `ERROR`, `WARN`, `WARNING`, `INFO`, `DEBUG`, `NOTSET` (case-insensitive). An unrecognized value fails settings loading at startup. | Set it yourself; not fetched from anywhere. |
 | `LEASE_TTL_SECONDS` | Optional, **not a secret** | `900` | Seconds a claimed run stays owned without a renewal before another process may pick it up after a crash. | Set it yourself; the default is the genuine production value. |
 | `LEASE_HEARTBEAT_SECONDS` | Optional, **not a secret** | `300` | How often the owning process renews its lease while a step runs. Must be strictly less than `LEASE_TTL_SECONDS`, or settings loading fails at startup. | Set it yourself; one third of the TTL is the standard ratio. |
@@ -233,9 +233,11 @@ resume`). To use either from GitHub's Actions tab:
    `.gitignore`) — never commit `.env` itself.
 2. In your target repository's GitHub settings, add the Actions secrets each
    generated workflow's `env:` block references: `DATABASE_URL`,
-   `DATABASE_URL_DIRECT`, `GITHUB_TOKEN`, and whichever worker credential
-   your assigned workers need (`ANTHROPIC_API_KEY` and/or
-   `COPILOT_GITHUB_TOKEN`, per the table in Step 3).
+   `DATABASE_URL_DIRECT`, `DARK_FACTORY_GITHUB_TOKEN`, and whichever worker
+   credential your assigned workers need (`ANTHROPIC_API_KEY` and/or
+   `COPILOT_GITHUB_TOKEN`, per the table in Step 3). `DARK_FACTORY_GITHUB_TOKEN`
+   is a repository secret you create yourself — it is a real PAT, not
+   GitHub's own reserved `GITHUB_TOKEN`.
 3. Each generated workflow has a commented-out "Install the worker runtime"
    step — uncomment it and fill in that runtime's own install command (e.g.
    for the `claude` binary), since Dark Factory neither ships nor verifies
