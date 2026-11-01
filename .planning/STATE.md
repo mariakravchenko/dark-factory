@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: v1.0
 status: Awaiting next milestone
-stopped_at: Completed quick task 261101-dz9-consolidate-all-of-dark-factory-s-docume
-last_updated: "2026-11-01T10:00:00.000Z"
+stopped_at: Completed quick task 261101-ngp-fix-two-dead-code-findings-from-a-vultur
+last_updated: "2026-11-01T15:00:00.000Z"
 last_activity: 2026-11-01
-last_activity_desc: Completed quick task 261101-dz9 (consolidated docs/ into a single usage-focused README.md)
-state_head: 8df08b5
+last_activity_desc: Completed quick task 261101-ngp (removed unused Path import and dead GitHubClient._token/_timeout attributes found by a dead-code scan)
+state_head: e031a31
 current_phase: 12
 progress:
   total_phases: 12
@@ -30,7 +30,7 @@ See: .planning/PROJECT.md (updated 2026-10-06)
 Phase: Milestone v1.0 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-01 — Completed quick task 261101-dz9: Consolidated docs/ into a single usage-focused README.md (pitch, install, configure, required env vars, CLI, GitHub Actions, resume flow)
+Last activity: 2026-11-01 — Completed quick task 261101-ngp: Removed two dead-code findings (unused Path import, write-only GitHubClient._token/_timeout attributes)
 
 ## Performance Metrics
 
@@ -319,6 +319,7 @@ Resolved this phase: LOOP-01/LOOP-02 db-tier behavioral proof (Phase 9, gap-clos
 | 261031-jmw | Remove the webhook receiver subsystem (src/dark_factory/webhook/, dispatch_workflow()/for_dispatch(), github_webhook_secret/dispatch_github_token settings, the webhook pyproject extra, GitHubPendingInteraction, 8 webhook-only test modules) now that a real app-int run proved the manual flow works end-to-end: a human replies on the clarifying-question issue, then `gh workflow run resume.yml -f run_id=<id> -f answer=<text>` — added that `answer` input to both shipped resume.yml templates, mirroring app-int's env-indirection shape (D-03) for expression-injection hardening. Rewrote README/docs/.env.example to document only this path. Decisions: keep submit_answer's github_comment_id param + docstring reword (D-02), retire GitHubPendingInteraction as fully caller-less (D-01). Full unit+contract tier 826 passed, ruff+mypy --strict clean; db tier not run (no reachable Postgres in the execution sandbox) — needs a human-supplied Neon run before fully trusting the 3 rewired db-tier modules | 2026-10-31 | 69abd57 | [261031-jmw-remove-the-webhook-receiver-subsystem-fr](./quick/261031-jmw-remove-the-webhook-receiver-subsystem-fr/) |
 | 261031-lhn | Rename dark-factory's own GitHub API credential from github_token (env GITHUB_TOKEN) to dark_factory_github_token (env DARK_FACTORY_GITHUB_TOKEN) everywhere — Settings field, all consumers (orchestrator/runner.py, github/client.py), redaction, docs, .env.example, and scaffold_target_repo.py's templates — since the literal name GITHUB_TOKEN collides with GitHub Actions' own reserved secrets.GITHUB_TOKEN, whose ephemeral installation token can never call GET /user regardless of permissions scoping (the live 403 root cause behind clarification-comment posting failures). Caught and fixed a D-15 redaction regression along the way: the old key name had to stay in `_SENSITIVE_KEYS` (third-party workflow text still echoes it) while the new name was added alongside it, not substituted. copilot_github_token/COPILOT_GITHUB_TOKEN correctly left untouched (a separate worker credential). Full unit+contract tier 820 passed/1 skipped, ruff+mypy --strict clean; db/integration tiers collect-only verified (416 collected, 0 errors), not run against live Postgres. **app-int updated and verified live**: secret renamed to DARK_FACTORY_GITHUB_TOKEN, confirmed COMPLETED on a fresh CI run and a full resume (WAITING_HUMAN -> answer -> COMPLETED) in one pass | 2026-11-01 | 70da05e | [261031-lhn-rename-dark-factory-s-own-github-api-tok](./quick/261031-lhn-rename-dark-factory-s-own-github-api-tok/) |
 | 261101-dz9 | Consolidate all documentation into a single README.md and delete docs/ (ARCHITECTURE.md, CONFIGURATION.md, DEVELOPMENT.md, GETTING-STARTED.md, TESTING.md) — reframed as a usage-focused adoption guide (pitch -> install -> configure -> required env vars -> CLI -> GitHub Actions -> resume flow), cutting phase-history/decision content per user request, folding TESTING.md/DEVELOPMENT.md into one condensed Contributing section. Preserved tests/unit/test_resume_workflow_reference_doc.py's guards byte-identically (the sentinel-bracketed resume.yml block and the "Finish a run in CI" -> "Configuration reference" heading-adjacency slice) — confirmed 14/14 passing throughout, zero edits to the test file. All 11 Settings env vars, 27 .dark-factory.yaml/role-YAML keys, and 13 scaffold flags now documented in README (each gate derived from source, not hand-copied). Zero dangling docs/ references across 261 scanned files. Full unit+contract tier 820 passed/1 skipped, ruff clean | 2026-11-01 | 8df08b5 | [261101-dz9-consolidate-all-of-dark-factory-s-docume](./quick/261101-dz9-consolidate-all-of-dark-factory-s-docume/) |
+| 261101-ngp | Fix two real findings from a vulture/ruff dead-code scan: an unused `pathlib.Path` import in `git/__init__.py` (invisible to routine CI since `pyproject.toml`'s ruff `select` list doesn't include `F`), and `GitHubClient.__init__`'s `self._token`/`self._timeout` instance attributes, assigned but never read anywhere (the real SDK client is built from the local `token`/`timeout` parameters directly) — removing `self._token` also narrows where the raw credential could leak via debugger inspection or an accidental `vars(self)`/repr, a minor security-hygiene side effect beyond the cleanup itself. Verified zero other readers before removing (grepped `tests/` too); confirmed the two still-live lines that DO need `token`/`timeout` (SDK construction, the redaction-fallback map) survived unchanged via positive gates. `ruff check .` clean, `mypy --strict` clean, unit+contract tier 830 passed | 2026-11-01 | e031a31 | [261101-ngp-fix-two-dead-code-findings-from-a-vultur](./quick/261101-ngp-fix-two-dead-code-findings-from-a-vultur/) |
 
 ## Deferred Items
 
